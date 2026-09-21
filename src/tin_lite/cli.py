@@ -6,12 +6,14 @@ from pathlib import Path
 from uuid import UUID
 
 import uvicorn
+from temporalio.client import Client
 
 from tin_lite.catalog import sync_builtin_workflows
 from tin_lite.code_storage import CodeStorage
 from tin_lite.community import validate_all
 from tin_lite.db import Database, apply_migrations
 from tin_lite.rollouts import parse_rollout_filename, render_rollout_trace
+from tin_lite.schedules import TemporalScheduleService
 from tin_lite.settings import get_settings
 from tin_lite.system_wiki import sync_system_wiki
 
@@ -22,6 +24,26 @@ async def _migrate() -> None:
     settings = get_settings()
     applied = await apply_migrations(settings.migration_dsn, ROOT / "migrations")
     print("applied migrations:", ", ".join(applied) if applied else "none")
+
+
+async def _repair_schedule_timeouts(*, apply: bool) -> None:
+    settings = get_settings()
+    temporal = await Client.connect(
+        settings.temporal_endpoint,
+        namespace=settings.temporal_namespace,
+        api_key=settings.temporal_api_key.get_secret_value(),
+        tls=True,
+    )
+    service = TemporalScheduleService(client=temporal, settings=settings)
+    # Read Temporal itself: stored schedules can outlive their product configuration.
+    async for schedule in await temporal.list_schedules():
+        prefix = "tin-lite-project-workflow:"
+        if not schedule.id.startswith(prefix):
+            continue
+        configured_id = str(UUID(schedule.id.removeprefix(prefix)))
+        changed = await service.remove_legacy_review_timeout(configured_id, apply=apply)
+        action = ("updated" if apply else "would update") if changed else "unchanged"
+        print(f"{action}: {schedule.id}")
 
 
 async def _create_project(name: str, repo_id: str) -> None:
@@ -172,6 +194,12 @@ def main() -> None:
     commands.add_parser("migrate")
     commands.add_parser("sync-builtins")
     commands.add_parser("serve")
+    schedule_timeouts = commands.add_parser(
+        "repair-schedule-timeouts", help="remove legacy 24-hour dispatcher deadlines"
+    )
+    schedule_timeouts.add_argument(
+        "--apply", action="store_true", help="update stored schedules (default: dry run)"
+    )
     community = commands.add_parser(
         "validate-community", help="check the contributed workflow packages in this checkout"
     )
@@ -199,6 +227,8 @@ def main() -> None:
         asyncio.run(_migrate())
     elif args.command == "sync-builtins":
         asyncio.run(_sync_builtins())
+    elif args.command == "repair-schedule-timeouts":
+        asyncio.run(_repair_schedule_timeouts(apply=args.apply))
     elif args.command == "validate-community":
         asyncio.run(_validate_community(args.root))
     elif args.command == "serve":

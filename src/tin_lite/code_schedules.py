@@ -7,7 +7,7 @@ from tin_lite.billing_contracts import BillingError
 from tin_lite.domain import RunStatus
 from tin_lite.private_workflows import require_private_execution
 from tin_lite.schedules import (
-    ScheduledCodeSkip,
+    ScheduledWorkflowSkip,
     TemporalScheduleService,
     WorkflowSchedule,
     next_run_after,
@@ -142,7 +142,7 @@ async def dispatch_code_schedule(common, configured, workflow, payload):
             scheduled_for=scheduled_for,
             schedule_settings_revision=configured.settings_revision,
         )
-    except ScheduledCodeSkip:
+    except ScheduledWorkflowSkip:
         await db.advance_project_workflow_schedule(
             project_workflow_id=configured.id,
             next_run_at=next_run_after(schedule, scheduled_for),

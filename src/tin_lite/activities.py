@@ -105,7 +105,7 @@ from tin_lite.procedures import (
 from tin_lite.publication import OutputCheckpoint, OutputConflictError, PublicationPendingError
 from tin_lite.rollouts import RolloutCapture
 from tin_lite.scan import ScanReporter, ScanSource, validate_scan_report
-from tin_lite.schedules import WorkflowSchedule, next_run_after
+from tin_lite.schedules import ScheduledWorkflowSkip, WorkflowSchedule, next_run_after
 from tin_lite.settings import Settings
 from tin_lite.site_health import (
     SiteHealthImprover,
@@ -309,20 +309,28 @@ class TinActivities:
             workflow=workflow_definition,
             normalized_inputs=configured.inputs,
         )
-        run, created = await self._db.create_run(
-            project_id=configured.project_id,
-            workflow_id=configured.workflow_id,
-            start_idempotency_key=f"schedule:{payload['occurrence_id']}",
-            input_payload=configured.inputs,
-            project_workflow_id=configured.id,
-            definition_commit_sha=configured.definition_commit_sha,
-            pinned_definition=workflow_definition.definition,
-            trigger_source="schedule",
-            scheduled_for=scheduled_for,
-            prerequisite_evidence=(
-                evaluation.evidence(inputs=configured.inputs) if evaluation.results else None
-            ),
-        )
+        try:
+            run, created = await self._db.create_run(
+                project_id=configured.project_id,
+                workflow_id=configured.workflow_id,
+                start_idempotency_key=f"schedule:{payload['occurrence_id']}",
+                input_payload=configured.inputs,
+                project_workflow_id=configured.id,
+                definition_commit_sha=configured.definition_commit_sha,
+                pinned_definition=workflow_definition.definition,
+                trigger_source="schedule",
+                scheduled_for=scheduled_for,
+                prerequisite_evidence=(
+                    evaluation.evidence(inputs=configured.inputs) if evaluation.results else None
+                ),
+            )
+        except ScheduledWorkflowSkip:
+            await self._db.advance_project_workflow_schedule(
+                project_workflow_id=configured.id,
+                next_run_at=next_run_after(schedule, scheduled_for),
+                expected_settings_revision=configured.settings_revision,
+            )
+            return {}
         schedule = WorkflowSchedule.model_validate(configured.schedule)
         await self._db.advance_project_workflow_schedule(
             project_workflow_id=configured.id,
