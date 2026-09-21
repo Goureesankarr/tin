@@ -71,6 +71,11 @@ managed-model output subset: closed objects, required properties, scalar enums a
 arrays. No arbitrary Python evaluators, regex or remote schema references run on the server.
 `expected_status: "failed"` expresses an expected runtime rejection, not an admission failure.
 Code-level pytest tests remain the place for richer invariants and precise exception checks.
+Tin validates the manifest with its bound `project_id` before admission. Procedure sandbox inputs
+omit that field; do not revalidate them against the full manifest schema. A procedure's final
+message does not determine its run status. Give semantic input errors an explicit diagnostic
+artifact contract, and check configuration and findings so an earlier report cannot satisfy a
+new case merely because its headings match.
 The CSV [case file](../workflow_evals/example.csv_summary/qualification.json) is a complete example.
 
 ## Offline checks

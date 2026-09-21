@@ -37,6 +37,11 @@ Cases: 1–12, unique lowercase IDs, concrete inputs without project_id (Tin bin
 expected_status succeeded or failed. Successful cases need assertions or a rubric.
 For expected failures, omit output assertions unless the contract supplies a canonical artifact.
 Error diagnostics are not artifact text; check validation diagnostics in local tests.
+A procedure's final message cannot set its Tin run status. For semantic input errors, prefer a
+fresh diagnostic artifact with expected_status succeeded and assertions on its explicit invalid
+status; do not promise a failed run just by telling Codex to stop. An existing output file is not
+evidence that this run produced a result. Cases must check the supplied configuration and findings,
+not only headings that an earlier report could also satisfy.
 The optional expect.json_schema uses the same bounded JSON Schema subset as managed model output: closed
 objects with every property required, bounded arrays, scalar types and enum; no refs or regex.
 contains/excludes are literal text checks, not proof that a calculation or narrative is correct.
@@ -69,6 +74,10 @@ Keep rubric questions independent; no overall score. Maintainers review cases an
   not individual paths. Required setup belongs in the candidate's instructions.
 
 Input schemas are closed objects. project_id is exactly {"type":"string","format":"uuid"}.
+Tin binds and validates project_id before execution. Procedure context.inputs deliberately omits
+it. Validate sandbox inputs against the client schema (remove project_id from properties and
+required), or validate only the workflow-specific semantic constraints. Never demand or invent
+a project_id inside procedure inputs; a provider's project ID is a separate workflow input.
 Other fields are bounded strings, numbers, booleans or bounded arrays of bounded strings.
 No nested input objects. Code may declare on_demand plus daily/weekly; private procedures only
 on_demand. Human review is {"eligible":true,"reason":"..."} when supported, not a string.
