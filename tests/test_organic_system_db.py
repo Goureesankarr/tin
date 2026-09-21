@@ -129,6 +129,28 @@ async def test_description_preparation_and_delivery_recheck(publication_db, monk
         await f.execution.validate_delivery(f.run, result, saved)
 
 
+@pytest.mark.parametrize("limits", [None, {"max_files": 1000, "max_bytes": 100_000_000}])
+async def test_technical_preparation_and_execution_use_the_same_repository_limits(
+    publication_db, monkeypatch, limits
+):
+    monkeypatch.setattr("tin_lite.activities.activity.heartbeat", lambda *_: None)
+    f = await technical_fixture(publication_db, monkeypatch)
+    assert await f.execution.prepare(f.run, workspace_limits=limits) is False
+    prepared_call = f.integrations.github_repository_bundle.call_args.kwargs
+    f.activities._integrations = f.integrations
+    await f.activities._github_procedure_bundle(
+        project_id=f.run.project_id,
+        run_id=f.run.id,
+        sandbox_id="sandbox-test",
+        expected_binding=prepared_call["expected_binding"],
+        workspace_limits=limits,
+    )
+    execution_call = f.integrations.github_repository_bundle.call_args.kwargs
+    assert execution_call == prepared_call
+    for key, value in (limits or {}).items():
+        assert prepared_call[key] == value
+
+
 async def test_incomplete_repository_cannot_claim_build_verification(publication_db, monkeypatch):
     f = await technical_fixture(publication_db, monkeypatch)
     f.integrations.github_repository_bundle.return_value.complete = False

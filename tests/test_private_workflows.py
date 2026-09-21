@@ -584,6 +584,21 @@ def test_github_pr_workflows_and_worker_verification_are_supported():
     assert spec.result_kind == "github.pull_request" and spec.verification_commands
     assert spec.allow_no_change is True
     assert spec.verification_commands == ("git diff --check",)
+    assert (spec.workspace_max_files, spec.workspace_max_bytes) == (1000, 100_000_000)
+    legacy = deepcopy(definition)
+    del legacy["procedure"]["workspace"]["limits"]
+    old_spec = validate_private_definition(legacy)
+    assert (old_spec.workspace_max_files, old_spec.workspace_max_bytes) == (500, 10_000_000)
+    for limits in (
+        {"max_files": 1001, "max_bytes": 100_000_000},
+        {"max_files": 1000, "max_bytes": 100_000_001},
+        {"max_files": True, "max_bytes": 100_000_000},
+        {"max_files": 1000, "max_bytes": 100_000_000, "unbounded": True},
+    ):
+        changed = deepcopy(definition)
+        changed["procedure"]["workspace"]["limits"] = limits
+        with pytest.raises(ValueError, match="limits"):
+            validate_private_definition(changed)
     ensure_schedule_allowed(definition, None)
     with pytest.raises(ValueError, match="scheduling"):
         ensure_schedule_allowed(definition, SimpleNamespace(cadence="daily"))
