@@ -1240,8 +1240,15 @@ function outputReadUrl(runId, source = "canonical") {
   return `/api/workflows/runs/${encodeURIComponent(runId)}/artifact${source === "retained" ? "?source=retained" : ""}`;
 }
 
+function retainedOutputLabel(run) {
+  return hasOutputConflict(run) ? "Compare" : run?.retained_output?.reason === "execution_interrupted" ? "Partial result" : "Saved result";
+}
+
 function retainedOutputMessage(run) {
   if (!run?.retained_output) return "";
+  if (run.retained_output.reason === "execution_interrupted") {
+    return "This workflow stopped before finishing. Its partial result is saved for reading and has not been applied to Files.";
+  }
   return run.retained_output.reason === "output_conflict"
     ? "The result was saved because this file changed while the workflow ran. The current file was left alone."
     : "The result is saved. Tin has not yet confirmed whether it reached Files.";
@@ -1524,7 +1531,7 @@ function renderChatTurn(turn) {
       ? `<button type="button" data-open-task="${escapeHtml(run.id)}">Open task →</button>`
       : `<button type="button" data-open-run="${escapeHtml(run.id)}">Watch →</button>`;
     if (run.retained_output && !run.canonical_commit_sha) {
-      action = `<button type="button" data-artifact-run="${escapeHtml(run.id)}">${hasOutputConflict(run) ? "Compare" : "Saved result"} →</button>`;
+      action = `<button type="button" data-artifact-run="${escapeHtml(run.id)}">${retainedOutputLabel(run)} →</button>`;
     } else if (availableRunOutput(run)) {
       action = `<button type="button" data-artifact-run="${escapeHtml(run.id)}">${run.status === "needs_input" && isMarkdownArtifact(run) ? "Review" : "Open"} →</button>`;
     }
@@ -2153,7 +2160,7 @@ function systemRunDetailHtml(run, includeClose = true) {
   const workflow = workflowForRun(run);
   const available = availableRunOutput(run);
   const output = available
-    ? `<button type="button" data-run-detail-artifact="${escapeHtml(run.id)}">${available.source === "retained" ? hasOutputConflict(run) ? "Compare" : "Saved result" : escapeHtml((available.source === "canonical" && run.artifact_title) || String(available.path).split("/").at(-1) || "Open result")} →</button>`
+    ? `<button type="button" data-run-detail-artifact="${escapeHtml(run.id)}">${available.source === "retained" ? retainedOutputLabel(run) : escapeHtml((available.source === "canonical" && run.artifact_title) || String(available.path).split("/").at(-1) || "Open result")} →</button>`
     : run.review_source_run_id
       ? `<button type="button" data-run-detail-artifact="${escapeHtml(run.id)}">${run.status === "failed" ? "Retry revision" : "Previous copy"} →</button>`
       : "—";
@@ -2166,7 +2173,7 @@ function systemRunDetailHtml(run, includeClose = true) {
       <span><code>result</code><strong>${output}</strong></span>
     </div>
     ${run.error_message ? `<p class="system-run-error">${escapeHtml(run.error_message)}</p>` : ""}
-    ${run.retained_output && !run.error_message ? `<p class="system-run-error">${escapeHtml(retainedOutputMessage(run))}</p>` : ""}
+    ${run.retained_output && (!run.error_message || run.retained_output.reason === "execution_interrupted") ? `<p class="system-run-error">${escapeHtml(retainedOutputMessage(run))}</p>` : ""}
     ${run.workflow_name === "outreach.email_campaign" ? emailCampaignRunDetail(run, detail) : ""}
     ${includeClose ? `<button class="system-run-close" type="button" data-observe-run="${escapeHtml(run.id)}" aria-label="Close ${escapeHtml(workflow?.title || "run")} details">Close</button>` : ""}
   </div>`;
@@ -3010,6 +3017,8 @@ function renderDocument() {
     const run = state.runs.find((item) => item.id === route.runId);
     state.documentCleanup = window.TinMarkdownViewer.mount(main, cached, {
       mode: "in-app",
+      contextLabel: route.source === "retained" && run?.retained_output?.reason === "execution_interrupted"
+        ? `Partial result · ${cached.filename}` : undefined,
       returnTo: {
         label: route.returnView,
         onActivate: () => route.taskPath ? openTask(route.runId) : navigate(route.returnView),
@@ -4486,7 +4495,7 @@ function activityAction(event) {
     return `<button type="button" data-activity-task="${escapeHtml(run.id)}">Open task →</button>`;
   }
   if (run.retained_output && !run.canonical_commit_sha) {
-    return `<button type="button" data-activity-artifact="${escapeHtml(run.id)}">${hasOutputConflict(run) ? "Compare" : "Saved result"} →</button>`;
+    return `<button type="button" data-activity-artifact="${escapeHtml(run.id)}">${retainedOutputLabel(run)} →</button>`;
   }
   if (!availableRunOutput(run)) {
     return `<button type="button" data-observe-run="${escapeHtml(run.id)}" data-observe-event="${escapeHtml(event.id)}">Observe →</button>`;

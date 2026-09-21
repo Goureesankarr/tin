@@ -2750,6 +2750,9 @@ class TinActivities:
                 raise RuntimeError("procedure result has no checkpoint path")
             recovered_revision = None
             from tin_lite import content_repository_delivery
+            from tin_lite.codex_api import attempt_failure, attempt_key, record_attempt_failure
+
+            api_attempt = await self._db.get_effect(attempt_key(run_id), conn=conn)
 
             repository_delivery = run.workflow_id == content_repository_delivery.WORKFLOW_ID
             if (
@@ -2763,6 +2766,15 @@ class TinActivities:
                     repo_id=project.state_repo_id,
                     branch=run.ephemeral_branch,
                 )
+                if (
+                    recovered_revision is None
+                    and api_attempt is not None
+                    and api_attempt.status == "completed"
+                    and (api_attempt.result or {}).get("generation") == run.generation
+                    and (api_attempt.result or {}).get("definition_commit_sha")
+                    == run.definition_commit_sha
+                ):
+                    recovered_revision = (api_attempt.result or {}).get("procedure_revision")
                 recovered = (
                     await self._storage.read_procedure_checkpoint(
                         repo_id=project.state_repo_id,
@@ -2851,6 +2863,28 @@ class TinActivities:
 
             sandbox_id: str | None = None
             try:
+                from tin_lite import interrupted_procedure
+
+                async def retain_interrupted(content=None):
+                    await interrupted_procedure.retain(
+                        db=self._db,
+                        conn=conn,
+                        storage=self._storage,
+                        run=run,
+                        project=project,
+                        spec=procedure,
+                        base=await self._procedure_artifact_base(run=run, procedure=procedure),
+                        content=content,
+                    )
+
+                if api_attempt is not None:
+                    sandbox_id = run.sandbox_id  # Cleanup the old attempt; never allocate another.
+                    await record_attempt_failure(conn, attempt_key(run_id))
+                    await retain_interrupted()
+                    failure = attempt_failure(api_attempt.result or {})
+                    raise ApplicationError(
+                        str(failure), type=type(failure).__name__, non_retryable=True
+                    )
                 await self._check_private_attempt(run, workflow_definition)
                 from tin_lite.codex_api import execution_profile, pinned_contract
 
@@ -3105,6 +3139,11 @@ class TinActivities:
                             ),
                             output_path=checkpoint_path,
                             output_max_bytes=procedure.output_max_bytes,
+                            interrupted_output_sink=(
+                                retain_interrupted
+                                if interrupted_procedure.eligible(procedure)
+                                else None
+                            ),
                             project_revision=(
                                 run.expected_head_sha
                                 if (
@@ -3233,10 +3272,19 @@ class TinActivities:
                 if sandbox_id is not None:
                     with suppress(Exception):
                         await self._sandboxes.kill(sandbox_id)
+                failed_attempt = await self._db.get_effect(attempt_key(run_id), conn=conn)
+                reported_failure = exc
+                if failed_attempt is not None and (failed_attempt.result or {}).get("outcome") in {
+                    "failed",
+                    "cancelled",
+                    "timed_out",
+                    "unconfirmed",
+                }:
+                    reported_failure = attempt_failure(failed_attempt.result or {})
                 await self._db.fail_effect(
                     conn,
                     execution_key=execution_key,
-                    error_message=_safe_failure(exc),
+                    error_message=_safe_failure(reported_failure),
                 )
                 raise
 

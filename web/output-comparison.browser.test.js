@@ -43,6 +43,7 @@ test("packaged app: Decisions, readers, exact apply/reload, and responsive compa
   const writes = [];
   const errors = [];
   let ordinaryReview = null;
+  let interrupted = false;
   const reviewApprovals = [];
   let filePath = "reports/PUBLIC_ARTICLE.md";
   let mediaType = "text/markdown";
@@ -50,12 +51,13 @@ test("packaged app: Decisions, readers, exact apply/reload, and responsive compa
   let savedBody = saved;
   const project = { id: "project", name: "Comparison QA", workspace_id: "workspace", workspace_name: "QA", timezone: "Europe/Berlin", member_count: 2 };
   const otherProject = { ...project, id: "other", name: "Other project" };
-  const run = () => ({ id: runId, project_id: "project", workflow_name: ordinaryReview?.workflow_key || "content.public_article", workflow_title: "Weekly article", status: ordinaryReview ? "needs_input" : "failed", created_at: "2026-09-07T11:20:00Z", output_resolution: resolution,
+  const run = () => ({ id: runId, project_id: "project", workflow_name: interrupted ? "research.deep_dive" : ordinaryReview?.workflow_key || "content.public_article", workflow_title: interrupted ? "Deep research" : "Weekly article", status: ordinaryReview ? "needs_input" : "failed", created_at: "2026-09-07T11:20:00Z", output_resolution: resolution,
     artifact_path: ordinaryReview ? filePath : null, canonical_commit_sha: ordinaryReview ? "c".repeat(40) : null,
-    retained_output: ordinaryReview ? null : { reason: "output_conflict", artifact_path: filePath, revision: "c".repeat(40) } });
+    error_message: interrupted ? "Codex stopped at this run's quoted spending maximum." : null,
+    retained_output: ordinaryReview ? null : { reason: interrupted ? "execution_interrupted" : "output_conflict", artifact_path: interrupted ? "reports/RESEARCH.md" : filePath, revision: "c".repeat(40) } });
   const compare = () => ({ run_id: runId, project_id: "project", path: filePath, media_type: mediaType, complete: true, identical: false, resolution, allowed_actions: resolution ? [] : ["keep_current", "use_saved"],
     current: { presence: "file", content: currentBody, revision: "b".repeat(40) }, saved: { content: savedBody, revision: "c".repeat(40) }, starting: { content: original, available: true, presence: "file", revision: "a".repeat(40) } });
-  const decisions = () => resolution && resolution.state !== "applying" ? [] : [{ id: runId, run_id: runId, project_id: "project", kind: "output_conflict", workflow_key: "content.public_article", workflow_title: "Weekly article", title: "Choose a version of PUBLIC_ARTICLE.md", explanation: "This file changed while the workflow ran. Tin left the file alone and saved the result.", consequence: "Nothing changes until you confirm on the comparison.", created_at: run().created_at, items: [{ file: "reports/PUBLIC_ARTICLE.md", revision: "c".repeat(40), source: "retained" }] }];
+  const decisions = () => interrupted || resolution && resolution.state !== "applying" ? [] : [{ id: runId, run_id: runId, project_id: "project", kind: "output_conflict", workflow_key: "content.public_article", workflow_title: "Weekly article", title: "Choose a version of PUBLIC_ARTICLE.md", explanation: "This file changed while the workflow ran. Tin left the file alone and saved the result.", consequence: "Nothing changes until you confirm on the comparison.", created_at: run().created_at, items: [{ file: "reports/PUBLIC_ARTICLE.md", revision: "c".repeat(40), source: "retained" }] }];
   const document = { filename: "PUBLIC_ARTICLE.md", source_url: "", html: "<h1>Why small teams ship faster</h1><p>Current file.</p>", markdown: current, word_count: 120, reading_minutes: 1, headings: [] };
   const server = http.createServer(async (request, response) => {
     const url = new URL(request.url, "http://localhost");
@@ -82,6 +84,7 @@ test("packaged app: Decisions, readers, exact apply/reload, and responsive compa
     }
     if (url.pathname.endsWith("/system")) return send({ waiting_count: decisions().length, running_count: 0, workflow_count: 0 });
     if (url.pathname.endsWith("/runs")) return send([run()]);
+    if (interrupted && url.pathname.endsWith("/activity")) return send([{id: "interrupted", run_id: runId, event_type: "workflow_failed", created_at: "2026-09-07T11:20:00Z", summary: "Research stopped at its spending maximum.", details: {}}]);
     if (url.pathname.endsWith(`/runs/${runId}`)) return send(run());
     if (url.pathname.endsWith(`/runs/${runId}/review`)) return send({
       run_id: runId, current_run_id: runId, version: 1, is_current: true,
@@ -104,7 +107,7 @@ test("packaged app: Decisions, readers, exact apply/reload, and responsive compa
       }
       return send({ project_id: "project", path: compare().path, resolution, retry_request: resolution?.state === "applying" ? retryRequest : null });
     }
-    if (url.pathname.endsWith("/document")) return send(document);
+    if (url.pathname.endsWith("/document")) return send(interrupted ? {...document, filename: "RESEARCH.md", html: "<h1>Why small teams ship faster</h1><p>Early research notes. The source review is unfinished.</p>"} : document);
     if (url.pathname.endsWith("/artifact")) return send(savedBody, mediaType);
     if (url.pathname.endsWith("/files/raw")) return send(currentBody, mediaType);
     if (url.pathname.endsWith("/files")) return send({ revision: "e".repeat(40), entries: [] });
@@ -134,6 +137,17 @@ test("packaged app: Decisions, readers, exact apply/reload, and responsive compa
     }, theme);
     const page = await context.newPage();
     page.on("pageerror", (error) => errors.push(error.message));
+    // Interrupted drafts remain readable, with no approval or apply action.
+    interrupted = true;
+    await page.goto(`${base}/#activity`);
+    await page.getByRole("button", {name: "Partial result →", exact: true}).click();
+    await page.getByRole("heading", {name: "Why small teams ship faster", exact: true}).waitFor();
+    assert.equal(new URL(page.url()).searchParams.get("source"), "retained");
+    assert.match(await page.locator(".markdown-filename").textContent(), /^Partial result ·/);
+    assert.equal(await page.getByRole("button", {name: /Approve|Use saved|Apply/}).count(), 0);
+    if (process.env.TIN_RECOVERY_SCREENSHOT) await page.screenshot({path: process.env.TIN_RECOVERY_SCREENSHOT, clip: {x: 0, y: 0, width: 1440, height: 420}});
+    assert.deepEqual(writes, []);
+    interrupted = false;
     // Ordinary document reviews have one reader action per output, not a
     // second header shortcut to the first document. No-output reviews retain
     // their only route into the run; conflicts retain their distinct route.

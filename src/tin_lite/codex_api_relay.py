@@ -22,6 +22,7 @@ from tin_lite.codex_api import (
     DIAGRAM_CONTRACT,
     PROCEDURE_CONTRACT,
     SESSION_CONTRACT,
+    STOP_MESSAGES,
     USAGE,
     attempt_key,
     decode_record,
@@ -37,6 +38,12 @@ from tin_lite.workflow_costs import session_funded
 router = APIRouter()
 MAX_EVENT_BYTES = 2 * 1024 * 1024
 UPSTREAM = "https://api.openai.com/v1"
+
+
+class AdmissionStopped(HTTPException):
+    def __init__(self, status, detail, *, key, reason):
+        super().__init__(status, detail)
+        self.key, self.reason = key, reason
 
 
 def web_usage(output, protocol):
@@ -216,6 +223,25 @@ class CodexAPIRelay:
         await self.client.aclose()
 
     async def admit(self, run_id, grant, fingerprint, operation, *, request_bytes=0, raw=None):
+        try:
+            return await self._admit(
+                run_id, grant, fingerprint, operation, request_bytes=request_bytes, raw=raw
+            )
+        except AdmissionStopped as exc:
+            # Admission rolled back and released its connection/run lock. Keep only
+            # our allowlisted code, never the request body or provider error text.
+            await self.db.pool.execute(
+                """UPDATE effect_receipts SET result=result || $2::jsonb
+                   WHERE execution_key=$1 AND operation=$3 AND status='started'
+                     AND result->>'grant_sha256'=$4 AND NOT result ? 'stop_reason'""",
+                exc.key,
+                json.dumps({"stop_reason": exc.reason}),
+                ATTEMPT,
+                token_hash(grant),
+            )
+            raise
+
+    async def _admit(self, run_id, grant, fingerprint, operation, *, request_bytes=0, raw=None):
         async with self.db.pool.acquire() as conn, conn.transaction():
             # Serialize short admissions, NOT model streaming or the activity's
             # session-long advisory lock. Stop/replacement lock the same run row.
@@ -267,6 +293,19 @@ class CodexAPIRelay:
             ):
                 raise HTTPException(403, "Codex API grant is expired or no longer active")
             contract = record["contract"]
+            if record.get("stop_reason") in STOP_MESSAGES:
+                raise HTTPException(409, STOP_MESSAGES[record["stop_reason"]])
+
+            def stopped(exc):
+                if exc.code in STOP_MESSAGES:
+                    return AdmissionStopped(
+                        exc.status,
+                        exc.diagnostic(),
+                        key=attempt_key(run_id, turn_number),
+                        reason=exc.code,
+                    )
+                return HTTPException(exc.status, exc.diagnostic())
+
             if raw is not None:
                 # Validate against this run's contract before any paid intent. The
                 # HTTP body ceiling alone must not upgrade a historical v1 grant.
@@ -318,7 +357,7 @@ class CodexAPIRelay:
                         conn, run_id=run_id, operation_id=key, kind="codex_api", maximum=None
                     )
                 except BillingError as exc:
-                    raise HTTPException(exc.status, exc.diagnostic()) from None
+                    raise stopped(exc) from None
             else:
                 rows = await conn.fetch(
                     """SELECT status, result FROM effect_receipts
@@ -330,13 +369,15 @@ class CodexAPIRelay:
                 if any(item["status"] != "completed" for item in rows):
                     raise HTTPException(409, "A prior API request is active or unconfirmed")
                 if len(rows) >= contract["max_requests"]:
-                    raise HTTPException(429, "Codex API request limit reached")
+                    raise stopped(
+                        BillingError("request_limit", "Codex API request limit reached", 429)
+                    )
                 tokens = sum(
                     (decode_record(item["result"]).get("usage") or {}).get("total_tokens") or 0
                     for item in rows
                 )
                 if tokens >= contract["max_observed_tokens"]:
-                    raise HTTPException(429, "Codex API token limit reached")
+                    raise stopped(BillingError("token_limit", "Codex API token limit reached", 429))
                 if enrolled:
                     for item in rows:
                         previous = decode_record(item["result"])
@@ -354,7 +395,7 @@ class CodexAPIRelay:
                             maximum=lambda terms: terms["request_maximum_nanos"],
                         )
                     except BillingError as exc:
-                        raise HTTPException(exc.status, exc.diagnostic()) from None
+                        raise stopped(exc) from None
                 request_number = len(rows) + 1
             observation = {
                 "version": 1,
