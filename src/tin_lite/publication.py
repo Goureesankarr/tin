@@ -143,6 +143,7 @@ class OutputCheckpoint:
                 "text/csv",
                 "text/vnd.mermaid",
                 "text/plain",
+                "application/json",
                 "image/svg+xml",
                 "video/mp4",
             }

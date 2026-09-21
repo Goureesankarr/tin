@@ -23,13 +23,19 @@ from tin_lite.code_storage import CodeStorage
 from tin_lite.db import Database, apply_migrations
 from tin_lite.domain import RunStatus, SideEffectConflictError, StaleGenerationError, WorkflowRun
 from tin_lite.mcp_server import create_mcp_app
-from tin_lite.procedures import PinnedCodexProcedure, SandboxProfile
+from tin_lite.procedures import (
+    PinnedCodexProcedure,
+    SandboxProfile,
+    validate_codex_procedure_definition,
+)
 from tin_lite.publication import (
     OutputCheckpoint,
     OutputConflictError,
     PublicationPendingError,
     read_run_output,
 )
+from tin_lite.workflow_creator import creator_files
+from tin_lite.workflow_packages import decode_workflow_source
 
 PATH = "reports/RESEARCH.md"
 CONTENT = b"# Finished research\n\nThe validated result.\n"
@@ -193,17 +199,17 @@ class HistoryStorage(CodeStorage):
         }
 
 
-def saved_checkpoint(storage, run):
+def saved_checkpoint(storage, run, *, path=PATH, content=CONTENT, media_type="text/markdown"):
     head = storage.repo.head
-    revision = storage.repo.edit({PATH: CONTENT}, parent=run.expected_head_sha)
+    revision = storage.repo.edit({path: content}, parent=run.expected_head_sha)
     storage.branch_revision = revision
     storage.repo.head = head
     return OutputCheckpoint.create(
-        run=run, revision=revision, path=PATH, media_type="text/markdown", content=CONTENT
+        run=run, revision=revision, path=path, media_type=media_type, content=content
     )
 
 
-async def publish(storage, checkpoint, state, validate=None):
+async def publish(storage, checkpoint, state, validate=None, *, content=CONTENT):
     async def save_intent(value):
         state["intent"] = value
 
@@ -214,7 +220,7 @@ async def publish(storage, checkpoint, state, validate=None):
         repo_id=storage.repo.id,
         branch="main",
         checkpoint=checkpoint,
-        content=CONTENT,
+        content=content,
         execution_key=f"{checkpoint.run_id}:procedure_canonical_commit",
         workflow_key="research.deep_dive",
         intent=state.get("intent"),
@@ -222,6 +228,40 @@ async def publish(storage, checkpoint, state, validate=None):
         save_intent=save_intent,
         validate_lease=validate or valid,
     )
+
+
+@pytest.mark.asyncio
+async def test_creator_json_checkpoint_publishes_once_and_remains_readable():
+    path = "workflow_packages/custom.workflow_create/workflow.json"
+    definition = decode_workflow_source(
+        creator_files()[path].encode(), definition_path=path
+    ).definition
+    spec = validate_codex_procedure_definition(definition)
+    content = b'{"format":"tin-workflow-candidate-v1","limitations":[]}\n'
+    storage = HistoryStorage()
+    run = run_fixture()
+    checkpoint = saved_checkpoint(
+        storage, run, path=spec.output_path, content=content, media_type=spec.output_media_type
+    )
+    restored = OutputCheckpoint.load(checkpoint.to_dict(), run=run)
+    restored.validate_content(content)
+    with pytest.raises(ValueError, match="no longer matches"):
+        restored.validate_content(content + b" ")
+    with pytest.raises(ValueError, match="validated checkpoint"):
+        OutputCheckpoint.load(checkpoint.to_dict(), run=replace(run, generation=2))
+    storage.repo.edit({"README.md": b"Later project edit\n"})
+    state = {}
+    revision, changed = await publish(storage, restored, state, content=content)
+    assert changed and storage.repo.writes == 1
+    assert await publish(storage, restored, state, content=content) == (revision, True)
+    assert storage.repo.writes == 1
+    output = await read_run_output(
+        storage=storage,
+        run=replace(run, artifact_path=spec.output_path, canonical_commit_sha=revision),
+        repo_id=storage.repo.id,
+    )
+    assert output.path == "reports/WORKFLOW_CANDIDATE.json" and output.content == content
+    assert storage.repo.trees[revision]["README.md"][1] == b"Later project edit\n"
 
 
 @pytest.mark.asyncio
