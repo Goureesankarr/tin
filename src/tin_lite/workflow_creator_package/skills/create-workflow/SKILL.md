@@ -22,6 +22,8 @@ workflow implicitly.
    Distinguish a saved connection from proof that the required provider operations work.
    For procedures, respect Tin's input boundary: sandbox inputs omit the server-bound project_id.
    Require a fresh declared result; an old artifact or a final error message is not a new result.
+   Keep the input form small: expose choices the caller needs to make, and keep derived facts
+   and stable execution policy in package resources. State missing setup instead of inventing it.
 4. Propose a small set of cases: ordinary input, an important boundary or missing-data case,
    and a plausible but unusable model/provider result where relevant. Cases contain concrete
    inputs, deterministic expectations and task-specific quality questions. Tie them to the
