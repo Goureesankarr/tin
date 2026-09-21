@@ -448,3 +448,25 @@ def test_provider_boundary_fixtures(name):
     else:
         assert cov[("current", p["steps"][0])]["eligible_actors"] == 6
         assert a["validate_traffic"](rows["traffic"], p, cov)["current"] == [6, 7]
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "customer@example.test",
+        "/users/123456",
+        "Other",
+        "https://private.test/",
+        "01234567-abcd",
+        None,
+    ],
+)
+def test_configured_dimensions_have_the_same_safe_labels_as_discovery(value):
+    a, p = analytics(), plan("website")
+    p["categories"] = [value]
+    with pytest.raises(ValueError):
+        a["validate_plan"](p)
+    with pytest.raises(ValueError):
+        a["validate_dimensions"](
+            [{"kind": "categories", "value": value, "volume": 2}], plan("website")
+        )

@@ -1,15 +1,23 @@
 # Report contract
 
 Write a dated brief to context.output.path. Header: title, Status (complete/incomplete/invalid
-configuration/unsupported exclusions/schema changed), generated UTC, workflow version 1.0.0,
+configuration/unsupported exclusions/schema changed), generated UTC, context.workflow_key,
 builder reusable-v1, provider project, current/prior UTC half-open windows, 90-day lookback,
 actor/attempt and separate traffic identity, applied exclusions and uncertain inclusion.
 State inferred semantics and reliable-date limitations. Never invent a run or source revision.
 
+The human brief before the evidence marker is at most 10000 characters. Lead each section
+with one useful finding, then the smallest table needed to substantiate it. Round displayed
+percentages to one decimal and seconds to two decimals; preserve exact values in JSON. Do not
+repeat captions, zero-only rows, a separate rate row for every step/day, or boilerplate assurances.
+Use one shared window/unit/exclusion caption when adjacent tables have the same population.
+The immutable workflow version is recorded by Tin; do not invent it from the builder version.
+
 Use these five headings, in order:
 
 - ## Activation funnel: readable step labels plus events; ordered counts by selected-start day
-  and period, of-previous/of-first rates and exact daily median timings. Raw event-day emissions
+  and period, period conversion rates and daily median time to the final step. Keep full
+  per-step/day rates, timings and zero-filled days in evidence. Raw event-day emissions
   and eligible actors are separately captioned. No summed marginal counts as conversion.
 - ## Key-event trends: daily comparison-window counts, older weekly counts, current/prior raw
   totals and distinct actors from coverage, absolute/relative changes. Undefined is not zero.
@@ -28,7 +36,8 @@ matching old/new window; explain that late data or instrumentation may be involv
 possibilities. Different windows or units are not corrections. Keep prior labels unless the
 saved configuration changed, and disclose mapping changes.
 
-Append a fenced JSON evidence block preceded by `<!-- tin-analytics-evidence-v1 -->`:
+Append compact JSON (json.dumps with separators=(",", ":"), no indentation or duplicate
+derived copies) in a fenced evidence block preceded by `<!-- tin-analytics-evidence-v1 -->`:
 
 - `binding`: settings hash; `generated_at`: UTC timestamp; `provider_project`: selected ID;
 - `state`: plan_state result, including validated plan, schema signature and any differences;

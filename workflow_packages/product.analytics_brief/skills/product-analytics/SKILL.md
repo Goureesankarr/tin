@@ -126,8 +126,9 @@ provider error text or malformed output for a numerical result.
 ## Delivery
 
 Write only context.output.path, using REPORT.md, at most context.output.max_bytes. Use Python
-to render checked tables and append JSON evidence from saved responses; do not manually
-transcribe numbers or ask the model to reprint large SQL/results. Keep narrative concise.
+to render checked tables and append compact JSON evidence from saved responses; do not manually
+transcribe numbers or ask the model to reprint large SQL/results. Keep the human brief within
+REPORT.md's 10000-character bound and keep full detailed rows in evidence.
 Every output is fresh, including failures. A complete brief needs five defensible findings;
 verified missing pageviews or insufficient statistical evidence can satisfy their sections.
 A failed required query makes the report incomplete and fails ordinary qualification.

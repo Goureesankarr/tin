@@ -1,7 +1,7 @@
 # Screen a declared set of conversion comparisons
 
-Use this code unchanged. Before seeing outcomes, select up to three defensible
-non-identifying dimensions and at most eight categories per dimension. Each
+Use this code unchanged. Before seeing outcomes, select one defensible
+non-identifying dimension and at most eight categories. Each
 comparison is one category against the rest of the same eligible funnel cohort,
 using one independent actor per row and the dimension on its first step. Missing
 dimensions and ambiguous first-step values remain explicit; never use arbitrary
@@ -67,8 +67,8 @@ def holm(p_values):
 
 
 def screen_comparisons(tables):
-    if not 1 <= len(tables) <= 24:
-        raise ValueError("declare 1-24 comparisons")
+    if not 1 <= len(tables) <= 8:
+        raise ValueError("declare 1-8 comparisons")
     values = [fisher_exact_two_sided(*table) for table in tables]
     adjusted = holm([p if p is not None else 1.0 for p in values])
     return [

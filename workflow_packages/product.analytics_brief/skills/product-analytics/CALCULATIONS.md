@@ -11,7 +11,6 @@ import re
 import statistics
 
 VERSION = "reusable-v1"
-SAFE = re.compile(r"[A-Za-z0-9_$ ./:-]{1,128}\Z")
 KEY = re.compile(r"[A-Za-z_$][A-Za-z0-9_$]{0,63}\Z")
 RESERVED = {"Unknown", "Ambiguous", "Other"}
 
@@ -150,8 +149,8 @@ def validate_plan(p):
     ):
         raise ValueError("invalid labels")
     for k in ("paths", "sources", "categories"):
-        if set(p[k]) & RESERVED:
-            raise ValueError("reserved category label")
+        for value in p[k]:
+            safe_dimension(value)
     for k in ("category_property", "path_property", "source_property"):
         if p[k]:
             prop(p[k])
@@ -922,21 +921,25 @@ def query_columns(step, p):
     raise ValueError("unknown query schema")
 
 
+def safe_dimension(value):
+    if (
+        type(value) is not str
+        or not re.fullmatch(r"[A-Za-z/][A-Za-z0-9 _./-]{0,63}", value)
+        or value in RESERVED
+        or re.search(r"[0-9]{5}|[a-f0-9]{8}-[a-f0-9]{4}", value, re.I)
+    ):
+        raise ValueError("unsafe or identifying dimension value")
+    return value
+
+
 def validate_dimensions(rows, p):
     result = {k: [] for k in ("categories", "paths", "sources")}
     seen = set()
     for r in rows:
         kind, value = r["kind"], r["value"]
-        if (
-            kind not in result
-            or type(value) is not str
-            or (kind, value) in seen
-            or not re.fullmatch(r"[A-Za-z/][A-Za-z0-9 _./-]{0,63}", value)
-            or value in RESERVED
-        ):
+        if kind not in result or type(value) is not str or (kind, value) in seen:
             raise ValueError("invalid safe dimension value")
-        if re.search(r"[0-9]{5}|[a-f0-9]{8}-[a-f0-9]{4}", value, re.I):
-            raise ValueError("identifying dimension value")
+        safe_dimension(value)
         count(r["volume"])
         seen.add((kind, value))
         result[kind].append(value)
