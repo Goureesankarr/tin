@@ -1,5 +1,6 @@
 """Offline checks of the checked-in recipe; no PostHog requests or model calls."""
 
+import json
 import re
 from copy import deepcopy
 from pathlib import Path
@@ -45,6 +46,18 @@ def test_exact_aggregate_validation_and_rates(recipe):
     assert rows[2]["median_from_previous"] == 3.0
     assert rows[2]["of_previous_pct"] == pytest.approx(100 * 5 / 6)
     assert rows[2]["of_first_pct"] == 62.5
+
+
+def test_generator_preserves_the_provider_qualified_synthetic_query(recipe):
+    # A versioned SQL/response pair records the actual dialect check. This is a regression
+    # guard, not a live query in CI; SQL changes require separately authorized requalification.
+    fixtures = Path(__file__).parent / "fixtures/posthog_funnel"
+    query = (fixtures / "ordered.sql").read_text().rstrip()
+    events_cte = query.split(",\nb AS", 1)[0]
+    steps = ["onboarding_plan_written", "onboarding_approved", "onboarding_set_up"]
+    assert events_cte + recipe["funnel_tail"](steps) == query
+    observed = json.loads((fixtures / "ordered.json").read_text())
+    assert recipe["read_funnel"](observed, 3) == recipe["read_funnel"](response(), 3)
 
 
 @pytest.mark.parametrize("raw_first", [0, 1])

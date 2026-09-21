@@ -1,0 +1,42 @@
+{
+  "columns": [
+    "raw1",
+    "eligible1",
+    "actors1",
+    "raw2",
+    "eligible2",
+    "actors2",
+    "raw3",
+    "eligible3",
+    "actors3",
+    "n1",
+    "n2",
+    "n3",
+    "median_d12",
+    "median_d13",
+    "median_d23",
+    "order_violations",
+    "duplicate_choices"
+  ],
+  "results": [
+    [
+      10,
+      10,
+      8,
+      11,
+      11,
+      8,
+      10,
+      10,
+      8,
+      8,
+      6,
+      5,
+      1.5,
+      5.0,
+      3.0,
+      0,
+      0
+    ]
+  ]
+}
