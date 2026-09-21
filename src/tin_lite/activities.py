@@ -4596,11 +4596,14 @@ class TinActivities:
                         "visibility model request was already attempted without a recoverable "
                         "response; the request was not repeated"
                     )
+                # The provider's existing usage observation records dispatch intent.
+                # A billing rejection before that intent must remain retryable as
+                # an admission failure, not become an uncertain paid attempt here.
+                response = await request()
+                result = visibility_response_checkpoint(response)
                 await self._db.start_effect(
                     conn, execution_key=response_key, operation="visibility_response_v1"
                 )
-                response = await request()
-                result = visibility_response_checkpoint(response)
                 await self._db.complete_effect(conn, execution_key=response_key, result=result)
                 return read_visibility_response_checkpoint(result)
 

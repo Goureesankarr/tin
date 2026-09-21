@@ -408,7 +408,7 @@ async def test_cancelled_provider_call_remains_unknown_and_cannot_be_rebought(pu
 
     with pytest.raises(asyncio.CancelledError):
         await invoke()
-    with pytest.raises(ApplicationError, match="could not be recovered"):
+    with pytest.raises(ApplicationError, match="already attempted without a recoverable response"):
         await invoke()
     assert dispatched == 1
     usage = await publication_db.get_effect(
@@ -416,3 +416,28 @@ async def test_cancelled_provider_call_remains_unknown_and_cannot_be_rebought(pu
     )
     assert usage.status == "started" and usage.result["outcome"] == "unconfirmed"
     assert usage.result["usage"] is None
+
+
+async def test_admission_rejection_is_not_recorded_as_a_paid_attempt(publication_db, monkeypatch):
+    run_id, responses, invoke = effect(publication_db, response_text("panel", json.dumps(panel())))
+    original = responses.create
+    attempts = 0
+
+    async def admit(payload):
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            raise RuntimeError("spending admission rejected before dispatch")
+        return await original(payload)
+
+    monkeypatch.setattr(responses, "create", admit)
+    with pytest.raises(RuntimeError, match="spending admission rejected before dispatch"):
+        await invoke()
+    assert await publication_db.get_effect(f"{run_id}:visibility:panel:response") is None
+    assert (
+        await publication_db.get_effect(observation_key(run_id, "visibility:panel", "responses"))
+        is None
+    )
+    assert responses.payloads == []
+    assert (await invoke())["target"]["domain"] == "virvid.app"
+    assert attempts == 2 and len(responses.payloads) == 1
