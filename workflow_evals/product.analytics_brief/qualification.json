@@ -1,0 +1,255 @@
+{
+  "version": 1,
+  "assumptions": [
+    "Fixtures and response replays are synthetic; live runs need separately authorized project connections and a named payer.",
+    "One provider project, 1..31 complete UTC days plus equal prior window and a bounded 90-day history. At most 200 event types, 2..6 ordered steps, 4 key events, 2 error events and one named dimension.",
+    "Run success establishes artifact delivery. Ordinary cases also require a complete useful report and independent numerical/rubric review."
+  ],
+  "cost_drivers": [
+    "One bounded Codex session uses the existing pinned model pricing and spending ceiling. No extra managed-model routes. The configured ceiling is not an expected price.",
+    "Agent work depends on schema ambiguity, bounded project context, prior state and response/narrative size. Eight provider requests maximum, 16000 bytes each, 64000-byte responses, 900 seconds and one 192000-byte report.",
+    "PostHog scans depend on selected window, event volume and actor/attempt cardinality. Output LIMIT is not a bound on provider scan cost. Connected-provider cost is unknown and separate.",
+    "Use verified usage from authorized runs for measured estimates. Synthetic SQL checks alone measure no model cost."
+  ],
+  "effects": [
+    "Read-only event-definition GET and aggregate query POST through custom.api.posthog. Provider-enforced read-only permissions are required; generic http.write is a transport permission.",
+    "One run-owned reports/analytics/<run_id>.md in project state; Files/Activity delivery and existing immutable history.",
+    "No provider mutation, raw person exports, credential access, email, publication, workflow activation or recursive runs."
+  ],
+  "cases": [
+    {
+      "id": "ordinary_web",
+      "description": "Controlled ordinary_web fixture from tests/fixtures/product_analytics. Require useful verified figures, ordered population 6/3/2 (web adds 2), not a diagnostic. See README.md.",
+      "inputs": {
+        "posthog_project_id": "101",
+        "reporting_days": 7,
+        "as_of_utc": "2026-01-12",
+        "event_mapping": "Browser identities use distinct_id; sessions use $session_id. Visited the site=$pageview, Started signup=signup_started, Completed signup=signup_completed, Exported once=first_export. Website properties: $pathname, $referring_domain and $device_type. These are synthetic documented events.",
+        "exclusions": ""
+      },
+      "expected_status": "succeeded",
+      "expect": {
+        "contains": [
+          "Status: complete",
+          "## Activation funnel",
+          "## Key-event trends",
+          "## Traffic sources and landing paths",
+          "## Meaningful error signals",
+          "## Named categorical breakdown",
+          "$pageview",
+          "signup_completed",
+          "first_export",
+          "Desktop",
+          "/start",
+          "Fisher",
+          "Holm"
+        ],
+        "excludes": [
+          "Status: incomplete",
+          "Recommendations",
+          "qualified: true"
+        ]
+      }
+    },
+    {
+      "id": "ordinary_backend",
+      "description": "Controlled ordinary_backend fixture from tests/fixtures/product_analytics. Require useful verified figures, ordered population 6/3/2 (web adds 2), not a diagnostic. See README.md.",
+      "inputs": {
+        "posthog_project_id": "202",
+        "reporting_days": 7,
+        "as_of_utc": "2026-01-12",
+        "event_mapping": "Accounts use account_id; attempts use job_id. Created a workspace=Workspace created, Invited a teammate=Invite sent, Viewed a report=Report viewed. No website instrumentation or category dimension. These are synthetic documented events.",
+        "exclusions": ""
+      },
+      "expected_status": "succeeded",
+      "expect": {
+        "contains": [
+          "Status: complete",
+          "## Activation funnel",
+          "## Key-event trends",
+          "## Traffic sources and landing paths",
+          "## Meaningful error signals",
+          "## Named categorical breakdown",
+          "Workspace created",
+          "Invite sent",
+          "Report viewed",
+          "No pageviews observed"
+        ],
+        "excludes": [
+          "Status: incomplete",
+          "Recommendations",
+          "qualified: true"
+        ]
+      }
+    },
+    {
+      "id": "repeat_labels",
+      "description": "Reuse the validated pin from ordinary_web; same fixture and settings must retain labels and counts.",
+      "inputs": {
+        "posthog_project_id": "101",
+        "reporting_days": 7,
+        "as_of_utc": "2026-01-12",
+        "event_mapping": "Browser identities use distinct_id; sessions use $session_id. Visited the site=$pageview, Started signup=signup_started, Completed signup=signup_completed, Exported once=first_export. Website properties: $pathname, $referring_domain and $device_type. These are synthetic documented events.",
+        "exclusions": ""
+      },
+      "expected_status": "succeeded",
+      "expect": {
+        "contains": [
+          "## Activation funnel",
+          "## Key-event trends",
+          "## Traffic sources and landing paths",
+          "## Meaningful error signals",
+          "## Named categorical breakdown",
+          "Visited the site",
+          "Started signup",
+          "Completed signup",
+          "Exported once"
+        ],
+        "excludes": [
+          "Recommendations",
+          "qualified: true"
+        ]
+      }
+    },
+    {
+      "id": "wrong_counts",
+      "description": "Replay website responses with monotone 5/3/2/2 instead of 6/3/2/2. Funnel and dependent breakdown must be withheld.",
+      "inputs": {
+        "posthog_project_id": "101",
+        "reporting_days": 7,
+        "as_of_utc": "2026-01-12",
+        "event_mapping": "Browser identities use distinct_id; sessions use $session_id. Visited the site=$pageview, Started signup=signup_started, Completed signup=signup_completed, Exported once=first_export. Website properties: $pathname, $referring_domain and $device_type. These are synthetic documented events.",
+        "exclusions": ""
+      },
+      "expected_status": "succeeded",
+      "expect": {
+        "contains": [
+          "## Activation funnel",
+          "## Key-event trends",
+          "## Traffic sources and landing paths",
+          "## Meaningful error signals",
+          "## Named categorical breakdown",
+          "Status: incomplete",
+          "mismatch",
+          "unavailable"
+        ],
+        "excludes": [
+          "Recommendations",
+          "qualified: true"
+        ]
+      }
+    },
+    {
+      "id": "failed_query",
+      "description": "Replay coverage HTTP 403 after discovery; no blind retry or zero substitution.",
+      "inputs": {
+        "posthog_project_id": "101",
+        "reporting_days": 7,
+        "as_of_utc": "2026-01-12",
+        "event_mapping": "Browser identities use distinct_id; sessions use $session_id. Visited the site=$pageview, Started signup=signup_started, Completed signup=signup_completed, Exported once=first_export. Website properties: $pathname, $referring_domain and $device_type. These are synthetic documented events.",
+        "exclusions": ""
+      },
+      "expected_status": "succeeded",
+      "expect": {
+        "contains": [
+          "## Activation funnel",
+          "## Key-event trends",
+          "## Traffic sources and landing paths",
+          "## Meaningful error signals",
+          "## Named categorical breakdown",
+          "Status: incomplete",
+          "403",
+          "unavailable"
+        ],
+        "excludes": [
+          "Recommendations",
+          "qualified: true"
+        ]
+      }
+    },
+    {
+      "id": "unsupported_exclusions",
+      "description": "An email-domain pattern is outside the exact-scalar compiler; no aggregate requests.",
+      "inputs": {
+        "posthog_project_id": "101",
+        "reporting_days": 7,
+        "as_of_utc": "2026-01-12",
+        "event_mapping": "Browser identities use distinct_id; sessions use $session_id. Visited the site=$pageview, Started signup=signup_started, Completed signup=signup_completed, Exported once=first_export. Website properties: $pathname, $referring_domain and $device_type. These are synthetic documented events.",
+        "exclusions": "Exclude every colleague with an email in example.test."
+      },
+      "expected_status": "succeeded",
+      "expect": {
+        "contains": [
+          "## Activation funnel",
+          "## Key-event trends",
+          "## Traffic sources and landing paths",
+          "## Meaningful error signals",
+          "## Named categorical breakdown",
+          "Status: unsupported exclusions",
+          "unavailable"
+        ],
+        "excludes": [
+          "Recommendations",
+          "qualified: true"
+        ]
+      }
+    },
+    {
+      "id": "invalid_input",
+      "description": "Reject provider path traversal before access.",
+      "inputs": {
+        "posthog_project_id": "../202",
+        "reporting_days": 7,
+        "as_of_utc": "2026-01-12",
+        "event_mapping": "Browser identities use distinct_id; sessions use $session_id. Visited the site=$pageview, Started signup=signup_started, Completed signup=signup_completed, Exported once=first_export. Website properties: $pathname, $referring_domain and $device_type. These are synthetic documented events.",
+        "exclusions": ""
+      },
+      "expected_status": "succeeded",
+      "expect": {
+        "contains": [
+          "## Activation funnel",
+          "## Key-event trends",
+          "## Traffic sources and landing paths",
+          "## Meaningful error signals",
+          "## Named categorical breakdown",
+          "Status: invalid configuration",
+          "unavailable"
+        ],
+        "excludes": [
+          "Recommendations",
+          "qualified: true"
+        ]
+      }
+    }
+  ],
+  "rubric": [
+    {
+      "id": "usefulness",
+      "question": "Do ordinary cases contain correct useful figures in all five sections, allowing evidenced absence of pageviews or no supported breakdown, without substituting a diagnostic?"
+    },
+    {
+      "id": "grounding",
+      "question": "Can every count, rate and timing be reproduced from retained successful aggregates and deterministic calculations, including rejecting plausible inconsistent results?"
+    },
+    {
+      "id": "semantics",
+      "question": "Are actor identities, attempts, raw emissions, selected-start cohorts, traffic sessions and exclusions labeled correctly, without equating identifiers with humans or inferred setup with value?"
+    },
+    {
+      "id": "coverage",
+      "question": "Are missing keys, exclusions with missing values, unavailable firing-site semantics and historical coverage explicit, with errors distinguished from zero?"
+    },
+    {
+      "id": "statistics",
+      "question": "Was one non-identifying dimension chosen before outcomes, with the whole declared family, denominators, Fisher/Holm results and sample/computation limits retained?"
+    },
+    {
+      "id": "continuity",
+      "question": "Do repeated briefs keep validated labels and meanings, disclose saved-input changes and withhold comparisons on unexplained drift?"
+    },
+    {
+      "id": "scope",
+      "question": "Is access limited to the connected project and declared read-only operations, with no sensitive values in the report, recommendations, or unsupported qualification claims?"
+    }
+  ]
+}

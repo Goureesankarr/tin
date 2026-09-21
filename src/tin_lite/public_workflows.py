@@ -23,7 +23,9 @@ class PublicWorkflow:
 # Merging a package does not activate it. Add a reviewed package here to include it
 # in the next catalog sync. Keep IDs and keys stable; never reuse a retired identity.
 # Copyable example.* packages are deliberately not product Registry entries.
-PUBLIC_WORKFLOWS: tuple[PublicWorkflow, ...] = ()
+PUBLIC_WORKFLOWS: tuple[PublicWorkflow, ...] = (
+    PublicWorkflow(UUID("0ddd88b9-6ded-44c3-9982-b7505c2e31b1"), "product.analytics_brief"),
+)
 
 
 @dataclass(frozen=True)

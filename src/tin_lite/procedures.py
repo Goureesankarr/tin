@@ -813,8 +813,17 @@ def validate_codex_procedure_definition(definition: dict[str, Any]) -> CodexProc
                 raise ValueError("procedure artifact output path template is invalid")
             placeholders = re.findall(r"\{[^{}]*\}", raw_output_template)
             if placeholders == ["{run_id}"]:
-                if output_validator not in {*content_draft.VALIDATORS, PUBLIC_ARTICLE_VALIDATOR}:
-                    raise ValueError("run-owned draft paths require content draft validation")
+                plain_report = (
+                    output_validator is None
+                    and raw_output_template.startswith("reports/")
+                    and raw_output_template.endswith("/{run_id}.md")
+                    and output.get("media_type") == "text/markdown"
+                )
+                if not plain_report and output_validator not in {
+                    *content_draft.VALIDATORS,
+                    PUBLIC_ARTICLE_VALIDATOR,
+                }:
+                    raise ValueError("run-owned paths require a plain report or draft validation")
                 sample = raw_output_template.replace(
                     "{run_id}", "00000000-0000-4000-8000-000000000031"
                 )

@@ -1,0 +1,168 @@
+{
+  "profile": {
+    "actor": "properties.account_id",
+    "attempt": "properties.job_id",
+    "unit": "accounts",
+    "events": [
+      "Workspace created",
+      "Invite sent",
+      "Report viewed"
+    ],
+    "labels": [
+      "Created a workspace",
+      "Invited a teammate",
+      "Viewed a report"
+    ]
+  },
+  "events": [
+    {
+      "event": "Workspace created",
+      "timestamp": "2026-01-05T00:00:01Z",
+      "distinct_id": "a",
+      "properties": {
+        "account_id": "a",
+        "job_id": "a-1"
+      }
+    },
+    {
+      "event": "Invite sent",
+      "timestamp": "2026-01-05T00:00:02Z",
+      "distinct_id": "a",
+      "properties": {
+        "account_id": "a",
+        "job_id": "a-1"
+      }
+    },
+    {
+      "event": "Report viewed",
+      "timestamp": "2026-01-05T00:00:03Z",
+      "distinct_id": "a",
+      "properties": {
+        "account_id": "a",
+        "job_id": "a-1"
+      }
+    },
+    {
+      "event": "Workspace created",
+      "timestamp": "2026-01-05T00:00:01Z",
+      "distinct_id": "b",
+      "properties": {
+        "account_id": "b",
+        "job_id": "b-1"
+      }
+    },
+    {
+      "event": "Invite sent",
+      "timestamp": "2026-01-05T00:00:02Z",
+      "distinct_id": "b",
+      "properties": {
+        "account_id": "b",
+        "job_id": "b-1"
+      }
+    },
+    {
+      "event": "Report viewed",
+      "timestamp": "2026-01-05T00:00:03Z",
+      "distinct_id": "b",
+      "properties": {
+        "account_id": "b",
+        "job_id": "b-1"
+      }
+    },
+    {
+      "event": "Workspace created",
+      "timestamp": "2026-01-05T00:00:01Z",
+      "distinct_id": "c",
+      "properties": {
+        "account_id": "c",
+        "job_id": "c-1"
+      }
+    },
+    {
+      "event": "Invite sent",
+      "timestamp": "2026-01-05T00:00:02Z",
+      "distinct_id": "c",
+      "properties": {
+        "account_id": "c",
+        "job_id": "c-1"
+      }
+    },
+    {
+      "event": "Workspace created",
+      "timestamp": "2026-01-05T00:00:01Z",
+      "distinct_id": "d",
+      "properties": {
+        "account_id": "d",
+        "job_id": "d-1"
+      }
+    },
+    {
+      "event": "Workspace created",
+      "timestamp": "2026-01-05T00:00:01Z",
+      "distinct_id": "a",
+      "properties": {
+        "account_id": "a",
+        "job_id": "a-1"
+      }
+    },
+    {
+      "event": "Invite sent",
+      "timestamp": "2026-01-05T00:00:04Z",
+      "distinct_id": "later-only",
+      "properties": {
+        "account_id": "later-only",
+        "job_id": "x"
+      }
+    },
+    {
+      "event": "Workspace created",
+      "timestamp": "2026-01-05T00:00:08Z",
+      "distinct_id": "tie",
+      "properties": {
+        "account_id": "tie",
+        "job_id": "t"
+      }
+    },
+    {
+      "event": "Invite sent",
+      "timestamp": "2026-01-05T00:00:08Z",
+      "distinct_id": "tie",
+      "properties": {
+        "account_id": "tie",
+        "job_id": "t"
+      }
+    },
+    {
+      "event": "Workspace created",
+      "timestamp": "2026-01-05T00:00:10Z",
+      "distinct_id": "cross-attempt",
+      "properties": {
+        "account_id": "cross-attempt",
+        "job_id": "left"
+      }
+    },
+    {
+      "event": "Invite sent",
+      "timestamp": "2026-01-05T00:00:11Z",
+      "distinct_id": "cross-attempt",
+      "properties": {
+        "account_id": "cross-attempt",
+        "job_id": "right"
+      }
+    },
+    {
+      "event": "Invite sent",
+      "timestamp": "2026-01-05T00:00:12Z",
+      "distinct_id": "other-actor",
+      "properties": {
+        "account_id": "other-actor",
+        "job_id": "left"
+      }
+    }
+  ],
+  "expected_ordered": [
+    6,
+    3,
+    2
+  ]
+}
