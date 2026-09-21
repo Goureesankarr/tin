@@ -30,6 +30,13 @@ This is an authoring example, not a live-qualified analytics product.
 5. Calculate counts and conversion rates in SQL/Python. Check monotonic stage counts and use
    undefined, not 0%, for a zero denominator. Include the successful query text, window, stage
    definitions, aggregate results and calculations so another reader can reproduce them.
+   HOGQL.md supplies a deterministic two/three-stage implementation for strict in-window
+   progression within the same actor and attempt. Use it unchanged when those semantics fit;
+   establish both identity keys first. It selects one deepest, earliest chain per actor for
+   exact medians. If the requested funnel needs different semantics or lacks an attempt key,
+   disclose that limitation rather than inventing one or silently changing the population.
+   Do not translate a SQLite reference on the fly: provider joins and alias resolution can
+   behave differently. Validate the returned aggregates with the supplied read_funnel helper.
 6. Write the declared report. Separate observed counts from interpretation and assumptions.
    Include status: complete or incomplete. Describe remaining ambiguity and provider errors
    without claiming missing data is zero. Do not modify provider data or make recommendations

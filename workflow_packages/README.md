@@ -30,6 +30,14 @@ See [code workflows](../docs/code-workflows.md) and
 a bounded procedure uses `procedure.services` and a project-owned custom API key through
 Tin's gateway. It is not registered or live-qualified. See [API connections](../docs/project-api-connections.md)
 for secure setup, permissions, limits and evaluation requirements.
+Its [HogQL resource](example.posthog_funnel/skills/posthog-funnel/HOGQL.md) supplies a reusable
+ordered funnel calculation and aggregate validator. It has explicit actor/attempt semantics;
+it does not infer instrumentation or qualify a complete analytics product. Offline regression
+checks are in [test_posthog_funnel.py](../tests/test_posthog_funnel.py); real provider evaluation
+remains separately authorized.
+The [synthetic SQL fixture](../tests/fixtures/posthog_funnel/ordered.sql) and its paired response
+preserve a provider-dialect regression case for ties, duplicates, mixed attempts, missing steps
+and exact medians. CI checks the generated query against that baseline without contacting PostHog.
 
 Use this shape when the workflow needs a bounded agent run. Private trials of procedure
 packages remain manual, not scheduled.

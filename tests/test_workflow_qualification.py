@@ -178,6 +178,15 @@ async def test_standing_analytics_candidate_keeps_full_job_and_honest_limits():
     case = Qualification.model_validate(read_json(raw)["qualification"]).cases[0]
     narrow = b"Activation\nOne funnel has 3 of 12 conversions."
     assert assess_output(case, status="succeeded", content=narrow)["status"] == "failed"
+    sections = b"Activation\nKey-event trends\nTraffic\nError signals\nBreakdown\n"
+    complete = b"Status: complete\nOrdered funnel (projects): 12 -> 7 -> 3\n" + sections
+    assert assess_output(case, status="succeeded", content=complete)["status"] == "passed"
+    # Successful artifact delivery with every heading is not successful ordinary analysis.
+    incomplete = b"Status: incomplete\nBoth funnel queries failed.\n" + sections
+    assert assess_output(case, status="succeeded", content=incomplete)["status"] == "failed"
+    # A plausible completed report must also match the controlled fixture's known answer.
+    wrong_counts = complete.replace(b"12 -> 7 -> 3", b"12 -> 12 -> 12")
+    assert assess_output(case, status="succeeded", content=wrong_counts)["status"] == "failed"
     assert result["author_limitations"]  # No claim this synthetic candidate is publication-ready.
 
 

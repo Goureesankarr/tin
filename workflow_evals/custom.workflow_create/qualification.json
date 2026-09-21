@@ -47,7 +47,7 @@
     },
     {
       "id": "evaluation",
-      "question": "Would the cases detect a plausible but numerically or semantically wrong report?"
+      "question": "Would the ordinary case reject a report with all five headings but failed required queries, as well as plausible wrong numbers? Are honest incomplete reports tested separately and local SQL references distinguished from actual-provider checks?"
     }
   ]
 }

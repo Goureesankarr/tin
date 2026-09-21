@@ -61,6 +61,13 @@ when models or providers are involved. Start small and add cases when a real fai
 you something. The case file and package get separate content digests; changing either makes
 the report a different qualification. Cases omit `project_id`; Tin binds it.
 
+Make the normal case require the useful result. A report with all the right headings but a
+failed required query is not a pass. A workflow may successfully deliver that diagnostic;
+test its failure handling separately from its ability to do the ordinary job. For controlled
+fixtures, assert the known answers as well as the output shape. For live data, independently
+check the retained provider evidence and arithmetic rather than trusting a generated “verified”
+label. Keep legitimate missing-data findings distinct from broken queries.
+
 Optional `cost_drivers` describes what changes paid call counts or token sizes. Optional
 `rubric: [{"id": "grounding", "question": "Does each claim follow from the evidence?"}]`
 holds independent quality questions. The maintainer proposing Registry registration owns
@@ -92,6 +99,12 @@ uv run pytest tests/test_workflow_qualification.py
 This tests assertions, not workflow execution or model quality. It never establishes measured
 cost. `candidate candidate.json` inspects a saved creator result and prints proposed changes
 without writing them.
+
+For provider SQL, a local implementation in another dialect is a semantic reference, not
+proof that the emitted query works. Keep a deterministic query resource and, during authorized
+live qualification, exercise that exact provider dialect against synthetic edge cases before
+using project data. Include missing joins/steps, ordering, duplicates, empty results and any
+statistics whose definitions matter. Ordinary CI stays offline.
 
 PR CI uses these checks and ordinary fixture-based pytest with no production secrets or paid
 model access. Source validation parses code; it does not import or execute submitted Python.
