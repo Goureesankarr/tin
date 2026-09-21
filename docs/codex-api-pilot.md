@@ -29,6 +29,13 @@ acceptance/rollout status. Native model-service routing is unchanged. The
 switchboard still needs its legacy broker for historical OAuth runs.
 The existing project-scoped Temporal execution gate and trusted activity lane are unchanged.
 
+Procedure retry recovery is independent of the funding policy: it never purchases a second
+attempt. Trusted budget-stop reasons survive cleanup, completed revisions replay, and eligible
+interrupted Markdown can remain available as an explicitly incomplete, read-only result.
+See [Interrupted Codex procedures](procedure-publication-recovery.md#interrupted-codex-procedures).
+Session funding reduces the old per-request headroom failures; it does not imply every stopped
+session has a finished artifact. Historical and included/child funding pins remain unchanged.
+
 Browser API runs use `TIN_LITE_E2B_BROWSER_API_TEMPLATE` (default
 `tin-lite-codex-browser-api`), built from the isolated controller plus the existing
 Camoufox/WARP layer. Browser/MCP tools execute in the controller; shell and repository

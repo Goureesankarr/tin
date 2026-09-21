@@ -477,7 +477,9 @@ class RetainedOutputView(BaseModel):
     revision: str = Field(validation_alias="ephemeral_commit_sha")
     media_type: str
     byte_count: int
-    reason: Literal["publication_pending", "reconciliation_pending", "output_conflict"]
+    reason: Literal[
+        "publication_pending", "reconciliation_pending", "output_conflict", "execution_interrupted"
+    ]
 
 
 class RunView(BaseModel):
