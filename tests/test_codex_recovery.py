@@ -24,6 +24,7 @@ from tin_lite.codex_api import (
     PROCEDURE_CONTRACT,
     SESSION_CONTRACT,
     CodexAttemptStopped,
+    attempt_failure,
     attempt_key,
     run_api_attempt,
 )
@@ -137,7 +138,12 @@ async def test_failed_attempt_preserves_relay_reason_revokes_and_never_rebuys(
                 call=paid,
             )
     assert paid.await_count == 1
-    assert "provider secret" not in json.dumps((await db.get_effect(attempt_key(run.id))).result)
+    record = (await db.get_effect(attempt_key(run.id))).result
+    assert "provider secret" not in json.dumps(record)
+    assert record["failure_type"] == type(failure).__name__
+    if isinstance(failure, TimeoutError):
+        assert record["outcome"] == "failed"
+        assert "timed out" in str(attempt_failure({**record, "stop_reason": None}))
 
 
 async def test_retry_recovers_completed_revision_when_discovery_branch_is_gone(publication_db):

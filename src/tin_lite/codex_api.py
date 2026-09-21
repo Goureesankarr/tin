@@ -30,6 +30,8 @@ class CodexAttemptStopped(SideEffectConflictError):
 
 def attempt_failure(record):
     reason = STOP_MESSAGES.get(record.get("stop_reason"))
+    if reason is None and record.get("failure_type") == "TimeoutError":
+        reason = "Codex execution timed out."
     if reason is None:
         reason = {
             "cancelled": "Codex execution was interrupted.",
@@ -44,19 +46,18 @@ async def record_attempt_failure(conn, key, exc=None):
     outcome = (
         "unconfirmed"
         if exc is None
-        else (
-            "cancelled"
-            if isinstance(exc, asyncio.CancelledError)
-            else "timed_out"
-            if isinstance(exc, TimeoutError)
-            else "failed"
-        )
+        else ("cancelled" if isinstance(exc, asyncio.CancelledError) else "failed")
     )
+    facts = {"outcome": outcome, "finished_at": datetime.now(UTC).isoformat()}
+    if exc is not None:
+        # Keep the established attempt outcome/type contract for task turns too.
+        # Exception bodies can contain provider payloads and are never stored here.
+        facts["failure_type"] = type(exc).__name__
     await conn.execute(
         """UPDATE effect_receipts SET result=result || $2::jsonb
            WHERE execution_key=$1 AND status='started' AND result->>'outcome'='running'""",
         key,
-        json.dumps({"outcome": outcome, "finished_at": datetime.now(UTC).isoformat()}),
+        json.dumps(facts),
     )
 
 
