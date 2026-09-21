@@ -69,6 +69,9 @@ See [code workflows](code-workflows.md) and the linked extension contracts.
 - One bounded UTF-8 project artifact, or a bounded unmerged GitHub PR with repository verification.
   GitHub capabilities must match the declared workspace/result and use the connected-project
   gateway. Existing PR overlap checks and result validation remain in force.
+- Repository workspaces may explicitly declare `limits.max_files` up to 1,000 and
+  `limits.max_bytes` up to 100,000,000. Omitting limits retains the historical
+  500-file / 10 MB contract. Individual repository files remain capped at 2 MB.
 - Optional connected Workspace read capabilities: Gmail messages and calendar events. No email
   sending, test identities, browser/Studio, uploaded native executors or recursive starts.
 - Optional existing project skills and normal review eligibility. Managed `wiki/INDEX.md`
