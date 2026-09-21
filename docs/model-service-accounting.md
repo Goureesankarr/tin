@@ -70,6 +70,28 @@ policy must be bound to package admission and runtime grants. This implementatio
 that isolation proof. Private workflows may still legitimately prepare GitHub PRs through
 the existing authorized integration gateway; there is no new prohibition on that outcome.
 
+## Visibility response recovery
+
+The direct Responses path used by `visibility.audit` keeps its accounting observation separate
+from its recoverable output. Each panel, answer and adjudication step saves a bounded
+`visibility_response_v1` receipt before parsing or semantic validation. It contains only the
+returned text, public search/citation evidence and token counts, capped at 250,000 bytes.
+Prompts, credentials and reasoning are excluded; no output is added to Temporal history or
+to the usage receipt. An oversized response records a small rejection instead of its body.
+
+Retry reuses this response under the original step's effect lock and connection. A valid
+checkpoint can finish the owning effect after an interrupted validation or lost write
+acknowledgment. Invalid output retains its original non-retryable validation error. A request
+without a saved response remains uncertain and is never automatically purchased again;
+this also applies to older attempted calls whose output was not retained. Completed legacy
+effects remain reusable without a new response checkpoint.
+
+The panel schema asks for a bare DNS hostname or an empty unknown domain. Deterministic code
+also normalizes HTTP(S) URLs and harmless hostname formatting before checking target identity
+and question blindness. Normalization does not substitute another target or guess an unknown
+domain. Concurrent answer calls finish saving their receipts before a validation failure is
+projected.
+
 ## Verification
 
 Tests use real SDK request serialization with in-memory HTTP responses and real SQL in

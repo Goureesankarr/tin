@@ -115,13 +115,19 @@ from tin_lite.site_health import (
     validate_site_health_model_route,
 )
 from tin_lite.system_wiki import read_system_wiki_document
-from tin_lite.usage_capture import external_usage_scope
+from tin_lite.usage_capture import external_usage_scope, observation_key
 from tin_lite.visibility import (
+    ResponseCheckpoint,
+    ResponseRequest,
     VisibilityAuditor,
+    VisibilityProtocolError,
+    VisibilityRecoveryError,
     VisibilitySource,
+    read_visibility_response_checkpoint,
     validate_visibility_artifacts,
     validate_visibility_publication,
     visibility_publication_facts,
+    visibility_response_checkpoint,
 )
 from tin_lite.weekly_brief import (
     WeeklyBriefReporter,
@@ -1657,10 +1663,11 @@ class TinActivities:
                 run_id=run_id,
                 step_id="panel",
                 operation="visibility_panel",
-                execute=lambda: self._visibility_auditor.prepare_panel(
+                execute=lambda checkpoint: self._visibility_auditor.prepare_panel(
                     project_name=project.name,
                     target_request=target_request,
                     sources=sources,
+                    checkpoint=checkpoint,
                 ),
             ),
             details={"stage": "visibility_panel"},
@@ -1676,9 +1683,10 @@ class TinActivities:
                     run_id=run_id,
                     step_id=f"answer:{question_id}:{mode}",
                     operation="visibility_answer",
-                    execute=lambda: self._visibility_auditor.answer(
+                    execute=lambda checkpoint: self._visibility_auditor.answer(
                         question=question_text,
                         searched=searched,
+                        checkpoint=checkpoint,
                     ),
                 )
 
@@ -1695,9 +1703,13 @@ class TinActivities:
                     )
                 )
         answers = await self._await_with_heartbeats(
-            asyncio.gather(*answer_tasks),
+            asyncio.gather(*answer_tasks, return_exceptions=True),
             details={"stage": "visibility_answers"},
         )
+        # Let all dispatched calls save their receipts before projecting a failure.
+        for answer in answers:
+            if isinstance(answer, BaseException):
+                raise answer
         grouped: dict[str, dict[str, dict]] = {}
         for (question_id, mode), answer in zip(answer_slots, answers, strict=True):
             grouped.setdefault(question_id, {})[mode] = answer
@@ -1714,9 +1726,10 @@ class TinActivities:
                 run_id=run_id,
                 step_id="adjudication",
                 operation="visibility_adjudication",
-                execute=lambda: self._visibility_auditor.adjudicate(
+                execute=lambda checkpoint: self._visibility_auditor.adjudicate(
                     panel=panel,
                     measurements=measurements,
+                    checkpoint=checkpoint,
                 ),
             ),
             details={"stage": "visibility_adjudication"},
@@ -4551,7 +4564,7 @@ class TinActivities:
         run_id: UUID,
         step_id: str,
         operation: str,
-        execute: Callable[[], Awaitable[dict[str, object]]],
+        execute: Callable[[ResponseCheckpoint], Awaitable[dict[str, object]]],
     ) -> dict:
         execution_key = f"{run_id}:visibility:{step_id}"
         async with self._db.effect_lock(execution_key, operation) as (conn, existing):
@@ -4560,9 +4573,40 @@ class TinActivities:
                     raise RuntimeError("completed visibility effect has no result")
                 return existing.result
             await self._db.start_effect(conn, execution_key=execution_key, operation=operation)
+
+            async def checkpoint(request: ResponseRequest) -> dict:
+                # This child receipt is serialized by the owning effect's lock and
+                # reuses its connection. Accounting receipts remain metadata-only.
+                response_key = f"{execution_key}:response"
+                saved = await self._db.get_effect(response_key, conn=conn)
+                if saved is not None:
+                    if saved.status != "completed":
+                        raise VisibilityRecoveryError(
+                            "visibility model response could not be recovered; "
+                            "the request was not repeated"
+                        )
+                    return read_visibility_response_checkpoint(saved.result)
+                if (
+                    await self._db.get_effect(
+                        observation_key(run_id, f"visibility:{step_id}", "responses"), conn=conn
+                    )
+                    is not None
+                ):
+                    raise VisibilityRecoveryError(
+                        "visibility model request was already attempted without a recoverable "
+                        "response; the request was not repeated"
+                    )
+                await self._db.start_effect(
+                    conn, execution_key=response_key, operation="visibility_response_v1"
+                )
+                response = await request()
+                result = visibility_response_checkpoint(response)
+                await self._db.complete_effect(conn, execution_key=response_key, result=result)
+                return read_visibility_response_checkpoint(result)
+
             try:
                 with external_usage_scope(self._db, conn, run_id, f"visibility:{step_id}"):
-                    result = await execute()
+                    result = await execute(checkpoint)
                 await self._db.complete_effect(
                     conn,
                     execution_key=execution_key,
@@ -4575,6 +4619,10 @@ class TinActivities:
                     execution_key=execution_key,
                     error_message=_safe_failure(exc),
                 )
+                if isinstance(exc, (VisibilityProtocolError, VisibilityRecoveryError)):
+                    raise ApplicationError(
+                        str(exc), type=type(exc).__name__, non_retryable=True
+                    ) from exc
                 raise
 
     async def _visibility_sources(self, *, run_id: UUID, project) -> list[VisibilitySource]:
