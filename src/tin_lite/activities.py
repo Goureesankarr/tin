@@ -2592,7 +2592,14 @@ class TinActivities:
             database=self._db, storage=self._storage, integrations=self._integrations
         )
         handled = await self._await_with_heartbeats(
-            execution.prepare(run, policy=procedure.repair_policy),
+            execution.prepare(
+                run,
+                policy=procedure.repair_policy,
+                workspace_limits={
+                    "max_files": procedure.workspace_max_files,
+                    "max_bytes": procedure.workspace_max_bytes,
+                },
+            ),
             details={"stage": "technical_verification"},
         )
         if not handled:

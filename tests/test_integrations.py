@@ -1415,7 +1415,7 @@ async def test_github_repository_bundle_is_pinned_bounded_and_tokenless(tmp_path
             execution_key="run-9:larger-repository",
             run_id=RUN_ID,
             max_files=1000,
-            max_bytes=20_000_000,
+            max_bytes=100_000_000,
         )
         assert (larger.repository, larger.head_sha, larger.file_count) == (
             bundle.repository,
@@ -2366,3 +2366,84 @@ async def test_github_commit_adapter_writes_the_default_branch_and_replays(tmp_p
     assert receipt.status == "completed" and receipt.capability == "contents.write"
     assert receipt.provider_request_id == "request-commit"
     assert receipt.response_summary["commit"] == sha
+
+
+@pytest.mark.parametrize(
+    ("file_count", "file_bytes", "limits", "accepted"),
+    [
+        (750, 40_000, {"max_files": 1000, "max_bytes": 100_000_000}, True),
+        (1000, 100_000, {"max_files": 1000, "max_bytes": 100_000_000}, True),
+        (1001, 0, {"max_files": 1000, "max_bytes": 100_000_000}, False),
+        (51, 2_000_000, {"max_files": 1000, "max_bytes": 100_000_000}, False),
+        (750, 1, {}, False),  # Historical default still enforces 500 files.
+        (6, 2_000_000, {}, False),  # Historical default still enforces 10 MB.
+    ],
+)
+async def test_repository_bundle_expanded_bounds_and_legacy_rejection(
+    monkeypatch, file_count, file_bytes, limits, accepted
+):
+    from unittest.mock import AsyncMock
+
+    db = FakeIntegrationDatabase()
+    content = b"x" * file_bytes
+    head_sha = "a" * 40
+    blob_reads = []
+    tree = [
+        {
+            "type": "blob",
+            "mode": "100644",
+            "path": f"src/file-{index}.txt",
+            "sha": f"{index:040x}",
+            "size": file_bytes,
+        }
+        for index in range(file_count)
+    ]
+
+    async def github(request):
+        path = request.url.path
+        if path == "/repos/example-org/site":
+            return httpx.Response(200, json={"default_branch": "main"})
+        if path.endswith("/git/ref/heads/main"):
+            return httpx.Response(200, json={"object": {"sha": head_sha}})
+        if path.endswith(f"/git/trees/{head_sha}"):
+            return httpx.Response(200, json={"tree": tree, "truncated": False})
+        assert "/git/blobs/" in path
+        blob_reads.append(path)
+        return httpx.Response(
+            200, json={"encoding": "base64", "content": base64.b64encode(content).decode()}
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(github)) as client:
+        service = IntegrationService(database=db, settings=settings(), client=client)
+        monkeypatch.setattr(
+            service,
+            "_connection",
+            AsyncMock(
+                return_value=SimpleNamespace(
+                    id=uuid4(),
+                    external_account_id="42",
+                    configuration={
+                        "selected_repository": "example-org/site",
+                        "permissions": {"contents": "read"},
+                    },
+                )
+            ),
+        )
+        monkeypatch.setattr(
+            service, "_github_installation_token", AsyncMock(return_value="synthetic-token")
+        )
+        args = dict(project_id=PROJECT_ID, run_id=RUN_ID, execution_key="larger-repo", **limits)
+        if accepted:
+            bundle = await service.github_repository_bundle(**args)
+            assert bundle.file_count == file_count and bundle.complete
+            assert len(blob_reads) == file_count
+            with tarfile.open(fileobj=io.BytesIO(bundle.archive), mode="r:gz") as archive:
+                members = archive.getmembers()
+                assert len(members) == file_count
+                assert sum(member.size for member in members) == file_count * file_bytes
+                assert archive.extractfile(members[-1]).read() == content
+        else:
+            with pytest.raises(IntegrationAuthorizationError, match="workspace limits") as error:
+                await service.github_repository_bundle(**args)
+            assert f"{file_count:,} files / {file_count * file_bytes:,} bytes" in str(error.value)
+            assert not blob_reads  # Reject before downloading any file contents.
