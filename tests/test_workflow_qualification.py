@@ -69,7 +69,7 @@ async def test_creator_and_examples_are_valid_without_registry_registration():
     assert report["cost"]["expected_range_usd"] is None
     assert report["cost"]["configured_ceiling_usd"] == "5"
     assert report["safety"]["status"] == "review_required"
-    assert PUBLIC_WORKFLOWS == ()
+    assert all(not w.key.startswith(("example.", "custom.")) for w in PUBLIC_WORKFLOWS)
 
 
 async def test_static_candidate_never_executes_source_or_trusts_author_results(tmp_path):
