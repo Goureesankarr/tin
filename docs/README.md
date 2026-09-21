@@ -26,6 +26,7 @@ remain authoritative; older contract versions are retained for compatibility.
 - [Codex API execution](codex-api-pilot.md), [isolated runtime](isolated-codex-runtime.md),
   [Studio execution](studio-api-and-hosted-credits.md) and [worker lanes](activity-worker-lanes.md).
 - [Publication recovery](procedure-publication-recovery.md),
+  [scheduled review recovery](scheduled-review-recovery.md),
   [saved-output resolution](output-resolution.md) and [font serving](font-serving.md).
 
 Self-hosting remains an engineering setup path. A clean-clone installation and

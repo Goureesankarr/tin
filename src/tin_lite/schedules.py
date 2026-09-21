@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from copy import copy
 from datetime import UTC, datetime, time, timedelta
 from typing import Literal
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
@@ -33,7 +34,7 @@ WEEKDAYS = (
 )
 
 
-class ScheduledCodeSkip(RuntimeError):
+class ScheduledWorkflowSkip(RuntimeError):
     """An occurrence became stale or overlaps another accepted occurrence."""
 
 
@@ -162,6 +163,44 @@ class TemporalScheduleService:
             note="Paused from Tin"
         )
 
+    async def remove_legacy_review_timeout(
+        self, project_workflow_id: str, *, apply: bool = False
+    ) -> bool:
+        """Migrate a stored action without replacing its calendar, policy or pause state."""
+        handle = self._client.get_schedule_handle(self.schedule_id(project_workflow_id))
+
+        def updated(schedule: Schedule) -> ScheduleUpdate | None:
+            action = schedule.action
+            if (
+                not isinstance(action, ScheduleActionStartWorkflow)
+                or action.workflow != "tin.scheduled_dispatch"
+                or action.id != f"tin-scheduled-dispatch:{project_workflow_id}"
+            ):
+                raise ValueError("Schedule is not the expected Tin dispatcher")
+            if action.execution_timeout != timedelta(hours=24):
+                if action.execution_timeout not in (None, timedelta(0)):
+                    raise ValueError("Schedule has an unexpected execution timeout")
+                return None
+            # Retain raw payloads and SDK encoding metadata from describe().
+            action = copy(action)
+            action.execution_timeout = None
+            migrated = copy(schedule)
+            migrated.action = action
+            return ScheduleUpdate(migrated)
+
+        if not apply:
+            return updated((await handle.describe()).schedule) is not None
+        changed = False
+
+        def update(current):
+            nonlocal changed
+            result = updated(current.description.schedule)
+            changed = result is not None
+            return result
+
+        await handle.update(update)
+        return changed
+
     async def resume(self, project_workflow_id: str) -> None:
         await self._client.get_schedule_handle(self.schedule_id(project_workflow_id)).unpause(
             note="Resumed from Tin"
@@ -197,7 +236,8 @@ class TemporalScheduleService:
                 project_workflow_id,
                 id=f"tin-scheduled-dispatch:{project_workflow_id}",
                 task_queue=self._settings.task_queue,
-                execution_timeout=timedelta(hours=24),
+                # Catch-up bounds late starts, not the lifetime of a reviewable child.
+                # Keep the dispatcher alive until that child finishes (including review).
             ),
             spec=ScheduleSpec(
                 calendars=[
