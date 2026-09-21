@@ -28,8 +28,8 @@ files; adopt the checks when adding or revising a package.
 
 The creator is shipped in the Python distribution, not selected in `PUBLIC_WORKFLOWS`.
 It has no integration bindings or authority to start candidates. Its self-checks are author
-claims; the trusted qualifier supplies independent evidence. The first draft and one revision
-are instructed limits within the existing enforced agent budget and runtime bounds.
+claims; the trusted qualifier supplies independent evidence. Authoring and validation run
+within the existing enforced agent budget and runtime bounds.
 
 HTTP exposes the same services at `POST /api/projects/{project_id}/workflow-packages/candidate`,
 `/qualify` and `/evaluate`. Candidate takes `run_id`; qualification takes `path`, `revision`
