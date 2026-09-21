@@ -34,6 +34,12 @@ from tin_lite.domain import (
     Workflow,
 )
 from tin_lite.email_outreach import build_email_message, campaign_message_id
+from tin_lite.repository_limits import (
+    LEGACY_REPOSITORY_BYTES,
+    LEGACY_REPOSITORY_FILES,
+    MAX_REPOSITORY_BYTES,
+    MAX_REPOSITORY_FILES,
+)
 from tin_lite.settings import Settings
 
 logger = logging.getLogger(__name__)
@@ -1383,15 +1389,15 @@ class IntegrationService:
         execution_key: str,
         run_id: UUID | None = None,
         expected_binding: GitHubRepositoryBinding | None = None,
-        max_files: int = 500,
-        max_bytes: int = 10_000_000,
+        max_files: int = LEGACY_REPOSITORY_FILES,
+        max_bytes: int = LEGACY_REPOSITORY_BYTES,
     ) -> GitHubRepositoryBundle:
         """Build a bounded immutable repository archive without exposing GitHub auth to E2B."""
         if (
             type(max_files) is not int
-            or not 1 <= max_files <= 1000
+            or not 1 <= max_files <= MAX_REPOSITORY_FILES
             or type(max_bytes) is not int
-            or not 1 <= max_bytes <= 20_000_000
+            or not 1 <= max_bytes <= MAX_REPOSITORY_BYTES
         ):
             raise IntegrationError("GitHub repository workspace limits are invalid")
         if not execution_key or len(execution_key) > 200:
@@ -1411,7 +1417,7 @@ class IntegrationService:
                 "Choose a GitHub repository with contents access first"
             )
         selector = {"repository": repository, "selector": "procedure-repository-v1"}
-        if (max_files, max_bytes) != (500, 10_000_000):
+        if (max_files, max_bytes) != (LEGACY_REPOSITORY_FILES, LEGACY_REPOSITORY_BYTES):
             selector["limits"] = {"max_files": max_files, "max_bytes": max_bytes}
         fingerprint = _sha256(_canonical_json(selector))
         token = await self._github_installation_token(_installation_id(connection))
@@ -1528,9 +1534,16 @@ class IntegrationService:
             and isinstance(item.get("size"), int)
             and 0 <= item["size"] <= 2_000_000
         ]
-        if not blobs or len(blobs) > max_files or sum(item["size"] for item in blobs) > max_bytes:
+        total_bytes = sum(item["size"] for item in blobs)
+        if not blobs:
             raise IntegrationAuthorizationError(
-                "The selected repository is outside the procedure workspace limits"
+                "The selected repository has no eligible files for a procedure workspace"
+            )
+        if len(blobs) > max_files or total_bytes > max_bytes:
+            raise IntegrationAuthorizationError(
+                "The selected repository is outside the procedure workspace limits: "
+                f"{len(blobs):,} files / {total_bytes:,} bytes; "
+                f"this workflow allows {max_files:,} files / {max_bytes:,} bytes"
             )
         archive_buffer = io.BytesIO()
         with tarfile.open(

@@ -153,7 +153,7 @@ def validate_private_definition(definition):
     _closed(procedure.get("sandbox"), {"profile", "egress", "timeout_seconds"}, "sandbox")
     _closed(
         procedure.get("workspace", {"kind": "project.state"}),
-        {"kind", "provider_key", "capabilities"},
+        {"kind", "provider_key", "capabilities", "limits"},
         "workspace",
     )
     _closed(procedure.get("verification", {}), {"commands"}, "verification")
