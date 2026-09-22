@@ -358,6 +358,34 @@ async def test_live_adapter_uses_fixed_scope_and_bounds_without_retries(kind):
     assert result["items"] == [] and len(calls) == 1
 
 
+@pytest.mark.asyncio
+async def test_no_search_results_is_a_completed_empty_lookup():
+    expected = request_for("ads_search", market="US", value="quiet.example", tag="fixture")
+
+    def handler(request):
+        return httpx.Response(
+            200,
+            json={
+                "status_code": 20000,
+                "tasks": [
+                    {
+                        "id": "test",
+                        "status_code": 20100,
+                        "status_message": "No Search Results.",
+                        "cost": 0.002,
+                        "result_count": 0,
+                        "data": expected,
+                        "result": None,
+                    }
+                ],
+            },
+        )
+
+    provider = KeywordData("fixture", "x", transport=httpx.MockTransport(handler))
+    result = await provider.query("ads_search", market="US", value="quiet.example", tag="fixture")
+    assert result["items"] == [] and result["reported_cost_usd"] == "0.002"
+
+
 def test_request_for_paid_kinds_are_bounded():
     with pytest.raises(ValueError):
         request_for("overview_batch", market="US", value=["k"] * 41, tag="t")

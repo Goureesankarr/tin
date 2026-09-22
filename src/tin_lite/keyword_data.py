@@ -139,7 +139,8 @@ class KeywordData:
                 raise DataForSEOError("Keyword response has an invalid task envelope.")
             task = tasks[0]
             await observe_tool(observation, task)
-            if task.get("status_code") != 20000:
+            # 20100 is DataForSEO's "No Search Results": a completed, charged, empty lookup.
+            if task.get("status_code") not in {20000, 20100}:
                 raise DataForSEOError("Keyword task did not return a completed result.")
             data = task.get("data")
             if not isinstance(data, dict) or any(
@@ -150,7 +151,9 @@ class KeywordData:
             if not cost.is_finite() or cost < 0:
                 raise DataForSEOError("Keyword response has invalid cost metadata.")
             results = task.get("result")
-            if results is None and task.get("result_count") == 0:
+            if results is None and (
+                task.get("result_count") == 0 or task.get("status_code") == 20100
+            ):
                 results = []
             if kind in ROW_RESULT_KINDS:
                 if not isinstance(results, list) or len(results) > len(request["keywords"]):
