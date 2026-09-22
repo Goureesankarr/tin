@@ -254,7 +254,7 @@ async def test_full_path_receipts_every_call_and_a_retry_buys_nothing():
     names = paid_ads.paths(run_id)
     assert set(names.values()) <= set(tree)
     report = tree[names["ASSESSMENT.md"]][1].decode()
-    assert report.count("```") == 2 and "Continue" in report
+    assert report.count("```") == 2 and "Keep the current ads running" in report
     assessment = json.loads(tree[names["assessment.json"]][1])
     assert assessment["decision"] == "continue" and assessment["campaign"]["ad_groups"]
     assert db._complete_readonly_report_projection.await_count == 1
@@ -281,7 +281,7 @@ async def test_the_gate_publishes_a_not_now_report_without_any_provider_call():
     assert provider.query.await_count == gak.query.await_count == router.generate.await_count == 0
     assert storage.repo.writes == 1
     report = storage.repo.trees[storage.repo.head][paid_ads.paths(run_id)["ASSESSMENT.md"]][1]
-    assert b"no paid ads" in report and b"Not now" in report
+    assert b"no paid ads" in report and b"Not now" in report and b"Words used" not in report
     assert activities.key(run_id, "budget") not in db.effects
 
 

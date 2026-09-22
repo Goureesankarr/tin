@@ -585,7 +585,8 @@ async def test_build_assessment_renders_four_documents_around_the_computed_verdi
     assessment = json.loads(docs["assessment.json"])
     assert assessment["scorecard"]["observed"]["cpa_customer"] == pytest.approx(10.2)
     assert assessment["keywords"][1]["intent"] == "bofu"
-    assert "## History" in text and "R-BROAD-MATCH" in text
+    assert "## What your earlier ads say" in text and "broad did not" in text
+    assert "E-" not in text.split("```tin-ads")[0].split("## What Tin looked at")[0]
     assert docs["keywords.csv"].count("\n") == 7
     assert model.calls == ["diagnose", "verdict"]
     assert not result["report"]["retried_steps"] and not result["report"]["code_corrections"]

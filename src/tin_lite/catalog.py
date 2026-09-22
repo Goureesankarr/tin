@@ -2171,7 +2171,7 @@ BUILTIN_WORKFLOWS = (
         # An LLM flow: code owns economics, scoring, the verdict and rendering; five bounded
         # model steps read evidence, label keywords, diagnose history and shape the campaign.
         executor=paid_ads.KEY,
-        version_label="0.1.0",
+        version_label="0.2.0",
         system=PAID_ADS_SYSTEM,
         schedule_modes=("on_demand",),
         input_schema=paid_ads.INPUT_SCHEMA,
