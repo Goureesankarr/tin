@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "industries": {
+    "b2b_saas": "software sold to businesses, mid or high price, sales-assisted or self-serve",
+    "b2b_saas_smb": "software or a service sold to small and local businesses at a low monthly price",
+    "dev_tools": "APIs, SDKs and infrastructure bought by developers",
+    "consumer_software": "apps, tools and subscriptions bought by individuals",
+    "ecommerce": "physical goods sold online",
+    "local_services": "services delivered in a place, such as clinics, trades and agencies with a territory"
+  },
+  "intents": {
+    "bofu": "the searcher wants to buy or sign up for this kind of product now",
+    "mofu": "the searcher compares or evaluates options",
+    "tofu": "the searcher wants to learn or is looking for something free",
+    "captive": "the query names a platform, ecosystem or workflow the product plugs into and the product is one of very few answers",
+    "brand_own": "the query names this business",
+    "brand_competitor": "the query names a competitor or asks for an alternative to one",
+    "irrelevant": "not a query this product answers"
+  },
+  "score_weights": {"economics": 30, "demand": 25, "readiness": 20, "fit": 15, "auction": 10},
+  "score_bands": {
+    "demand_clicks": [[30, 0], [100, 10], [300, 18], [1000, 22]],
+    "demand_max": 25,
+    "fit_full_buyer_share": 0.3,
+    "auction_moderate": [20, 60],
+    "auction_points": {"moderate": 10, "low": 6, "high": 4}
+  },
+  "verdict": {
+    "go_score": 70,
+    "go_headroom": 1.5,
+    "not_now_score": 50,
+    "test_headroom": 1.0
+  },
+  "diagnose_rules": [
+    {"id": "R-ZERO-IMPRESSIONS", "text": "A campaign that spent nothing and showed nothing was never in the auction: bids below the page floor, disapproved ads, a budget of zero, or a wrong geography. Fix the setup, do not judge the channel."},
+    {"id": "R-BROAD-MATCH", "text": "Broad match on short terms buys the platform's guesses. Cheap clicks with near-zero conversion on terms that only share a word with the offer point at match type, not demand."},
+    {"id": "R-SOFT-CONVERSION-ONLY", "text": "When the ad account only counts an upstream event such as a scan or a form view, the reported cost per conversion says nothing about customers. Import the purchase before judging."},
+    {"id": "R-LANDING-PAGE", "text": "Click-through above 1.5% with cost per acquisition above 1.5 times target means the ad works and the page does not. Audit message match, load time, mobile and the single call to action."},
+    {"id": "R-BUDGET-SPREAD", "text": "Several campaigns sharing a small budget starve each other before any reaches a read. One campaign, one goal, until it has thirty conversions."},
+    {"id": "R-BRAND-ONLY", "text": "Conversions that all arrive from the business's own name prove nothing about buying new demand; brand defence is a separate decision."},
+    {"id": "R-CPC-ABOVE-ALLOWABLE", "text": "When the realised cost per click already exceeds what the allowable acquisition cost can carry at any plausible conversion rate, the auction is too expensive for the price point."},
+    {"id": "R-TRACKING-GAP", "text": "Conversions recorded without a click identifier or transaction id cannot be trusted either way; enhanced conversions or server-side import come before the next dollar."}
+  ]
+}

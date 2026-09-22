@@ -53,6 +53,8 @@ compute or prevent deletion. They leave a coverage gap, not a fabricated measure
 
 `provider_reported_cost_usd` is the trusted DataForSEO task-envelope cost field, not a supplier
 invoice reconciliation. [DataForSEO documents the task cost in USD](https://docs.dataforseo.com/v3/on_page/task_post/).
+Google Ads Keyword Planner (`gak`) tool receipts report `0` because the operator-run service is
+not metered per request; the observation still records that a bounded request was made.
 
 `reference_estimate_usd` currently covers E2B only: observed wall seconds multiplied by the CPU and
 memory list-price card pinned as `e2b-public-2026-09-10`. The source is

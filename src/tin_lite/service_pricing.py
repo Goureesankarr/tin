@@ -37,7 +37,10 @@ CARD = {
         },
     },
     "web_search_call_nanos": 10_000_000,
-    "tools": {"dataforseo": "provider_reported_task_cost_usd"},
+    "tools": {
+        "dataforseo": "provider_reported_task_cost_usd",
+        "gak": "provider_reported_task_cost_usd",
+    },
 }
 
 NATIVE_EXECUTORS = {
@@ -52,6 +55,7 @@ NATIVE_EXECUTORS = {
     "organic.audit",
     "organic.keyword_plan",
     "growth.onboarding_plan",
+    "growth.paid_ads_assessment",
 }
 PARENT_EXECUTORS = {"organic.traffic_system", "growth.onboarding"}
 
@@ -98,6 +102,10 @@ def service_terms(definition, *, inputs=None):
     elif executor == "growth.onboarding_plan":
         # About twenty-five bounded model steps; each reserves its conservative ceiling first.
         maximum = 8 * NANOS_PER_DOLLAR
+    elif executor == "growth.paid_ads_assessment":
+        # The founder's ceiling bounds model steps and provider research together.
+        maximum = amount_nanos(inputs.get("max_cost_usd", 6))
+        kinds = ["native_model", "tool"]
     if type(maximum) is not int or maximum <= 0:
         raise BillingError("invalid_budget", "The workflow spending maximum is invalid.")
     return {

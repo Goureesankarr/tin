@@ -22,6 +22,7 @@ from tin_lite.domain import (
     CODEX_PROCEDURE_EXECUTOR,
     CREATIVE_CHARACTER_WORKFLOW_NAME,
     EMAIL_CAMPAIGN_WORKFLOW_NAME,
+    PAID_ADS_ASSESSMENT_WORKFLOW_NAME,
     PROJECT_MEMORY_WORKFLOW_NAME,
     PROJECT_TASK_WORKFLOW_NAME,
     SCAN_REPORT_WORKFLOW_NAME,
@@ -960,6 +961,49 @@ class KeywordPlanWorkflow:
                 raise
 
 
+@workflow.defn(name=PAID_ADS_ASSESSMENT_WORKFLOW_NAME)
+class PaidAdsAssessmentWorkflow:
+    """Prepare, gather, research, assess, publish, project. Only the run identifier enters
+    history; activities hold every receipted result. A stop fences new paid work."""
+
+    def __init__(self) -> None:
+        self._stopped = False
+
+    @workflow.signal(name="stop")
+    async def stop(self) -> None:
+        self._stopped = True
+
+    @workflow.run
+    async def run(self, run_id: str) -> None:
+        async def execute(name, *, minutes, heartbeat=None):
+            return await workflow.execute_activity(
+                name,
+                run_id,
+                start_to_close_timeout=timedelta(minutes=minutes),
+                heartbeat_timeout=timedelta(minutes=heartbeat) if heartbeat else None,
+                retry_policy=RetryPolicy(
+                    maximum_attempts=3, maximum_interval=timedelta(seconds=10)
+                ),
+            )
+
+        try:
+            for name, minutes, heartbeat in (
+                ("paid_ads_prepare", 5, None),
+                ("paid_ads_gather", 10, 3),
+                ("paid_ads_research", 25, 4),
+                ("paid_ads_assess", 20, 6),
+                ("paid_ads_publish", 5, None),
+                ("paid_ads_project", 2, None),
+            ):
+                if self._stopped:
+                    return
+                await execute(name, minutes=minutes, heartbeat=heartbeat)
+        except BaseException:
+            if not self._stopped:
+                await execute("paid_ads_failure", minutes=1)
+                raise
+
+
 @workflow.defn(name="content.plan")
 class ContentPlanWorkflow:
     def __init__(self) -> None:
@@ -1173,6 +1217,7 @@ def registered_workflows() -> list[type]:
         VisibilityAuditWorkflow,
         OrganicAuditWorkflow,
         KeywordPlanWorkflow,
+        PaidAdsAssessmentWorkflow,
         AnswerPageWorkflow,
         CharacterDesignWorkflow,
         CodexProcedureWorkflow,
@@ -1200,6 +1245,7 @@ def registered_workflow_implementations() -> dict[str, type]:
         VISIBILITY_AUDIT_WORKFLOW_NAME: VisibilityAuditWorkflow,
         "organic.audit": OrganicAuditWorkflow,
         "organic.keyword_plan": KeywordPlanWorkflow,
+        PAID_ADS_ASSESSMENT_WORKFLOW_NAME: PaidAdsAssessmentWorkflow,
         ANSWER_PAGE_WORKFLOW_NAME: AnswerPageWorkflow,
         CODEX_PROCEDURE_EXECUTOR: CodexProcedureWorkflow,
         WEEKLY_BRIEF_WORKFLOW_NAME: WeeklyBriefWorkflow,

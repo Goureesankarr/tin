@@ -53,7 +53,8 @@ Existing workflow-specific spending ceilings and retry policies remain in force.
 
 ## Coverage and limits of the September 10 slice
 
-All four current shared-router callers are connected: keyword planning, content planning,
+The paid ads assessment adds two routes (`paid-ads-judgment-v1`, `paid-ads-drafting-v1`) and
+the zero-cost `gak` tool provider. All shared-router callers are connected: paid ads assessment, keyword planning, content planning,
 native character design (draft, bounded repairs, refinement), and the retained native
 site-health executor for older histories. There is no schema migration, new Temporal
 implementation, change to the dashboard/MCP start contract, or sandbox image rebuild.

@@ -4402,6 +4402,16 @@ class Database:
             run_id=run_id, project_id=project_id, actor=actor, workflow_key="organic.keyword_plan"
         )
 
+    async def stop_paid_ads_assessment(
+        self, *, run_id: UUID, project_id: UUID, actor: str
+    ) -> WorkflowRun:
+        return await self._stop_paid_report(
+            run_id=run_id,
+            project_id=project_id,
+            actor=actor,
+            workflow_key="growth.paid_ads_assessment",
+        )
+
     async def _stop_paid_report(
         self, *, run_id: UUID, project_id: UUID, actor: str, workflow_key: str
     ) -> WorkflowRun:
@@ -4414,6 +4424,11 @@ class Database:
             "content.plan": ("content", "content_plan_stopped", "content plan"),
             "organic.audit": ("organic", "organic_audit_stopped", "audit"),
             "organic.keyword_plan": ("keyword", "keyword_plan_stopped", "keyword plan"),
+            "growth.paid_ads_assessment": (
+                "paid_ads",
+                "paid_ads_assessment_stopped",
+                "paid ads assessment",
+            ),
         }[workflow_key]
         async with self.pool.acquire() as conn, self.project_state_lock(conn, project_id):
             async with conn.transaction():
@@ -5574,6 +5589,10 @@ class Database:
             "content.plan": ("content_plan_ready", "Content plan is ready."),
             "organic.audit": ("organic_audit_ready", "Organic visibility audit is ready."),
             "organic.keyword_plan": ("keyword_plan_ready", "Keyword opportunity plan is ready."),
+            "growth.paid_ads_assessment": (
+                "paid_ads_assessment_ready",
+                "The paid ads assessment is ready.",
+            ),
             "organic.traffic_system": ("organic_system_ready", "Organic traffic system finished."),
             "organic.technical_fix": ("technical_fix_ready", "Technical fix inspection finished."),
         }[workflow_key]

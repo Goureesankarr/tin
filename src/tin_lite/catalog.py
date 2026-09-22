@@ -14,6 +14,7 @@ from tin_lite import (
     growth_onboarding,
     growth_plan,
     organic_system,
+    paid_ads,
     style_capture,
     technical_fix,
 )
@@ -52,6 +53,7 @@ from tin_lite.domain import (
 from tin_lite.integrations import (
     GITHUB_PROVIDER,
     GOOGLE_WORKSPACE_PROVIDER,
+    GSC_PROVIDER,
     IntegrationRequirement,
     parse_integration_requirements,
 )
@@ -117,6 +119,7 @@ ORGANIC_TRAFFIC_SYSTEM = "organic-traffic"
 COLD_OUTREACH_SYSTEM = "cold-outreach"
 PRODUCT_QA_SYSTEM = "product-qa"
 CREATIVE_STUDIO_SYSTEM = "creative-studio"
+PAID_ADS_SYSTEM = "paid-ads"
 DESIGN_MD_WORKFLOW_ID = UUID("00000000-0000-4000-8000-000000000001")
 PROJECT_MEMORY_WORKFLOW_ID = UUID("00000000-0000-4000-8000-000000000002")
 SCAN_REPORT_WORKFLOW_ID = UUID("00000000-0000-4000-8000-000000000003")
@@ -139,6 +142,7 @@ GROWTH_ONBOARDING_WORKFLOW_ID = UUID("00000000-0000-4000-8000-000000000035")
 ORGANIC_AUDIT_WORKFLOW_ID = UUID("00000000-0000-4000-8000-000000000020")
 CREATIVE_CHARACTER_WORKFLOW_ID = UUID("00000000-0000-4000-8000-000000000029")
 CREATIVE_PRODUCT_DEMO_WORKFLOW_ID = UUID("00000000-0000-4000-8000-000000000022")
+PAID_ADS_ASSESSMENT_WORKFLOW_ID = UUID("00000000-0000-4000-8000-000000000018")
 
 
 @dataclass(frozen=True)
@@ -173,6 +177,11 @@ WORKFLOW_SYSTEMS = (
         id=CREATIVE_STUDIO_SYSTEM,
         name="Creative studio",
         display_order=4,
+    ),
+    WorkflowSystem(
+        id=PAID_ADS_SYSTEM,
+        name="Paid ads system",
+        display_order=5,
     ),
 )
 WORKFLOW_SYSTEM_IDS = frozenset(item.id for item in WORKFLOW_SYSTEMS)
@@ -366,6 +375,10 @@ class BuiltinWorkflow:
             definition["plan_routes"] = growth_plan.route_definitions()
             definition["plan_contract_sha256"] = growth_plan.contract_digest()
             definition["output_path"] = GROWTH_ONBOARDING_PLAN_PATH
+        if self.key == paid_ads.KEY:
+            definition["paid_ads_policy"] = dict(paid_ads.POLICY)
+            definition["paid_ads_routes"] = paid_ads.route_definitions()
+            definition["paid_ads_contract_sha256"] = paid_ads.contract_digest()
         if self.key == content_plan.KEY:
             definition["content_policy"] = dict(content_plan_editorial.POLICY)
             definition["content_instructions"] = content_plan_editorial.INSTRUCTIONS
@@ -2130,11 +2143,56 @@ BUILTIN_WORKFLOWS = (
         # An LLM flow: code owns the sequence, scoring, availability and rendering; models supply
         # judgment. It replaced a Codex procedure that spent most of four minutes typing the file.
         executor=growth_plan.KEY,
-        version_label="3.0.0",
+        version_label="3.1.0",
         system=START_HERE_SYSTEM,
         agent_only=True,
         schedule_modes=("on_demand",),
         input_schema=growth_onboarding.INPUT_SCHEMA,
+    ),
+    BuiltinWorkflow(
+        id=PAID_ADS_ASSESSMENT_WORKFLOW_ID,
+        key=paid_ads.KEY,
+        title="Assess paid ads for this business",
+        description=(
+            "Decide whether Google Search ads fit: a verdict, the constraint that binds it, a "
+            "scorecard and a rough campaign shape from Keyword Planner, DataForSEO, Search "
+            "Console when connected and the site. Advisory only; nothing is created or spent "
+            "on ads."
+        ),
+        # An LLM flow: code owns economics, scoring, the verdict and rendering; five bounded
+        # model steps read evidence, label keywords, diagnose history and shape the campaign.
+        executor=paid_ads.KEY,
+        version_label="0.1.0",
+        system=PAID_ADS_SYSTEM,
+        schedule_modes=("on_demand",),
+        input_schema=paid_ads.INPUT_SCHEMA,
+        prerequisites=(
+            WorkflowPrerequisite(
+                kind="run",
+                level="recommended",
+                workflow=GROWTH_ONBOARDING_PLAN_WORKFLOW_NAME,
+                via_input="onboarding_run_id",
+                reason="The Start here plan's answers prefill the business profile.",
+            ),
+            WorkflowPrerequisite(
+                kind="run",
+                level="recommended",
+                workflow=KEYWORD_KEY,
+                via_input="keyword_run_id",
+                reason="A keyword plan supplies seeds and competitors the assessment reuses.",
+            ),
+            WorkflowPrerequisite(
+                kind="run",
+                level="recommended",
+                workflow=AUDIT_KEY,
+                via_input="audit_run_id",
+                reason="An audit supplies landing-page facts the readiness score uses.",
+            ),
+        ),
+        integration_requirements=(
+            IntegrationRequirement(GSC_PROVIDER, ("search_analytics.read",), required=False),
+            IntegrationRequirement(GITHUB_PROVIDER, ("contents.read",), required=False),
+        ),
     ),
 )
 

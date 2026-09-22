@@ -62,6 +62,9 @@ from tin_lite.keyword_plan_control import stop_keyword_plan as stop_keyword_plan
 from tin_lite.luna import LunaProtocolError, LunaSafetyError, LunaUpstreamError
 from tin_lite.organic_audit_control import stop_organic_audit as stop_organic_audit_service
 from tin_lite.output_resolution import OutputResolutionError, OutputResolutionRequest
+from tin_lite.paid_ads_control import (
+    stop_paid_ads_assessment as stop_paid_ads_assessment_service,
+)
 from tin_lite.private_workflow_api import router as private_workflow_router
 from tin_lite.private_workflows import private_execution_ready, workflow_source_view
 from tin_lite.product_urls import dashboard_url
@@ -213,6 +216,21 @@ async def stop_organic_audit_run(
 ) -> dict:
     try:
         run = await stop_organic_audit_service(
+            runtime=request.app.state.runtime, run_id=run_id, clerk_user_id=user.clerk_user_id
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail="run not found") from exc
+    except (ValueError, SideEffectConflictError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"id": str(run.id), "status": run.status.value}
+
+
+@router.post("/api/workflows/runs/{run_id}/stop-paid-ads-assessment")
+async def stop_paid_ads_assessment_run(
+    run_id: UUID, request: Request, user: AuthContext = AUTHENTICATED_USER
+) -> dict:
+    try:
+        run = await stop_paid_ads_assessment_service(
             runtime=request.app.state.runtime, run_id=run_id, clerk_user_id=user.clerk_user_id
         )
     except LookupError as exc:

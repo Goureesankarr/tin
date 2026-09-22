@@ -46,6 +46,8 @@ your own accounts before use; ordinary contributor tests need no production cred
 - [Private activation](private-workflow-activation.md), [code workflows](code-workflows.md),
   [managed model steps](code-model-workflows.md) and [code schedules](code-workflow-schedules.md).
 - [Project API connections](project-api-connections.md): secure credentials and external requests.
+- [Paid ads assessment](paid-ads-assessment-implementation.md): the native LLM flow that decides
+  whether Google Search ads fit, its evidence sources, scorer and outputs.
 - [Content programs](content-program-implementation.md), [draft generation](content-generation-implementation.md),
   [review and revisions](content-review.md) and [repository-aware delivery](repository-aware-content-delivery.md).
 - [Writing style capture](writing-style-capture.md) and [editorial judgment](content-editorial-judgment.md).

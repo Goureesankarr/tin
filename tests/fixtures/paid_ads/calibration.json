@@ -1,0 +1,617 @@
+{
+ "note": "Calibration cases from real projects on 2026-09-22; expected values from the reference scorer.",
+ "cases": [
+  {
+   "id": "tin_geo",
+   "name": "Tin GEO ($49/mo, $1 first month)",
+   "profile": {
+    "industry": "b2b_saas_smb",
+    "price": 49,
+    "billing": "monthly",
+    "gross_margin": 0.6,
+    "repeat_factor": 1.0,
+    "conversion_event": "purchase_low_friction",
+    "tracking": "partial",
+    "pricing_shown": true,
+    "mobile_ok": false,
+    "free_step": true,
+    "budget_usd_month": 1000,
+    "ads_history": "running",
+    "observed": {
+     "spend": 1150,
+     "clicks": 227,
+     "soft_conversions": 103,
+     "purchases": null
+    }
+   },
+   "keywords": {
+    "kw_961535e15eba49b2": "ai visibility checker",
+    "kw_da8c00b9d1240834": "ai visibility tool",
+    "kw_50ba5da6d0ffb510": "ai search engine optimization",
+    "kw_3241549430d334b3": "answer engine optimization",
+    "kw_0c5e361bb06cb7fa": "generative engine optimization",
+    "kw_2bee3a65ee171138": "generative engine optimization tool",
+    "kw_8b396870c6211dfd": "chatgpt visibility",
+    "kw_f73406ff099639b9": "how to rank on chatgpt",
+    "kw_96e282c29f57ea87": "get recommended by chatgpt",
+    "kw_095b166c21fd4725": "llm visibility tool",
+    "kw_2aa97ae300c02cf2": "ai seo tool",
+    "kw_a98b085349703d3d": "ai seo checker",
+    "kw_256ab54daf8e3087": "geo seo tool",
+    "kw_78f46cfff28da5a9": "aeo tool",
+    "kw_3bde3453f1e82909": "chatgpt seo",
+    "kw_b8b68060ccc17d12": "perplexity seo",
+    "kw_75385eeb231546a1": "ai overviews optimization",
+    "kw_349e2f37004b7087": "ai search optimization service"
+   },
+   "labels": {
+    "kw_961535e15eba49b2": "mofu",
+    "kw_da8c00b9d1240834": "bofu",
+    "kw_50ba5da6d0ffb510": "mofu",
+    "kw_3241549430d334b3": "tofu",
+    "kw_0c5e361bb06cb7fa": "tofu",
+    "kw_2bee3a65ee171138": "bofu",
+    "kw_8b396870c6211dfd": "mofu",
+    "kw_f73406ff099639b9": "tofu",
+    "kw_96e282c29f57ea87": "mofu",
+    "kw_095b166c21fd4725": "bofu",
+    "kw_2aa97ae300c02cf2": "bofu",
+    "kw_a98b085349703d3d": "mofu",
+    "kw_256ab54daf8e3087": "bofu",
+    "kw_78f46cfff28da5a9": "bofu",
+    "kw_3bde3453f1e82909": "mofu",
+    "kw_b8b68060ccc17d12": "tofu",
+    "kw_75385eeb231546a1": "tofu",
+    "kw_349e2f37004b7087": "bofu"
+   },
+   "volumes": {
+    "kw_961535e15eba49b2": {
+     "volume": 320,
+     "competition_index": 39
+    },
+    "kw_da8c00b9d1240834": {
+     "volume": 3600,
+     "competition_index": 26
+    },
+    "kw_50ba5da6d0ffb510": {
+     "volume": 12100,
+     "competition_index": 56
+    },
+    "kw_3241549430d334b3": {
+     "volume": 2400,
+     "competition_index": 32
+    },
+    "kw_0c5e361bb06cb7fa": {
+     "volume": 4400,
+     "competition_index": 49
+    },
+    "kw_2bee3a65ee171138": {
+     "volume": 880,
+     "competition_index": 1
+    },
+    "kw_8b396870c6211dfd": {
+     "volume": 40,
+     "competition_index": 31
+    },
+    "kw_f73406ff099639b9": {
+     "volume": 170,
+     "competition_index": 20
+    },
+    "kw_96e282c29f57ea87": {
+     "volume": 10,
+     "competition_index": 55
+    },
+    "kw_095b166c21fd4725": {
+     "volume": 720,
+     "competition_index": 8
+    },
+    "kw_2aa97ae300c02cf2": {
+     "volume": 2900,
+     "competition_index": 15
+    },
+    "kw_a98b085349703d3d": {
+     "volume": 70,
+     "competition_index": 75
+    },
+    "kw_256ab54daf8e3087": {
+     "volume": 30,
+     "competition_index": 4
+    },
+    "kw_78f46cfff28da5a9": {
+     "volume": 880,
+     "competition_index": 39
+    },
+    "kw_3bde3453f1e82909": {
+     "volume": 480,
+     "competition_index": 23
+    },
+    "kw_b8b68060ccc17d12": {
+     "volume": 110,
+     "competition_index": 18
+    },
+    "kw_75385eeb231546a1": {
+     "volume": 110,
+     "competition_index": 17
+    },
+    "kw_349e2f37004b7087": {
+     "volume": 0,
+     "competition_index": 0
+    }
+   },
+   "curve": [
+    {
+     "bid": 6.0,
+     "clicks": 224.02,
+     "cost": 894.27,
+     "cpc": 3.99
+    },
+    {
+     "bid": 25.0,
+     "clicks": 647.18,
+     "cost": 6491.73,
+     "cpc": 10.03
+    }
+   ],
+   "paid_slots": [
+    0
+   ],
+   "expected": {
+    "verdict": "not_now",
+    "allowable_cpa_customer": 78,
+    "headroom": 0.15,
+    "scores_total": 59.1,
+    "estimate_cpa_customer": 507,
+    "binding_constraint": "estimated CPA $507 above allowable $78"
+   }
+  },
+  {
+   "id": "tin_auto",
+   "name": "Tin Auto ($299/mo, no trial)",
+   "profile": {
+    "industry": "b2b_saas",
+    "price": 299,
+    "billing": "monthly",
+    "gross_margin": 0.5,
+    "repeat_factor": 1.0,
+    "conversion_event": "purchase_no_trial",
+    "tracking": "partial",
+    "pricing_shown": true,
+    "mobile_ok": true,
+    "free_step": true,
+    "budget_usd_month": 2000,
+    "ads_history": "stopped",
+    "observed": {
+     "spend": 0,
+     "clicks": 0
+    }
+   },
+   "keywords": {
+    "kw_2434229c4d04737b": "ai marketing agent",
+    "kw_2ffeed04f798920c": "autonomous marketing",
+    "kw_baf576320157253f": "ai growth agent",
+    "kw_e5b8666f961e1c60": "marketing ai agent",
+    "kw_95776139558e99f1": "ai seo agent",
+    "kw_f97c04e1d71d0752": "ai marketing assistant",
+    "kw_3438ecbaf818f464": "automated seo",
+    "kw_52b1cd1d8b7823e5": "ai content marketing tool",
+    "kw_854370698c4bbe1b": "marketing automation for small business",
+    "kw_aa5116c3985126a1": "ai marketing platform",
+    "kw_31481da2511831e4": "seo automation tool",
+    "kw_cbe6ecd7cfa99bda": "ai sdr",
+    "kw_338b508b64934d5e": "growth marketing automation",
+    "kw_dc2c7459074404b8": "ai marketing team",
+    "kw_0021844e5ffe926b": "done for you seo",
+    "kw_8cdfdcc17127c1c1": "ai powered marketing"
+   },
+   "labels": {
+    "kw_2434229c4d04737b": "bofu",
+    "kw_2ffeed04f798920c": "mofu",
+    "kw_baf576320157253f": "bofu",
+    "kw_e5b8666f961e1c60": "bofu",
+    "kw_95776139558e99f1": "bofu",
+    "kw_f97c04e1d71d0752": "mofu",
+    "kw_3438ecbaf818f464": "mofu",
+    "kw_52b1cd1d8b7823e5": "mofu",
+    "kw_854370698c4bbe1b": "mofu",
+    "kw_aa5116c3985126a1": "mofu",
+    "kw_31481da2511831e4": "mofu",
+    "kw_cbe6ecd7cfa99bda": "irrelevant",
+    "kw_338b508b64934d5e": "mofu",
+    "kw_dc2c7459074404b8": "bofu",
+    "kw_0021844e5ffe926b": "bofu",
+    "kw_8cdfdcc17127c1c1": "tofu"
+   },
+   "volumes": {
+    "kw_2434229c4d04737b": {
+     "volume": 2400,
+     "competition_index": 20
+    },
+    "kw_2ffeed04f798920c": {
+     "volume": 50,
+     "competition_index": 36
+    },
+    "kw_baf576320157253f": {
+     "volume": 110,
+     "competition_index": 19
+    },
+    "kw_e5b8666f961e1c60": {
+     "volume": 720,
+     "competition_index": 65
+    },
+    "kw_95776139558e99f1": {
+     "volume": 320,
+     "competition_index": 18
+    },
+    "kw_f97c04e1d71d0752": {
+     "volume": 110,
+     "competition_index": 19
+    },
+    "kw_3438ecbaf818f464": {
+     "volume": 2400,
+     "competition_index": 53
+    },
+    "kw_52b1cd1d8b7823e5": {
+     "volume": 170,
+     "competition_index": 13
+    },
+    "kw_854370698c4bbe1b": {
+     "volume": 720,
+     "competition_index": 7
+    },
+    "kw_aa5116c3985126a1": {
+     "volume": 1900,
+     "competition_index": 24
+    },
+    "kw_31481da2511831e4": {
+     "volume": 320,
+     "competition_index": 10
+    },
+    "kw_cbe6ecd7cfa99bda": {
+     "volume": 1900,
+     "competition_index": 49
+    },
+    "kw_338b508b64934d5e": {
+     "volume": 20,
+     "competition_index": 43
+    },
+    "kw_dc2c7459074404b8": {
+     "volume": 110,
+     "competition_index": 54
+    },
+    "kw_0021844e5ffe926b": {
+     "volume": 50,
+     "competition_index": 27
+    },
+    "kw_8cdfdcc17127c1c1": {
+     "volume": 1000,
+     "competition_index": 32
+    }
+   },
+   "curve": [
+    {
+     "bid": 6.0,
+     "clicks": 153.04,
+     "cost": 597.46,
+     "cpc": 3.9
+    },
+    {
+     "bid": 15.0,
+     "clicks": 285.34,
+     "cost": 2056.53,
+     "cpc": 7.21
+    },
+    {
+     "bid": 30.0,
+     "clicks": 331.46,
+     "cost": 3618.3,
+     "cpc": 10.92
+    }
+   ],
+   "paid_slots": [
+    0
+   ],
+   "expected": {
+    "verdict": "not_now",
+    "allowable_cpa_customer": 698,
+    "headroom": 0.63,
+    "scores_total": 68.7,
+    "estimate_cpa_customer": 1100,
+    "binding_constraint": "estimated CPA $1100 above allowable $698"
+   }
+  },
+  {
+   "id": "claw",
+   "name": "Claw Messenger ($5-50/mo, 7-day trial card required)",
+   "profile": {
+    "industry": "dev_tools",
+    "price": 15,
+    "billing": "monthly",
+    "gross_margin": 0.6,
+    "repeat_factor": 1.0,
+    "conversion_event": "trial_card_required",
+    "tracking": "full",
+    "pricing_shown": true,
+    "mobile_ok": true,
+    "free_step": false,
+    "budget_usd_month": 300,
+    "ads_history": "running",
+    "observed": {
+     "spend": 51,
+     "clicks": 26,
+     "purchases": 5
+    }
+   },
+   "keywords": {
+    "kw_1658103ed014622e": "imessage api",
+    "kw_94855a39b92ce5a5": "openclaw imessage",
+    "kw_19141aabe0545b76": "imessage for business",
+    "kw_3ae4f6771814eccd": "imessage bot",
+    "kw_b9e1f67e874c6559": "imessage server",
+    "kw_63d7d13f69fd4b7e": "imessage chatbot",
+    "kw_2791343b73dd3470": "sendblue alternative",
+    "kw_8b3ce68399052ffc": "imessage ai assistant",
+    "kw_af17ec11da91e3f3": "bluebubbles alternative",
+    "kw_f27d71b64fbcaa49": "imessage agent",
+    "kw_21351c027da5f251": "imessage automation",
+    "kw_db4457c96f475822": "imessage integration",
+    "kw_3278451501e60f0e": "imessage sdk",
+    "kw_c985a00280439e16": "imessage from linux",
+    "kw_83dfae6f0c7b812c": "imessage api pricing",
+    "kw_40ed734f43df93d9": "send imessage programmatically",
+    "kw_95dced7b6e20f4ab": "imessage webhook"
+   },
+   "labels": {
+    "kw_1658103ed014622e": "bofu",
+    "kw_94855a39b92ce5a5": "captive",
+    "kw_19141aabe0545b76": "mofu",
+    "kw_3ae4f6771814eccd": "mofu",
+    "kw_b9e1f67e874c6559": "mofu",
+    "kw_63d7d13f69fd4b7e": "mofu",
+    "kw_2791343b73dd3470": "brand_competitor",
+    "kw_8b3ce68399052ffc": "mofu",
+    "kw_af17ec11da91e3f3": "brand_competitor",
+    "kw_f27d71b64fbcaa49": "captive",
+    "kw_21351c027da5f251": "bofu",
+    "kw_db4457c96f475822": "bofu",
+    "kw_3278451501e60f0e": "bofu",
+    "kw_c985a00280439e16": "mofu",
+    "kw_83dfae6f0c7b812c": "bofu",
+    "kw_40ed734f43df93d9": "bofu",
+    "kw_95dced7b6e20f4ab": "bofu"
+   },
+   "volumes": {
+    "kw_1658103ed014622e": {
+     "volume": 720,
+     "competition_index": 61
+    },
+    "kw_94855a39b92ce5a5": {
+     "volume": 590,
+     "competition_index": 2
+    },
+    "kw_19141aabe0545b76": {
+     "volume": 320,
+     "competition_index": 58
+    },
+    "kw_3ae4f6771814eccd": {
+     "volume": 90,
+     "competition_index": 25
+    },
+    "kw_b9e1f67e874c6559": {
+     "volume": 90,
+     "competition_index": 4
+    },
+    "kw_63d7d13f69fd4b7e": {
+     "volume": 70,
+     "competition_index": 22
+    },
+    "kw_2791343b73dd3470": {
+     "volume": 50,
+     "competition_index": 68
+    },
+    "kw_8b3ce68399052ffc": {
+     "volume": 40,
+     "competition_index": 35
+    },
+    "kw_af17ec11da91e3f3": {
+     "volume": 30,
+     "competition_index": 2
+    },
+    "kw_f27d71b64fbcaa49": {
+     "volume": 30,
+     "competition_index": 30
+    },
+    "kw_21351c027da5f251": {
+     "volume": 20,
+     "competition_index": 44
+    },
+    "kw_db4457c96f475822": {
+     "volume": 20,
+     "competition_index": 32
+    },
+    "kw_3278451501e60f0e": {
+     "volume": 20,
+     "competition_index": 48
+    },
+    "kw_c985a00280439e16": {
+     "volume": 20,
+     "competition_index": 0
+    },
+    "kw_83dfae6f0c7b812c": {
+     "volume": 20,
+     "competition_index": 57
+    },
+    "kw_40ed734f43df93d9": {
+     "volume": 10,
+     "competition_index": 71
+    },
+    "kw_95dced7b6e20f4ab": {
+     "volume": 10,
+     "competition_index": 33
+    }
+   },
+   "curve": [
+    {
+     "bid": 4.0,
+     "clicks": 5.01,
+     "cost": 13.4,
+     "cpc": 2.67
+    },
+    {
+     "bid": 15.0,
+     "clicks": 30.12,
+     "cost": 247.61,
+     "cpc": 8.22
+    },
+    {
+     "bid": 30.0,
+     "clicks": 46.99,
+     "cost": 677.11,
+     "cpc": 14.41
+    }
+   ],
+   "paid_slots": [
+    0
+   ],
+   "expected": {
+    "verdict": "continue",
+    "allowable_cpa_customer": 30,
+    "headroom": 0.21,
+    "scores_total": 58.1,
+    "estimate_cpa_customer": 145,
+    "binding_constraint": "observed CPA inside allowable"
+   }
+  },
+  {
+   "id": "ite",
+   "name": "Image Text Edit (credit packs $1.99-$19.99, one-time)",
+   "profile": {
+    "industry": "consumer_software",
+    "price": 8,
+    "billing": "one_time",
+    "gross_margin": 0.7,
+    "repeat_factor": 1.3,
+    "conversion_event": "free_signup",
+    "tracking": "full",
+    "pricing_shown": true,
+    "mobile_ok": true,
+    "free_step": true,
+    "budget_usd_month": 300,
+    "ads_history": "unknown",
+    "observed": {}
+   },
+   "keywords": {
+    "kw_868d593901225ebd": "ai photo editor",
+    "kw_4dd983136b40d5aa": "remove text from image",
+    "kw_dd7d10067291d850": "photo text editor",
+    "kw_91ff55e6bab0a166": "edit text in image",
+    "kw_507d9e98e1ebbca1": "change text in image",
+    "kw_52d30ee9f75f2303": "change text in picture",
+    "kw_4533fee4a6ce28af": "edit text in image online",
+    "kw_4cd3f64445710840": "edit image text online free",
+    "kw_61a473466988786d": "edit text in jpg",
+    "kw_c1f0e3f05b22cf5d": "replace text in image",
+    "kw_21b03d6a00d89b66": "edit text in screenshot",
+    "kw_4d898be829243905": "change date on image",
+    "kw_b728215bc437c4e4": "edit text on picture online free",
+    "kw_7186ee62df7da2a2": "edit text in photo"
+   },
+   "labels": {
+    "kw_868d593901225ebd": "irrelevant",
+    "kw_4dd983136b40d5aa": "tofu",
+    "kw_dd7d10067291d850": "mofu",
+    "kw_91ff55e6bab0a166": "bofu",
+    "kw_507d9e98e1ebbca1": "bofu",
+    "kw_52d30ee9f75f2303": "bofu",
+    "kw_4533fee4a6ce28af": "bofu",
+    "kw_4cd3f64445710840": "tofu",
+    "kw_61a473466988786d": "bofu",
+    "kw_c1f0e3f05b22cf5d": "bofu",
+    "kw_21b03d6a00d89b66": "bofu",
+    "kw_4d898be829243905": "bofu",
+    "kw_b728215bc437c4e4": "tofu",
+    "kw_7186ee62df7da2a2": "bofu"
+   },
+   "volumes": {
+    "kw_868d593901225ebd": {
+     "volume": 201000,
+     "competition_index": 44
+    },
+    "kw_4dd983136b40d5aa": {
+     "volume": 9900,
+     "competition_index": 19
+    },
+    "kw_dd7d10067291d850": {
+     "volume": 4400,
+     "competition_index": 45
+    },
+    "kw_91ff55e6bab0a166": {
+     "volume": 2900,
+     "competition_index": 50
+    },
+    "kw_507d9e98e1ebbca1": {
+     "volume": 2900,
+     "competition_index": 50
+    },
+    "kw_52d30ee9f75f2303": {
+     "volume": 2900,
+     "competition_index": 50
+    },
+    "kw_4533fee4a6ce28af": {
+     "volume": 880,
+     "competition_index": 40
+    },
+    "kw_4cd3f64445710840": {
+     "volume": 390,
+     "competition_index": 45
+    },
+    "kw_61a473466988786d": {
+     "volume": 320,
+     "competition_index": 50
+    },
+    "kw_c1f0e3f05b22cf5d": {
+     "volume": 110,
+     "competition_index": 27
+    },
+    "kw_21b03d6a00d89b66": {
+     "volume": 110,
+     "competition_index": 51
+    },
+    "kw_4d898be829243905": {
+     "volume": 10,
+     "competition_index": 41
+    },
+    "kw_b728215bc437c4e4": {
+     "volume": 10,
+     "competition_index": 57
+    },
+    "kw_7186ee62df7da2a2": {
+     "volume": 0,
+     "competition_index": 0
+    }
+   },
+   "curve": [
+    {
+     "bid": 0.8,
+     "clicks": 3626.41,
+     "cost": 1687.62,
+     "cpc": 0.47
+    },
+    {
+     "bid": 4.0,
+     "clicks": 16902.73,
+     "cost": 37025.9,
+     "cpc": 2.19
+    }
+   ],
+   "paid_slots": [],
+   "expected": {
+    "verdict": "not_now",
+    "allowable_cpa_customer": 7,
+    "headroom": 0.03,
+    "scores_total": 69.5,
+    "estimate_cpa_customer": 280,
+    "binding_constraint": "estimated CPA $280 above allowable $7"
+   }
+  }
+ ]
+}

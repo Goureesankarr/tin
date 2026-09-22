@@ -126,14 +126,15 @@
         "time_to_signal": "weeks"
       },
       "tin": {
-        "coverage": "none",
+        "coverage": "partial",
         "workflows": [
+          "growth.paid_ads_assessment",
           "organic.keyword_plan"
         ],
         "integrations": [],
-        "founder_keeps": "campaigns, budget, bidding and tracking; the keyword plan can seed ad groups",
-        "impact": 0.1,
-        "impact_note": "Tin can seed keywords; campaigns, budget and bidding stay with the founder."
+        "founder_keeps": "campaigns, budget, bidding and tracking; the assessment says whether to start and with what shape",
+        "impact": 0.25,
+        "impact_note": "Tin assesses whether search ads fit and shapes a first campaign; campaigns, budget and bidding stay with the founder."
       }
     },
     {
@@ -586,7 +587,8 @@
     "product.deep_dive": "Map what the product actually does",
     "qa.product_audit": "Audit the product feature by feature",
     "creative.character": "Design a brand character",
-    "creative.product_demo": "Make a product demo video"
+    "creative.product_demo": "Make a product demo video",
+    "growth.paid_ads_assessment": "Assess paid ads for this business"
   },
   "workflow_scope": {
     "content.deliver": "Adapt an existing approved content.generate article to the connected website repository and open an unmerged PR. Requires source_run_id and expected_repository; no new drafting or implicit approval. Reuses the normal metered Codex procedure runner. Exact Markdown source preservation is checked; repository build and rendered equivalence are separate checks, never implied. CMS and WordPress publication require future connectors.",
@@ -615,6 +617,7 @@
     "product.deep_dive": "Read the docs, sign in and use your product with a Tin-owned account, reconcile with the code map, and write the Feature map section of project memory with evidence on every feature.",
     "qa.product_audit": "Exercise every feature in the project's Feature map as a user with a Tin-owned account and report what works, what is broken, and what to improve, with reproducible evidence.",
     "creative.character": "Design a cute, on-brand vector mascot for the product as an animatable SVG character in project Files (three mouth shapes, a blink, and a payoff expression), ready to narrate demo videos and appear in marketing. Tin reads the product page and project memory itself and asks one model for the drawing; about two minutes, no sandbox.",
-    "creative.product_demo": "Capture the founder's live product at phone size and render a smooth 9:16 short-form demo video (TikTok, Reels, Shorts) with a pain hook, voiceover, word-synced captions, tap and scroll motion, and an optional narrating character from project Files."
+    "creative.product_demo": "Capture the founder's live product at phone size and render a smooth 9:16 short-form demo video (TikTok, Reels, Shorts) with a pain hook, voiceover, word-synced captions, tap and scroll motion, and an optional narrating character from project Files.",
+    "growth.paid_ads_assessment": "Read the site, Keyword Planner, DataForSEO and Search Console when connected, then say whether Google Search ads fit: a verdict, the binding constraint, a scorecard and a rough campaign shape. Advisory; never creates or funds campaigns. On demand only."
   }
 }
