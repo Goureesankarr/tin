@@ -302,8 +302,9 @@ test("configuration cost preview reuses unchanged inputs and ignores stale repli
     await f.page.evaluate(()=>costForm.dispatchEvent(new Event("change")));
     await f.page.evaluate(()=>new Promise(resolve=>setTimeout(resolve,30)));
     assert.equal(await f.page.evaluate(()=>costCalls.length),1);
-    await f.page.evaluate(()=>costReplies[0](new Response(JSON.stringify({estimated_usd:"5.00"}))));
-    await f.page.getByText("Estimated cost: up to $5.00 per run · actual usage is charged",{exact:true}).waitFor();
+    await f.page.evaluate(()=>costReplies[0](new Response(JSON.stringify({estimated_usd:"5.00",maximum_usd:"5.00",estimate:{basis:"conservative_configured_bound"}}))));
+    await f.page.getByText("Maximum charge: $5.00 per run · actual usage is charged",{exact:true}).waitFor();
+    await f.page.screenshot({path:"/tmp/tin-workflow-maximum-charge.png",fullPage:true});
     await f.page.locator('[name="scope"]').fill("6");
     await f.page.locator('[name="scope"]').dispatchEvent("change");
     await f.page.waitForFunction(()=>costCalls.length===2);

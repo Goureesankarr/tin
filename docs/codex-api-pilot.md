@@ -29,6 +29,13 @@ acceptance/rollout status. Native model-service routing is unchanged. The
 switchboard still needs its legacy broker for historical OAuth runs.
 The existing project-scoped Temporal execution gate and trusted activity lane are unchanged.
 
+Procedure retry recovery is independent of the funding policy: it never purchases a second
+attempt. Trusted budget-stop reasons survive cleanup, completed revisions replay, and eligible
+interrupted Markdown can remain available as an explicitly incomplete, read-only result.
+See [Interrupted Codex procedures](procedure-publication-recovery.md#interrupted-codex-procedures).
+Session funding reduces the old per-request headroom failures; it does not imply every stopped
+session has a finished artifact. Historical and included/child funding pins remain unchanged.
+
 Browser API runs use `TIN_LITE_E2B_BROWSER_API_TEMPLATE` (default
 `tin-lite-codex-browser-api`), built from the isolated controller plus the existing
 Camoufox/WARP layer. Browser/MCP tools execute in the controller; shell and repository
@@ -77,7 +84,7 @@ Missing usage remains unknown. Compaction has request/body bounds, not an output
 parameter unsupported by its protocol. Provider-hosted files, stored response references,
 background execution, remote tools and arbitrary upstream routing are not supported.
 
-New default-profile procedures select **`tin-codex-api-v3`**: 64 requests, 1 MiB request
+Historical default-profile procedures selected **`tin-codex-api-v3`**: 64 requests, 1 MiB request
 bodies, 8,192 output tokens per response, 128,000 configured context tokens, automatic
 compaction at 96,000, and a stop after 2,000,000 observed cumulative tokens. Both server
 and controller use the pinned contract. These are bounded operating limits, not a promise
@@ -87,6 +94,43 @@ V3 keeps v2's context/usage limits but omits `max_tool_calls`, allowing the mode
 search, open pages and follow up within one response. Already admitted v1/v2 runs
 retain their one-call ceiling. Run timeouts and credit reservations still apply;
 this is not unlimited customer liability or unlimited supplier spending protection.
+
+New, customer-funded ordinary procedures (`default` and `isolated`) pin
+**`tin-codex-api-v4`** and `funding=procedure_session_v1`. Their Responses requests use
+GPT-6 Astra's supported 128,000 output-token maximum and 1,050,000-token context. The
+controller compacts at 922,000 context tokens, leaving room for one maximum response.
+An explicit smaller output limit remains valid. Output tokens include reasoning; these
+are per-response/context limits, not a cumulative session allowance. Requests remain
+bounded to 8 MiB; artifact, tool, sandbox isolation and timeout contracts still apply.
+There is no separate 64-request or lifetime-token stop for these sessions.
+[Model limits](https://developers.openai.com/api/docs/models/gpt-6-astra).
+
+Tin authorizes the existing $5 session maximum once, internally holding those credits
+until settlement. Each request checks the run grant, project membership, current spending
+policy and remaining budget, and records a durable intent. It does not predict prompt
+cost, repeatedly price prior receipts or fund the shared wallet again. One request may
+be outstanding; missing or unpriceable usage blocks continuation. Verified response
+usage updates the existing operation and run total. Settlement charges once, rounds
+once, releases unused authority and preserves existing uncertain-usage reconciliation.
+Compaction is an ordinary paid response in this same session.
+
+The $5 maximum is a **hard customer-charge ceiling and a soft supplier-spend stop**.
+A response admitted before the stop may exceed the remaining budget; Tin records and
+absorbs the excess, then refuses further calls. This exposure can be material: 128,000
+output tokens alone cost $6.40 at the pinned standard rate, or $9.60 in its long-context
+band, before input/search charges. There is no claim of an absolute supplier invoice
+cap. An interruption cannot undo already-accepted provider work. Changing this tradeoff
+requires an explicit provider/operating policy, not an invented precise token estimate.
+
+Only newly admitted ordinary root procedures select v4. Existing budgets and valid
+quotes retain their auth, model, price and runtime pins. Included onboarding and its
+children, other parent children, browser/Studio, diagrams/video, design tasks, interactive
+tasks and managed model steps keep their existing contracts. No data migration or
+Temporal command change is required. Before deploying the switchboard, build and verify
+an isolated image with `codex_api_config.py --check-v4` and the opt-in `session_context`
+isolation probe. Historical readiness checks remain supported. Roll back by stopping
+new admissions and retaining a v4-capable worker for admitted v4 runs; do not rewrite
+those runs' terms or resume them with an older controller.
 
 Codex 0.153.4's custom provider performs context compaction using an ordinary Responses
 model call. That call therefore has the same reservation, actual supplier model/tier/usage,

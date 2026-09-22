@@ -14,6 +14,53 @@ from tin_lite.domain import SideEffectConflictError
 MODE = "openai_api_v1"
 ATTEMPT = "codex_api_attempt_v1"
 USAGE = "codex_api_usage_v1"
+STOP_MESSAGES = {
+    "run_limit": "Codex stopped at this run's quoted spending maximum.",
+    "project_limit": "Codex stopped because the project's spending limit was reached.",
+    "insufficient_funds": "Codex stopped because no credits remained for the next step.",
+    "spending_stopped": "Further paid work was no longer authorized.",
+    "request_limit": "Codex reached this run's pinned request limit.",
+    "token_limit": "Codex reached this run's pinned token limit.",
+}
+
+
+class CodexAttemptStopped(SideEffectConflictError):
+    """A paid attempt has no completed checkpoint; automatic repurchase is forbidden."""
+
+
+def attempt_failure(record):
+    reason = STOP_MESSAGES.get(record.get("stop_reason"))
+    if reason is None and record.get("failure_type") == "TimeoutError":
+        reason = "Codex execution timed out."
+    if reason is None:
+        reason = {
+            "cancelled": "Codex execution was interrupted.",
+            "timed_out": "Codex execution timed out.",
+            "failed": "Codex execution failed before a completed result was recovered.",
+        }.get(record.get("outcome"), "Codex execution ended without a confirmed result.")
+    return CodexAttemptStopped(reason + " The paid attempt will not be repeated automatically.")
+
+
+async def record_attempt_failure(conn, key, exc=None):
+    # A previously running attempt without a surviving controller is unconfirmed.
+    outcome = (
+        "unconfirmed"
+        if exc is None
+        else ("cancelled" if isinstance(exc, asyncio.CancelledError) else "failed")
+    )
+    facts = {"outcome": outcome, "finished_at": datetime.now(UTC).isoformat()}
+    if exc is not None:
+        # Keep the established attempt outcome/type contract for task turns too.
+        # Exception bodies can contain provider payloads and are never stored here.
+        facts["failure_type"] = type(exc).__name__
+    await conn.execute(
+        """UPDATE effect_receipts SET result=result || $2::jsonb
+           WHERE execution_key=$1 AND status='started' AND result->>'outcome'='running'""",
+        key,
+        json.dumps(facts),
+    )
+
+
 MODEL = "gpt-6-astra"
 # Execution bounds; enrolled API runs separately pin their billing terms.
 CONTRACT = {
@@ -46,6 +93,18 @@ DIAGRAM_CONTRACT = {
     "max_request_bytes": 8 * 1024 * 1024,
     "max_non_image_bytes": PROCEDURE_CONTRACT["max_request_bytes"],
 }
+# Ordinary, funded procedures use the model's per-response/context capacity.
+# Session spend and the existing sandbox timeout bound the job, not lifetime tokens.
+# Keep v1-v3 byte-for-byte intact for admitted runs, included work and other profiles.
+SESSION_CONTRACT = {
+    "mode": MODE,
+    "model": MODEL,
+    "protocol": "tin-codex-api-v4",
+    "max_request_bytes": 8 * 1024 * 1024,
+    "max_output_tokens": 128_000,
+    "context_window": 1_050_000,
+    "auto_compact_tokens": 922_000,
+}
 
 
 def procedure_contract(validator=None):
@@ -74,7 +133,7 @@ def supports_api_definition(definition):
 
 
 def is_procedure_contract(value):
-    return value in (PROCEDURE_CONTRACT_V2, PROCEDURE_CONTRACT, DIAGRAM_CONTRACT)
+    return value in (PROCEDURE_CONTRACT_V2, PROCEDURE_CONTRACT, DIAGRAM_CONTRACT, SESSION_CONTRACT)
 
 
 def is_api_contract(value):
@@ -167,9 +226,7 @@ async def run_api_attempt(*, db, conn, run, sandbox_id, run_input, call, turn_nu
     key = attempt_key(run.id, turn_number)
     async with db.effect_lock(key, ATTEMPT, conn=conn) as (locked, existing):
         if existing is not None:
-            raise SideEffectConflictError(
-                "Codex API was already attempted; recover its checkpoint, do not purchase again"
-            )
+            raise attempt_failure(existing.result or {})
         contract = await pinned_contract(
             db,
             run.id,
@@ -226,26 +283,34 @@ async def run_api_attempt(*, db, conn, run, sandbox_id, run_input, call, turn_nu
             # not this overlapping thread total, are the supplier usage authority.
             pass
 
+        async def failed(exc):
+            # Revoke admission before salvage/cleanup. Merge in SQL so a relay's
+            # independently recorded budget stop cannot be overwritten here.
+            await record_attempt_failure(locked, key, exc)
+
         try:
             result = await call(
                 replace(
-                    run_input, api_grant=grant, api_contract=contract, usage_sink=controller_usage
+                    run_input,
+                    api_grant=grant,
+                    api_contract=contract,
+                    usage_sink=controller_usage,
+                    **(
+                        {"failure_sink": failed}
+                        if turn_number is None and hasattr(run_input, "failure_sink")
+                        else {}
+                    ),
                 )
             )
         except BaseException as exc:
-            record.update(
-                outcome="cancelled" if isinstance(exc, asyncio.CancelledError) else "failed",
-                failure_type=type(exc).__name__,
-                finished_at=datetime.now(UTC).isoformat(),
-            )
             try:
-                await asyncio.wait_for(
-                    db.save_effect_progress(locked, execution_key=key, result=record), timeout=5
-                )
+                await asyncio.wait_for(failed(exc), timeout=5)
             except BaseException:  # noqa: S110 — retain original error; never log raw transport
                 pass
             raise
         else:
+            latest = await db.get_effect(key, conn=locked)
+            record = latest.result or record
             record.update(outcome="checkpoint_returned", finished_at=datetime.now(UTC).isoformat())
             if turn_number is not None:
                 # A completed turn can replay its sanitized result/projection without
@@ -259,6 +324,9 @@ async def run_api_attempt(*, db, conn, run, sandbox_id, run_input, call, turn_nu
                     ),
                 )
                 record["task_result"] = asdict(result)
+            elif run.executor == "codex.procedure":
+                # Immutable recovery does not depend on the discovery branch remaining visible.
+                record["procedure_revision"] = result.ephemeral_commit_sha
             await db.complete_effect(locked, execution_key=key, result=record)
             return result
 

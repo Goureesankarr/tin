@@ -17,7 +17,7 @@ from tin_lite.billing_contracts import (
     usd,
 )
 from tin_lite.codex_api import api_enabled as codex_api_enabled
-from tin_lite.workflow_costs import configured_terms, incremental, liability
+from tin_lite.workflow_costs import configured_terms, incremental, liability, session_funded
 from tin_lite.workflow_definitions import resolve_execution_contract
 from tin_lite.workflow_inputs import normalize_workflow_inputs
 
@@ -278,10 +278,14 @@ class BillingService:
             )
         return {"revision": policy.expected_revision + 1}
 
-    def terms(self, definition, project_id, inputs=None):
-        return configured_terms(self._terms(definition, project_id, inputs), definition, inputs)
+    def terms(self, definition, project_id, inputs=None, *, session_budget=True):
+        return configured_terms(
+            self._terms(definition, project_id, inputs, session_budget=session_budget),
+            definition,
+            inputs,
+        )
 
-    def _terms(self, definition, project_id, inputs=None):
+    def _terms(self, definition, project_id, inputs=None, *, session_budget=True):
         from tin_lite.codex_api import supports_api_definition
         from tin_lite.free_workflows import onboarding_is_free
         from tin_lite.service_pricing import service_terms
@@ -336,7 +340,7 @@ class BillingService:
         if supports_api_definition(definition) and codex_api_enabled(self.settings, project_id):
             from tin_lite.codex_api_pricing import api_terms
 
-            return api_terms(definition)
+            return api_terms(definition, session_budget=session_budget)
         return test_terms(definition)
 
     async def quote(
@@ -413,7 +417,7 @@ class BillingService:
             "approval_required": False,
             "rate_card": terms["rate_card"],
             "notice": (
-                "Conservative estimate for this configuration, not a fixed charge. "
+                "Configured spending maximum, not a measured estimate. "
                 "Only actual verified usage is charged."
             ),
         }
@@ -592,8 +596,13 @@ class BillingService:
                     "stale_quote", "This quote is unavailable. Start again without a quote.", 402
                 )
             quoted_terms = object_value(quote["terms"]) if quote else None
+            # A still-valid pre-session quote keeps its original runtime and funding.
+            if quoted_terms and session_funded(terms) and not session_funded(quoted_terms):
+                terms = self.terms(
+                    definition, run["project_id"], object_value(run["input"]), session_budget=False
+                )
             # Previously issued quotes preserve their whole-run funding contract.
-            if quoted_terms and not incremental(quoted_terms):
+            if quoted_terms and "funding" not in quoted_terms:
                 expected = {k: v for k, v in terms.items() if k not in {"funding", "estimate"}}
             else:
                 expected = terms
@@ -842,8 +851,18 @@ class BillingService:
             )
             if not budget:
                 return None
+            terms = object_value(budget["terms"])
+            session = session_funded(terms)
+            if session and (budget["root_run_id"] != run_id or kind != "codex_api"):
+                raise BillingError(
+                    "unmetered_operation", "This session only funds its own model calls."
+                )
+            # A session's entire authorization is already held. Its calls only lock
+            # the run budget; no shared-wallet mutation or repeated funding occurs.
             account = await conn.fetchrow(
-                "SELECT * FROM billing_accounts WHERE workspace_id=$1 FOR UPDATE",
+                "SELECT * FROM billing_accounts WHERE workspace_id=$1"
+                if session
+                else "SELECT * FROM billing_accounts WHERE workspace_id=$1 FOR UPDATE",
                 budget["workspace_id"],
             )
             root = await conn.fetchrow(
@@ -869,19 +888,40 @@ class BillingService:
                     "operation_already_attempted",
                     "Recover the existing paid operation; do not purchase it again.",
                 )
-            terms = object_value(budget["terms"])
             if kind not in terms.get("operations", [terms["kind"]]):
                 raise BillingError(
                     "unmetered_operation", "This operation is outside the quoted profile."
                 )
-            amount = maximum(terms) if callable(maximum) else maximum
+            if session:
+                # This is remaining customer authority, not a supplier-cost forecast.
+                # One pending response occupies it until verified usage arrives.
+                amount = root["maximum_nanos"] - root["committed_nanos"]
+                if amount <= 0:
+                    pending = await conn.fetchval(
+                        "SELECT true FROM billing_operations WHERE root_run_id=$1 "
+                        "AND status='pending' LIMIT 1",
+                        run_id,
+                    )
+                    raise BillingError(
+                        "usage_pending" if pending else "run_limit",
+                        "A prior API request is active or unconfirmed."
+                        if pending
+                        else "This session has reached its spending maximum.",
+                        409 if pending else 402,
+                    )
+            else:
+                amount = maximum(terms) if callable(maximum) else maximum
             if type(amount) is not int or amount < 0:
                 raise ValueError("invalid operation maximum")
-            own_committed = await conn.fetchval(
-                """SELECT COALESCE(sum(CASE WHEN status='pending' THEN maximum_nanos
+            own_committed = (
+                root["committed_nanos"]
+                if session
+                else await conn.fetchval(
+                    """SELECT COALESCE(sum(CASE WHEN status='pending' THEN maximum_nanos
                     ELSE COALESCE(observed_nanos,0) END),0)
                    FROM billing_operations WHERE run_id=$1""",
-                run_id,
+                    run_id,
+                )
             )
             if own_committed + amount > terms["maximum_nanos"]:
                 raise BillingError(
@@ -986,11 +1026,19 @@ class BillingService:
                 "SELECT workspace_id FROM billing_run_budgets WHERE run_id=$1",
                 operation["root_run_id"],
             )
-            # Every wallet mutation follows account -> root -> operation lock order.
-            await conn.fetchrow(
-                "SELECT workspace_id FROM billing_accounts WHERE workspace_id=$1 FOR UPDATE",
-                workspace_id,
+            terms = object_value(
+                await conn.fetchval(
+                    "SELECT terms FROM billing_run_budgets WHERE run_id=$1",
+                    operation["root_run_id"],
+                )
             )
+            # Every wallet mutation follows account -> root -> operation lock order.
+            # Session observations only change their already-funded root and receipt.
+            if not session_funded(terms):
+                await conn.fetchrow(
+                    "SELECT workspace_id FROM billing_accounts WHERE workspace_id=$1 FOR UPDATE",
+                    workspace_id,
+                )
             root = await conn.fetchrow(
                 "SELECT * FROM billing_run_budgets WHERE run_id=$1 FOR UPDATE",
                 operation["root_run_id"],
@@ -1263,7 +1311,7 @@ class BillingService:
                 "root_run_id": str(root["run_id"]),
                 "mode": "test",
                 "status": "in_progress"
-                if incremental(terms) and root["status"] == "reserved"
+                if (incremental(terms) or session_funded(terms)) and root["status"] == "reserved"
                 else root["status"],
                 "estimated_usd": usd(
                     terms.get("estimate", {}).get("amount_nanos", root["maximum_nanos"])
@@ -1282,7 +1330,7 @@ class BillingService:
                 if root["charged_nanos"] is not None
                 else None,
                 "released_usd": usd(root["maximum_nanos"] - root["charged_nanos"])
-                if root["status"] == "settled" and not incremental(terms)
+                if root["status"] == "settled" and not (incremental(terms) or session_funded(terms))
                 else None,
                 "included_in_parent": run_id != root["run_id"],
                 "rate_card": object_value(budget["terms"])["rate_card"],

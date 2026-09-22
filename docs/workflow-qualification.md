@@ -28,8 +28,8 @@ files; adopt the checks when adding or revising a package.
 
 The creator is shipped in the Python distribution, not selected in `PUBLIC_WORKFLOWS`.
 It has no integration bindings or authority to start candidates. Its self-checks are author
-claims; the trusted qualifier supplies independent evidence. The first draft and one revision
-are instructed limits within the existing enforced agent budget and runtime bounds.
+claims; the trusted qualifier supplies independent evidence. Authoring and validation run
+within the existing enforced agent budget and runtime bounds.
 
 HTTP exposes the same services at `POST /api/projects/{project_id}/workflow-packages/candidate`,
 `/qualify` and `/evaluate`. Candidate takes `run_id`; qualification takes `path`, `revision`
@@ -61,6 +61,13 @@ when models or providers are involved. Start small and add cases when a real fai
 you something. The case file and package get separate content digests; changing either makes
 the report a different qualification. Cases omit `project_id`; Tin binds it.
 
+Make the normal case require the useful result. A report with all the right headings but a
+failed required query is not a pass. A workflow may successfully deliver that diagnostic;
+test its failure handling separately from its ability to do the ordinary job. For controlled
+fixtures, assert the known answers as well as the output shape. For live data, independently
+check the retained provider evidence and arithmetic rather than trusting a generated “verified”
+label. Keep legitimate missing-data findings distinct from broken queries.
+
 Optional `cost_drivers` describes what changes paid call counts or token sizes. Optional
 `rubric: [{"id": "grounding", "question": "Does each claim follow from the evidence?"}]`
 holds independent quality questions. The maintainer proposing Registry registration owns
@@ -71,6 +78,11 @@ managed-model output subset: closed objects, required properties, scalar enums a
 arrays. No arbitrary Python evaluators, regex or remote schema references run on the server.
 `expected_status: "failed"` expresses an expected runtime rejection, not an admission failure.
 Code-level pytest tests remain the place for richer invariants and precise exception checks.
+Tin validates the manifest with its bound `project_id` before admission. Procedure sandbox inputs
+omit that field; do not revalidate them against the full manifest schema. A procedure's final
+message does not determine its run status. Give semantic input errors an explicit diagnostic
+artifact contract, and check configuration and findings so an earlier report cannot satisfy a
+new case merely because its headings match.
 The CSV [case file](../workflow_evals/example.csv_summary/qualification.json) is a complete example.
 
 ## Offline checks
@@ -87,6 +99,12 @@ uv run pytest tests/test_workflow_qualification.py
 This tests assertions, not workflow execution or model quality. It never establishes measured
 cost. `candidate candidate.json` inspects a saved creator result and prints proposed changes
 without writing them.
+
+For provider SQL, a local implementation in another dialect is a semantic reference, not
+proof that the emitted query works. Keep a deterministic query resource and, during authorized
+live qualification, exercise that exact provider dialect against synthetic edge cases before
+using project data. Include missing joins/steps, ordering, duplicates, empty results and any
+statistics whose definitions matter. Ordinary CI stays offline.
 
 PR CI uses these checks and ordinary fixture-based pytest with no production secrets or paid
 model access. Source validation parses code; it does not import or execute submitted Python.

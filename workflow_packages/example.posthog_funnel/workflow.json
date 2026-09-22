@@ -4,7 +4,7 @@
     "key": "example.posthog_funnel",
     "title": "Inspect a PostHog funnel",
     "description": "Explore event definitions and report one bounded funnel with reproducible queries and explicit data limitations.",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "executor": "codex.procedure",
     "schedule_modes": [
       "on_demand"
@@ -64,7 +64,8 @@
       "prompt_path": "PROMPT.md",
       "skills_path": "skills",
       "skill_files": [
-        "skills/posthog-funnel/SKILL.md"
+        "skills/posthog-funnel/SKILL.md",
+        "skills/posthog-funnel/HOGQL.md"
       ],
       "entry_skill": "posthog-funnel",
       "workspace": {

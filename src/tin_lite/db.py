@@ -2321,7 +2321,7 @@ class Database:
                     workflow_id,
                 )
                 if trigger_source == "schedule" and workflow["executor"] == "workflow.code":
-                    from tin_lite.schedules import ScheduledCodeSkip
+                    from tin_lite.schedules import ScheduledWorkflowSkip
 
                     if (
                         configured is None
@@ -2329,7 +2329,7 @@ class Database:
                         or configured["schedule"] is None
                         or configured["settings_revision"] != schedule_settings_revision
                     ):
-                        raise ScheduledCodeSkip("The saved schedule changed before dispatch.")
+                        raise ScheduledWorkflowSkip("The saved schedule changed before dispatch.")
                     if started_by_clerk_user_id != configured[
                         "created_by_clerk_user_id"
                     ] or not await self.has_project_access(
@@ -2338,12 +2338,19 @@ class Database:
                         conn=conn,
                     ):
                         raise ValueError("The schedule's author no longer has project access.")
+                if trigger_source == "schedule":
+                    from tin_lite.schedules import ScheduledWorkflowSkip
+
+                    # A recovered child can outlive its original Temporal dispatcher.
+                    # Serialize admission against the durable run projection as well.
                     if await conn.fetchval(
                         "SELECT EXISTS(SELECT 1 FROM workflow_runs WHERE project_workflow_id=$1 "
                         "AND status IN ('pending','running','needs_input','paused'))",
                         project_workflow_id,
                     ):
-                        raise ScheduledCodeSkip("An earlier run of this configuration is active.")
+                        raise ScheduledWorkflowSkip(
+                            "An earlier run of this configuration is active."
+                        )
                 if configured is None:
                     raise LookupError("project workflow is not available")
                 if definition_commit_sha != configured["definition_commit_sha"]:

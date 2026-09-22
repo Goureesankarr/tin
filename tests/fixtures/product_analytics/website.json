@@ -1,0 +1,225 @@
+{
+  "profile": {
+    "actor": "distinct_id",
+    "attempt": "properties.$session_id",
+    "unit": "browser identities",
+    "events": [
+      "$pageview",
+      "signup_started",
+      "signup_completed",
+      "first_export"
+    ],
+    "labels": [
+      "Visited the site",
+      "Started signup",
+      "Completed signup",
+      "Exported once"
+    ]
+  },
+  "events": [
+    {
+      "event": "$pageview",
+      "timestamp": "2026-01-05T00:00:01Z",
+      "distinct_id": "a",
+      "properties": {
+        "$session_id": "a-1",
+        "$device_type": "Desktop",
+        "$pathname": "/start",
+        "$referring_domain": "search.example"
+      }
+    },
+    {
+      "event": "signup_started",
+      "timestamp": "2026-01-05T00:00:02Z",
+      "distinct_id": "a",
+      "properties": {
+        "$session_id": "a-1",
+        "$device_type": "Desktop",
+        "$pathname": "/start",
+        "$referring_domain": "search.example"
+      }
+    },
+    {
+      "event": "signup_completed",
+      "timestamp": "2026-01-05T00:00:03Z",
+      "distinct_id": "a",
+      "properties": {
+        "$session_id": "a-1",
+        "$device_type": "Desktop",
+        "$pathname": "/start",
+        "$referring_domain": "search.example"
+      }
+    },
+    {
+      "event": "first_export",
+      "timestamp": "2026-01-05T00:00:04Z",
+      "distinct_id": "a",
+      "properties": {
+        "$session_id": "a-1",
+        "$device_type": "Desktop",
+        "$pathname": "/start",
+        "$referring_domain": "search.example"
+      }
+    },
+    {
+      "event": "$pageview",
+      "timestamp": "2026-01-05T00:00:01Z",
+      "distinct_id": "b",
+      "properties": {
+        "$session_id": "b-1",
+        "$device_type": "Desktop",
+        "$pathname": "/start",
+        "$referring_domain": "search.example"
+      }
+    },
+    {
+      "event": "signup_started",
+      "timestamp": "2026-01-05T00:00:02Z",
+      "distinct_id": "b",
+      "properties": {
+        "$session_id": "b-1",
+        "$device_type": "Desktop",
+        "$pathname": "/start",
+        "$referring_domain": "search.example"
+      }
+    },
+    {
+      "event": "signup_completed",
+      "timestamp": "2026-01-05T00:00:03Z",
+      "distinct_id": "b",
+      "properties": {
+        "$session_id": "b-1",
+        "$device_type": "Desktop",
+        "$pathname": "/start",
+        "$referring_domain": "search.example"
+      }
+    },
+    {
+      "event": "first_export",
+      "timestamp": "2026-01-05T00:00:04Z",
+      "distinct_id": "b",
+      "properties": {
+        "$session_id": "b-1",
+        "$device_type": "Desktop",
+        "$pathname": "/start",
+        "$referring_domain": "search.example"
+      }
+    },
+    {
+      "event": "$pageview",
+      "timestamp": "2026-01-05T00:00:01Z",
+      "distinct_id": "c",
+      "properties": {
+        "$session_id": "c-1",
+        "$device_type": "Desktop",
+        "$pathname": "/start",
+        "$referring_domain": "search.example"
+      }
+    },
+    {
+      "event": "signup_started",
+      "timestamp": "2026-01-05T00:00:02Z",
+      "distinct_id": "c",
+      "properties": {
+        "$session_id": "c-1",
+        "$device_type": "Desktop",
+        "$pathname": "/start",
+        "$referring_domain": "search.example"
+      }
+    },
+    {
+      "event": "$pageview",
+      "timestamp": "2026-01-05T00:00:01Z",
+      "distinct_id": "d",
+      "properties": {
+        "$session_id": "d-1",
+        "$device_type": "Desktop",
+        "$pathname": "/start",
+        "$referring_domain": "search.example"
+      }
+    },
+    {
+      "event": "$pageview",
+      "timestamp": "2026-01-05T00:00:01Z",
+      "distinct_id": "a",
+      "properties": {
+        "$session_id": "a-1",
+        "$device_type": "Desktop",
+        "$pathname": "/start",
+        "$referring_domain": "search.example"
+      }
+    },
+    {
+      "event": "signup_started",
+      "timestamp": "2026-01-05T00:00:04Z",
+      "distinct_id": "later-only",
+      "properties": {
+        "$session_id": "x",
+        "$device_type": "Desktop",
+        "$pathname": "/start",
+        "$referring_domain": "search.example"
+      }
+    },
+    {
+      "event": "$pageview",
+      "timestamp": "2026-01-05T00:00:08Z",
+      "distinct_id": "tie",
+      "properties": {
+        "$session_id": "t",
+        "$device_type": "Desktop",
+        "$pathname": "/start",
+        "$referring_domain": "search.example"
+      }
+    },
+    {
+      "event": "signup_started",
+      "timestamp": "2026-01-05T00:00:08Z",
+      "distinct_id": "tie",
+      "properties": {
+        "$session_id": "t",
+        "$device_type": "Desktop",
+        "$pathname": "/start",
+        "$referring_domain": "search.example"
+      }
+    },
+    {
+      "event": "$pageview",
+      "timestamp": "2026-01-05T00:00:10Z",
+      "distinct_id": "cross-attempt",
+      "properties": {
+        "$session_id": "left",
+        "$device_type": "Desktop",
+        "$pathname": "/start",
+        "$referring_domain": "search.example"
+      }
+    },
+    {
+      "event": "signup_started",
+      "timestamp": "2026-01-05T00:00:11Z",
+      "distinct_id": "cross-attempt",
+      "properties": {
+        "$session_id": "right",
+        "$device_type": "Desktop",
+        "$pathname": "/start",
+        "$referring_domain": "search.example"
+      }
+    },
+    {
+      "event": "signup_started",
+      "timestamp": "2026-01-05T00:00:12Z",
+      "distinct_id": "other-actor",
+      "properties": {
+        "$session_id": "left",
+        "$device_type": "Desktop",
+        "$pathname": "/start",
+        "$referring_domain": "search.example"
+      }
+    }
+  ],
+  "expected_ordered": [
+    6,
+    3,
+    2,
+    2
+  ]
+}

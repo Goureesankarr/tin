@@ -1,0 +1,892 @@
+{
+  "provenance": "Fabricated inline event CTEs executed through PostHog HogQL on 2026-09-21 and 2026-09-22; no customer data.",
+  "cases": {
+    "six": {
+      "plan": {
+        "version": "reusable-v1",
+        "actor_key": "event:account_id",
+        "actor_label": "accounts",
+        "chain_key": "event:job_id",
+        "chain_label": "attempts",
+        "steps": [
+          "step 1",
+          "step 2",
+          "step 3",
+          "step 4",
+          "step 5",
+          "step 6"
+        ],
+        "labels": [
+          "step 1",
+          "step 2",
+          "step 3",
+          "step 4",
+          "step 5",
+          "step 6"
+        ],
+        "key_events": [
+          "step 1",
+          "step 6"
+        ],
+        "error_events": [
+          "job_failed"
+        ],
+        "pageview_event": "",
+        "path_property": "",
+        "source_property": "",
+        "paths": [],
+        "sources": [],
+        "category_property": "",
+        "categories": [],
+        "exclusions": [],
+        "semantic_evidence": [
+          "Synthetic documented event and identity semantics."
+        ],
+        "traffic_actor_key": "distinct_id",
+        "traffic_chain_key": "event:$session_id"
+      },
+      "events": [
+        {
+          "timestamp": "2026-01-05T00:00:01Z",
+          "event": "step 1",
+          "distinct_id": "a",
+          "properties": {
+            "account_id": "account-a",
+            "job_id": "job-a"
+          }
+        },
+        {
+          "timestamp": "2026-01-05T00:00:02Z",
+          "event": "step 2",
+          "distinct_id": "a",
+          "properties": {
+            "account_id": "account-a",
+            "job_id": "job-a"
+          }
+        },
+        {
+          "timestamp": "2026-01-05T00:00:03Z",
+          "event": "step 3",
+          "distinct_id": "a",
+          "properties": {
+            "account_id": "account-a",
+            "job_id": "job-a"
+          }
+        },
+        {
+          "timestamp": "2026-01-05T00:00:04Z",
+          "event": "step 4",
+          "distinct_id": "a",
+          "properties": {
+            "account_id": "account-a",
+            "job_id": "job-a"
+          }
+        },
+        {
+          "timestamp": "2026-01-05T00:00:05Z",
+          "event": "step 5",
+          "distinct_id": "a",
+          "properties": {
+            "account_id": "account-a",
+            "job_id": "job-a"
+          }
+        },
+        {
+          "timestamp": "2026-01-05T00:00:06Z",
+          "event": "step 6",
+          "distinct_id": "a",
+          "properties": {
+            "account_id": "account-a",
+            "job_id": "job-a"
+          }
+        }
+      ],
+      "empty": false,
+      "responses": {
+        "funnel": {
+          "query_sha256": "711ecedfdf8aaf2bfae379a03d7dcc38df724588f9047a2f58bd4fc13e563a2e",
+          "data": {
+            "columns": [
+              "period",
+              "day",
+              "n1",
+              "n2",
+              "n3",
+              "n4",
+              "n5",
+              "n6",
+              "median_d1_2",
+              "median_d1_3",
+              "median_d1_4",
+              "median_d1_5",
+              "median_d1_6",
+              "median_d2_3",
+              "median_d3_4",
+              "median_d4_5",
+              "median_d5_6",
+              "order_violations",
+              "duplicate_choices"
+            ],
+            "results": [
+              [
+                "current",
+                "2026-01-05",
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                1,
+                2,
+                3,
+                4,
+                5,
+                1,
+                1,
+                1,
+                1,
+                0,
+                0
+              ]
+            ],
+            "hasMore": null,
+            "error": null,
+            "query_status": null
+          }
+        }
+      }
+    },
+    "empty": {
+      "plan": {
+        "version": "reusable-v1",
+        "actor_key": "event:account_id",
+        "actor_label": "accounts",
+        "chain_key": "event:job_id",
+        "chain_label": "attempts",
+        "steps": [
+          "Workspace created",
+          "Invite sent",
+          "Report viewed"
+        ],
+        "labels": [
+          "Created a workspace",
+          "Invited a teammate",
+          "Viewed a report"
+        ],
+        "key_events": [
+          "Workspace created",
+          "Report viewed"
+        ],
+        "error_events": [
+          "job_failed"
+        ],
+        "pageview_event": "",
+        "path_property": "",
+        "source_property": "",
+        "paths": [],
+        "sources": [],
+        "category_property": "",
+        "categories": [],
+        "exclusions": [],
+        "semantic_evidence": [
+          "Synthetic documented event and identity semantics."
+        ],
+        "traffic_actor_key": "distinct_id",
+        "traffic_chain_key": "event:$session_id"
+      },
+      "events": [
+        {
+          "event": "Workspace created",
+          "timestamp": "2026-01-05T00:00:01Z",
+          "distinct_id": "a",
+          "properties": {
+            "account_id": "a",
+            "job_id": "a-1"
+          }
+        }
+      ],
+      "empty": true,
+      "responses": {
+        "funnel": {
+          "query_sha256": "ed41720372802bd6f80a187faaa65bce1ed0bbf25de36d1f84ed37710cef9b69",
+          "data": {
+            "columns": [
+              "period",
+              "day",
+              "n1",
+              "n2",
+              "n3",
+              "median_d1_2",
+              "median_d1_3",
+              "median_d2_3",
+              "order_violations",
+              "duplicate_choices"
+            ],
+            "results": [],
+            "hasMore": null,
+            "error": null,
+            "query_status": null
+          }
+        }
+      }
+    },
+    "exclusions": {
+      "plan": {
+        "version": "reusable-v1",
+        "actor_key": "event:account_id",
+        "actor_label": "accounts",
+        "chain_key": "event:job_id",
+        "chain_label": "attempts",
+        "steps": [
+          "Workspace created",
+          "Invite sent",
+          "Report viewed"
+        ],
+        "labels": [
+          "Created a workspace",
+          "Invited a teammate",
+          "Viewed a report"
+        ],
+        "key_events": [
+          "Workspace created",
+          "Report viewed"
+        ],
+        "error_events": [
+          "job_failed"
+        ],
+        "pageview_event": "",
+        "path_property": "",
+        "source_property": "",
+        "paths": [],
+        "sources": [],
+        "category_property": "",
+        "categories": [],
+        "exclusions": [
+          {
+            "property": "is_test",
+            "value": true
+          }
+        ],
+        "semantic_evidence": [
+          "Synthetic documented event and identity semantics."
+        ],
+        "traffic_actor_key": "distinct_id",
+        "traffic_chain_key": "event:$session_id"
+      },
+      "events": [
+        {
+          "timestamp": "2026-01-05T00:00:01Z",
+          "event": "Workspace created",
+          "distinct_id": "0",
+          "properties": {
+            "account_id": "0",
+            "job_id": "0",
+            "is_test": true
+          }
+        },
+        {
+          "timestamp": "2026-01-05T00:00:01Z",
+          "event": "Workspace created",
+          "distinct_id": "1",
+          "properties": {
+            "account_id": "1",
+            "job_id": "1",
+            "is_test": false
+          }
+        },
+        {
+          "timestamp": "2026-01-05T00:00:01Z",
+          "event": "Workspace created",
+          "distinct_id": "2",
+          "properties": {
+            "account_id": "2",
+            "job_id": "2",
+            "is_test": "true"
+          }
+        },
+        {
+          "timestamp": "2026-01-05T00:00:01Z",
+          "event": "Workspace created",
+          "distinct_id": "3",
+          "properties": {
+            "account_id": "3",
+            "job_id": "3",
+            "is_test": null
+          }
+        },
+        {
+          "timestamp": "2026-01-05T00:00:01Z",
+          "event": "Workspace created",
+          "distinct_id": "4",
+          "properties": {
+            "account_id": "4",
+            "job_id": "4",
+            "is_test": 1
+          }
+        }
+      ],
+      "empty": false,
+      "responses": {
+        "inventory": {
+          "query_sha256": "d855155bb2d99cce24587c6c18206291b6a9d0b8d6044e923130c30cec3599d0",
+          "data": {
+            "columns": [
+              "event",
+              "observed",
+              "prior",
+              "current",
+              "first_seen",
+              "last_seen",
+              "total_event_types"
+            ],
+            "results": [
+              [
+                "Workspace created",
+                4,
+                0,
+                4,
+                "2026-01-05T00:00:01Z",
+                "2026-01-05T00:00:01Z",
+                1
+              ]
+            ],
+            "hasMore": null,
+            "error": null,
+            "query_status": null
+          }
+        },
+        "coverage": {
+          "query_sha256": "8de8a2452084082fecce850791c2c7af6b35647ca3e512f1331c168940b80379",
+          "data": {
+            "columns": [
+              "event",
+              "period",
+              "raw",
+              "actor_rows",
+              "eligible_rows",
+              "actors",
+              "eligible_actors",
+              "chains",
+              "first_seen",
+              "last_seen",
+              "missing_p0"
+            ],
+            "results": [
+              [
+                "Workspace created",
+                "current",
+                4,
+                4,
+                4,
+                4,
+                4,
+                4,
+                "2026-01-05T00:00:01Z",
+                "2026-01-05T00:00:01Z",
+                1
+              ]
+            ],
+            "hasMore": null,
+            "error": null,
+            "query_status": null
+          }
+        }
+      }
+    },
+    "mixed": {
+      "plan": {
+        "version": "reusable-v1",
+        "actor_key": "event:account_id",
+        "actor_label": "accounts",
+        "chain_key": "event:job_id",
+        "chain_label": "attempts",
+        "steps": [
+          "Workspace created",
+          "Invite sent",
+          "Report viewed"
+        ],
+        "labels": [
+          "Created a workspace",
+          "Invited a teammate",
+          "Viewed a report"
+        ],
+        "key_events": [
+          "Workspace created",
+          "Report viewed"
+        ],
+        "error_events": [
+          "job_failed"
+        ],
+        "pageview_event": "$pageview",
+        "path_property": "$pathname",
+        "source_property": "$referring_domain",
+        "paths": [
+          "/start"
+        ],
+        "sources": [
+          "search.example"
+        ],
+        "category_property": "",
+        "categories": [],
+        "exclusions": [],
+        "semantic_evidence": [
+          "Synthetic documented event and identity semantics."
+        ],
+        "traffic_actor_key": "distinct_id",
+        "traffic_chain_key": "event:$session_id"
+      },
+      "events": [
+        {
+          "event": "Workspace created",
+          "timestamp": "2026-01-05T00:00:01Z",
+          "distinct_id": "a",
+          "properties": {
+            "account_id": "a",
+            "job_id": "a-1"
+          }
+        },
+        {
+          "event": "Invite sent",
+          "timestamp": "2026-01-05T00:00:02Z",
+          "distinct_id": "a",
+          "properties": {
+            "account_id": "a",
+            "job_id": "a-1"
+          }
+        },
+        {
+          "event": "Report viewed",
+          "timestamp": "2026-01-05T00:00:03Z",
+          "distinct_id": "a",
+          "properties": {
+            "account_id": "a",
+            "job_id": "a-1"
+          }
+        },
+        {
+          "event": "Workspace created",
+          "timestamp": "2026-01-05T00:00:01Z",
+          "distinct_id": "b",
+          "properties": {
+            "account_id": "b",
+            "job_id": "b-1"
+          }
+        },
+        {
+          "event": "Invite sent",
+          "timestamp": "2026-01-05T00:00:02Z",
+          "distinct_id": "b",
+          "properties": {
+            "account_id": "b",
+            "job_id": "b-1"
+          }
+        },
+        {
+          "event": "Report viewed",
+          "timestamp": "2026-01-05T00:00:03Z",
+          "distinct_id": "b",
+          "properties": {
+            "account_id": "b",
+            "job_id": "b-1"
+          }
+        },
+        {
+          "event": "Workspace created",
+          "timestamp": "2026-01-05T00:00:01Z",
+          "distinct_id": "c",
+          "properties": {
+            "account_id": "c",
+            "job_id": "c-1"
+          }
+        },
+        {
+          "event": "Invite sent",
+          "timestamp": "2026-01-05T00:00:02Z",
+          "distinct_id": "c",
+          "properties": {
+            "account_id": "c",
+            "job_id": "c-1"
+          }
+        },
+        {
+          "event": "Workspace created",
+          "timestamp": "2026-01-05T00:00:01Z",
+          "distinct_id": "d",
+          "properties": {
+            "account_id": "d",
+            "job_id": "d-1"
+          }
+        },
+        {
+          "event": "Workspace created",
+          "timestamp": "2026-01-05T00:00:01Z",
+          "distinct_id": "a",
+          "properties": {
+            "account_id": "a",
+            "job_id": "a-1"
+          }
+        },
+        {
+          "event": "Invite sent",
+          "timestamp": "2026-01-05T00:00:04Z",
+          "distinct_id": "later-only",
+          "properties": {
+            "account_id": "later-only",
+            "job_id": "x"
+          }
+        },
+        {
+          "event": "Workspace created",
+          "timestamp": "2026-01-05T00:00:08Z",
+          "distinct_id": "tie",
+          "properties": {
+            "account_id": "tie",
+            "job_id": "t"
+          }
+        },
+        {
+          "event": "Invite sent",
+          "timestamp": "2026-01-05T00:00:08Z",
+          "distinct_id": "tie",
+          "properties": {
+            "account_id": "tie",
+            "job_id": "t"
+          }
+        },
+        {
+          "event": "Workspace created",
+          "timestamp": "2026-01-05T00:00:10Z",
+          "distinct_id": "cross-attempt",
+          "properties": {
+            "account_id": "cross-attempt",
+            "job_id": "left"
+          }
+        },
+        {
+          "event": "Invite sent",
+          "timestamp": "2026-01-05T00:00:11Z",
+          "distinct_id": "cross-attempt",
+          "properties": {
+            "account_id": "cross-attempt",
+            "job_id": "right"
+          }
+        },
+        {
+          "event": "Invite sent",
+          "timestamp": "2026-01-05T00:00:12Z",
+          "distinct_id": "other-actor",
+          "properties": {
+            "account_id": "other-actor",
+            "job_id": "left"
+          }
+        },
+        {
+          "event": "$pageview",
+          "timestamp": "2026-01-05T00:00:01Z",
+          "distinct_id": "a",
+          "properties": {
+            "$session_id": "a-1",
+            "$device_type": "Desktop",
+            "$pathname": "/start",
+            "$referring_domain": "search.example"
+          }
+        },
+        {
+          "event": "signup_started",
+          "timestamp": "2026-01-05T00:00:02Z",
+          "distinct_id": "a",
+          "properties": {
+            "$session_id": "a-1",
+            "$device_type": "Desktop",
+            "$pathname": "/start",
+            "$referring_domain": "search.example"
+          }
+        },
+        {
+          "event": "signup_completed",
+          "timestamp": "2026-01-05T00:00:03Z",
+          "distinct_id": "a",
+          "properties": {
+            "$session_id": "a-1",
+            "$device_type": "Desktop",
+            "$pathname": "/start",
+            "$referring_domain": "search.example"
+          }
+        },
+        {
+          "event": "first_export",
+          "timestamp": "2026-01-05T00:00:04Z",
+          "distinct_id": "a",
+          "properties": {
+            "$session_id": "a-1",
+            "$device_type": "Desktop",
+            "$pathname": "/start",
+            "$referring_domain": "search.example"
+          }
+        },
+        {
+          "event": "$pageview",
+          "timestamp": "2026-01-05T00:00:01Z",
+          "distinct_id": "b",
+          "properties": {
+            "$session_id": "b-1",
+            "$device_type": "Desktop",
+            "$pathname": "/start",
+            "$referring_domain": "search.example"
+          }
+        },
+        {
+          "event": "signup_started",
+          "timestamp": "2026-01-05T00:00:02Z",
+          "distinct_id": "b",
+          "properties": {
+            "$session_id": "b-1",
+            "$device_type": "Desktop",
+            "$pathname": "/start",
+            "$referring_domain": "search.example"
+          }
+        },
+        {
+          "event": "signup_completed",
+          "timestamp": "2026-01-05T00:00:03Z",
+          "distinct_id": "b",
+          "properties": {
+            "$session_id": "b-1",
+            "$device_type": "Desktop",
+            "$pathname": "/start",
+            "$referring_domain": "search.example"
+          }
+        },
+        {
+          "event": "first_export",
+          "timestamp": "2026-01-05T00:00:04Z",
+          "distinct_id": "b",
+          "properties": {
+            "$session_id": "b-1",
+            "$device_type": "Desktop",
+            "$pathname": "/start",
+            "$referring_domain": "search.example"
+          }
+        },
+        {
+          "event": "$pageview",
+          "timestamp": "2026-01-05T00:00:01Z",
+          "distinct_id": "c",
+          "properties": {
+            "$session_id": "c-1",
+            "$device_type": "Desktop",
+            "$pathname": "/start",
+            "$referring_domain": "search.example"
+          }
+        },
+        {
+          "event": "signup_started",
+          "timestamp": "2026-01-05T00:00:02Z",
+          "distinct_id": "c",
+          "properties": {
+            "$session_id": "c-1",
+            "$device_type": "Desktop",
+            "$pathname": "/start",
+            "$referring_domain": "search.example"
+          }
+        },
+        {
+          "event": "$pageview",
+          "timestamp": "2026-01-05T00:00:01Z",
+          "distinct_id": "d",
+          "properties": {
+            "$session_id": "d-1",
+            "$device_type": "Desktop",
+            "$pathname": "/start",
+            "$referring_domain": "search.example"
+          }
+        },
+        {
+          "event": "$pageview",
+          "timestamp": "2026-01-05T00:00:01Z",
+          "distinct_id": "a",
+          "properties": {
+            "$session_id": "a-1",
+            "$device_type": "Desktop",
+            "$pathname": "/start",
+            "$referring_domain": "search.example"
+          }
+        },
+        {
+          "event": "signup_started",
+          "timestamp": "2026-01-05T00:00:04Z",
+          "distinct_id": "later-only",
+          "properties": {
+            "$session_id": "x",
+            "$device_type": "Desktop",
+            "$pathname": "/start",
+            "$referring_domain": "search.example"
+          }
+        },
+        {
+          "event": "$pageview",
+          "timestamp": "2026-01-05T00:00:08Z",
+          "distinct_id": "tie",
+          "properties": {
+            "$session_id": "t",
+            "$device_type": "Desktop",
+            "$pathname": "/start",
+            "$referring_domain": "search.example"
+          }
+        },
+        {
+          "event": "signup_started",
+          "timestamp": "2026-01-05T00:00:08Z",
+          "distinct_id": "tie",
+          "properties": {
+            "$session_id": "t",
+            "$device_type": "Desktop",
+            "$pathname": "/start",
+            "$referring_domain": "search.example"
+          }
+        },
+        {
+          "event": "$pageview",
+          "timestamp": "2026-01-05T00:00:10Z",
+          "distinct_id": "cross-attempt",
+          "properties": {
+            "$session_id": "left",
+            "$device_type": "Desktop",
+            "$pathname": "/start",
+            "$referring_domain": "search.example"
+          }
+        },
+        {
+          "event": "signup_started",
+          "timestamp": "2026-01-05T00:00:11Z",
+          "distinct_id": "cross-attempt",
+          "properties": {
+            "$session_id": "right",
+            "$device_type": "Desktop",
+            "$pathname": "/start",
+            "$referring_domain": "search.example"
+          }
+        },
+        {
+          "event": "signup_started",
+          "timestamp": "2026-01-05T00:00:12Z",
+          "distinct_id": "other-actor",
+          "properties": {
+            "$session_id": "left",
+            "$device_type": "Desktop",
+            "$pathname": "/start",
+            "$referring_domain": "search.example"
+          }
+        }
+      ],
+      "empty": false,
+      "responses": {
+        "coverage": {
+          "query_sha256": "9b58229e3ebf2f1f4734b452fc06ae584e193a20166faa24527960775c943e20",
+          "data": {
+            "columns": [
+              "event",
+              "period",
+              "raw",
+              "actor_rows",
+              "eligible_rows",
+              "actors",
+              "eligible_actors",
+              "chains",
+              "first_seen",
+              "last_seen",
+              "missing_p0",
+              "missing_p1"
+            ],
+            "results": [
+              [
+                "$pageview",
+                "current",
+                7,
+                7,
+                7,
+                6,
+                6,
+                6,
+                "2026-01-05T00:00:01Z",
+                "2026-01-05T00:00:10Z",
+                0,
+                0
+              ],
+              [
+                "Invite sent",
+                "current",
+                7,
+                7,
+                7,
+                7,
+                7,
+                7,
+                "2026-01-05T00:00:02Z",
+                "2026-01-05T00:00:12Z",
+                7,
+                7
+              ],
+              [
+                "Report viewed",
+                "current",
+                2,
+                2,
+                2,
+                2,
+                2,
+                2,
+                "2026-01-05T00:00:03Z",
+                "2026-01-05T00:00:03Z",
+                2,
+                2
+              ],
+              [
+                "Workspace created",
+                "current",
+                7,
+                7,
+                7,
+                6,
+                6,
+                6,
+                "2026-01-05T00:00:01Z",
+                "2026-01-05T00:00:10Z",
+                7,
+                7
+              ]
+            ],
+            "hasMore": null,
+            "error": null,
+            "query_status": null
+          }
+        },
+        "traffic": {
+          "query_sha256": "a70c3d90411d2afa77d723b23d14cdfa010c5872d0084a32dba390d5190085dc",
+          "data": {
+            "columns": [
+              "period",
+              "path",
+              "source",
+              "sessions",
+              "pageviews"
+            ],
+            "results": [
+              [
+                "current",
+                "/start",
+                "search.example",
+                6,
+                7
+              ]
+            ],
+            "hasMore": null,
+            "error": null,
+            "query_status": null
+          }
+        }
+      }
+    }
+  }
+}

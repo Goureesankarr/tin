@@ -89,6 +89,7 @@ def test_temporal_schedule_uses_skip_overlap_and_one_dispatcher() -> None:
     assert definition.spec.time_zone_name == "America/Los_Angeles"
     assert definition.policy.overlap == ScheduleOverlapPolicy.SKIP
     assert definition.policy.catchup_window.total_seconds() == 24 * 60 * 60
+    assert definition.action.execution_timeout is None
 
 
 def test_workflow_inputs_bind_project_and_apply_defaults() -> None:

@@ -26,6 +26,7 @@ remain authoritative; older contract versions are retained for compatibility.
 - [Codex API execution](codex-api-pilot.md), [isolated runtime](isolated-codex-runtime.md),
   [Studio execution](studio-api-and-hosted-credits.md) and [worker lanes](activity-worker-lanes.md).
 - [Publication recovery](procedure-publication-recovery.md),
+  [scheduled review recovery](scheduled-review-recovery.md),
   [saved-output resolution](output-resolution.md) and [font serving](font-serving.md).
 
 Self-hosting remains an engineering setup path. A clean-clone installation and
@@ -41,6 +42,7 @@ your own accounts before use; ordinary contributor tests need no production cred
   static checks and explicitly budgeted evaluations using existing run evidence.
 - [Public workflow packages](../workflow_packages/README.md): deterministic Python, multi-step
   managed-model Python and Codex procedures, with explicit maintainer registration.
+- [Product analytics brief](product-analytics-brief.md): the public PostHog package and qualification limits.
 - [Private activation](private-workflow-activation.md), [code workflows](code-workflows.md),
   [managed model steps](code-model-workflows.md) and [code schedules](code-workflow-schedules.md).
 - [Project API connections](project-api-connections.md): secure credentials and external requests.
@@ -50,6 +52,7 @@ your own accounts before use; ordinary contributor tests need no production cred
   [review and revisions](content-review.md) and [repository-aware delivery](repository-aware-content-delivery.md).
 - [Writing style capture](writing-style-capture.md) and [editorial judgment](content-editorial-judgment.md).
 - [Organic system execution](organic-system-execution.md) and [content continuation](organic-content-continuation.md).
+- [Technical repair](technical-fix.md): finding selection, supported repairs and verification limits.
 - [Diagram renderer](diagram-renderer.md), [composition checks](diagram-composition-quality.md)
   and [creative Studio](creative-studio.md).
 

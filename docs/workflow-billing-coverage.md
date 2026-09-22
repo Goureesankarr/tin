@@ -7,8 +7,8 @@ The September 14/15 sections below describe the underlying accounting and execut
 
 ## Native usage and parent budgets — September 14, 2026
 
-Use the existing supplier-operation and append-only credit ledger services. New
-runs use [configured estimates and internal per-call funding](workflow-credit-simplification.md),
+Use the existing supplier-operation and append-only credit ledger services. Native
+runs use [configured cost previews and internal funding](workflow-credit-simplification.md),
 not mandatory quote approval or upfront whole-run reservations. Old quotes/budgets
 retain their semantics. HTTP, MCP, schedules and trusted parent starts share this
 admission contract. This accounting change did not itself enroll wallets; the subsequent

@@ -114,6 +114,9 @@ project-owned configurations that pin one Registry revision, store schema-valida
 optionally own a daily or weekly Temporal Schedule in an IANA timezone. Product reads remain
 Postgres-only. A scheduled occurrence creates an ordinary pinned workflow run through one explicit
 dispatcher; overlap is skipped and at most 24 hours of missed work is caught up.
+The dispatcher remains alive while its child awaits human review; the catch-up window
+is not a review deadline. Existing deployments must remove the old deadline from stored
+schedule actions; see [scheduled review recovery](scheduled-review-recovery.md).
 
 Starting a Registry template directly creates an unsaved run. While active it appears in My system;
 after it finishes it remains inspectable in Activity with any durable output in Files. Saving a

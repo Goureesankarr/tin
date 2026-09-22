@@ -54,7 +54,7 @@ calls = [
         },
     ),
 ]
-if SCENARIO == "api_context":
+if SCENARIO in {"api_context", "session_context"}:
     calls += [("exec_command", {"cmd": "test -s reports/private/RESULT.md"})] * 4
 if SCENARIO == "studio_voice":
     from codex_api_config import studio_shell_policy
@@ -118,7 +118,7 @@ class Handler(BaseHTTPRequestHandler):
                 }
             )
         compact = self.path.endswith("/compact") or (
-            SCENARIO == "api_context"
+            SCENARIO in {"api_context", "session_context"}
             and "Any critical data, examples, or references needed to continue"
             in json.dumps(body.get("input"))
         )
@@ -164,6 +164,8 @@ class Handler(BaseHTTPRequestHandler):
                 "try { text(await tools." + name + "(" + json.dumps(args) + ")); } "
                 "catch (error) { text(String(error)); }"
             )
+            if SCENARIO == "session_context" and number == 1:
+                code += "\n// synthetic tool argument padding" * 1500
             output = [
                 {
                     "type": "custom_tool_call",
@@ -185,7 +187,11 @@ class Handler(BaseHTTPRequestHandler):
                     "content": [{"type": "output_text", "text": text}],
                 }
             ]
-        if SCENARIO in {"hosted_search", "api_context"} and number == 1 and not compact:
+        if (
+            SCENARIO in {"hosted_search", "api_context", "session_context"}
+            and number == 1
+            and not compact
+        ):
             output.insert(
                 0,
                 {
@@ -225,8 +231,10 @@ class Handler(BaseHTTPRequestHandler):
                 }
             ]
         input_tokens = 250_000 if SCENARIO == "token_limit" else 100
-        if SCENARIO == "api_context" and len(requests) == 1:
+        if SCENARIO in {"api_context", "session_context"} and len(requests) == 1:
             input_tokens = 100000
+        if SCENARIO == "session_context" and not compact and number <= 3:
+            input_tokens = 940_000  # Force real CLI compaction and exceed the old lifetime stop.
         response = {
             "id": f"resp_{number}",
             "object": "response",
@@ -338,10 +346,16 @@ env = {
     "TIN_PROCEDURE_CONTEXT_B64": base64.b64encode(json.dumps(context).encode()).decode(),
     "TIN_PROCEDURE_RESULT_PATH": "/home/user/.tin-lite/procedure-result.json",
 }
-if SCENARIO == "api_context":
+if SCENARIO in {"api_context", "session_context"}:
     env.update(
         TIN_CODEX_API_URL="https://tin.test/internal/codex-api/test/v1",
-        TIN_CODEX_API_CONTRACT=json.dumps({"protocol": "tin-codex-api-v3"}),
+        TIN_CODEX_API_CONTRACT=json.dumps(
+            {
+                "protocol": "tin-codex-api-v4"
+                if SCENARIO == "session_context"
+                else "tin-codex-api-v3"
+            }
+        ),
     )
 result = subprocess.run(
     ["/usr/sbin/runuser", "-u", "user", "--", "/opt/tin-lite/procedure-app-server"],

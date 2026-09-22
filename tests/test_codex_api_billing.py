@@ -6,6 +6,7 @@ from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
+from uuid import UUID
 
 import httpx
 import pytest
@@ -16,11 +17,20 @@ from test_codex_api import BODY, GRANT, post, result_event
 from test_procedure_publication import publication_db as publication_db
 
 from tin_lite.billing_contracts import BillingError, final_charge
-from tin_lite.codex_api import ATTEMPT, CONTRACT, USAGE, attempt_key, select_contract, token_hash
-from tin_lite.codex_api_pricing import RATE_CARD, REQUEST_MAXIMUM, price_response
+from tin_lite.codex_api import (
+    ATTEMPT,
+    CONTRACT,
+    SESSION_CONTRACT,
+    USAGE,
+    attempt_key,
+    select_contract,
+    token_hash,
+)
+from tin_lite.codex_api_pricing import RATE_CARD, REQUEST_MAXIMUM, api_terms, price_response
 from tin_lite.codex_api_relay import CodexAPIRelay, router
 from tin_lite.procedures import SandboxProfile
 from tin_lite.run_usage import read_run_usage
+from tin_lite.workflow_costs import configured_terms
 
 GOLDEN = [(9250, 117, 0, 9247), (12456, 241, 9247, 3206), (12753, 72, 12453, 297)]
 
@@ -83,6 +93,19 @@ async def paid_relay(
     await fund(f)
     f.settings.codex_api_projects = {f.project.id}
     q = await quote(f)
+    if contract != SESSION_CONTRACT and q["terms"].get("codex_contract") == SESSION_CONTRACT:
+        # These fixtures model already-issued v1/v3 quotes. Keep their old funding
+        # and execution pins rather than quietly upgrading the tests to v4.
+        q["terms"] = configured_terms(
+            api_terms(f.workflow.definition),
+            f.workflow.definition,
+            {"brief": "Explain the public docs"},
+        )
+        await f.db.pool.execute(
+            "UPDATE billing_quotes SET terms=$2::jsonb WHERE id=$1",
+            UUID(q["id"]),
+            json.dumps(q["terms"]),
+        )
     assert q["maximum_usd"] == "5.00" and q["terms"]["execution_fee_nanos"] == 0
     run = await start(f, q)
     await f.db.pool.execute(
@@ -266,7 +289,7 @@ async def test_quote_and_admission_pin_auth_across_operator_changes(billed):
             await select_contract(
                 db=f.db, conn=conn, run=api_run, procedure=procedure, settings=f.settings
             )
-            == CONTRACT
+            == SESSION_CONTRACT
         )
         f.settings.codex_api_projects = {f.project.id}
         assert await select_contract(
@@ -275,9 +298,12 @@ async def test_quote_and_admission_pin_auth_across_operator_changes(billed):
 
 
 @pytest.mark.parametrize("status", ["failed", "incomplete"])
-async def test_verified_supplier_usage_is_charged_even_when_generation_fails(billed, status):
+@pytest.mark.parametrize("contract", [CONTRACT, SESSION_CONTRACT])
+async def test_verified_supplier_usage_is_charged_even_when_generation_fails(
+    billed, status, contract
+):
     f = billed
-    run, relay, client, sent = await paid_relay(f, response_status=status)
+    run, relay, client, sent = await paid_relay(f, response_status=status, contract=contract)
     try:
         assert (await post(client, run)).status_code == 200
         await f.db.pool.execute(

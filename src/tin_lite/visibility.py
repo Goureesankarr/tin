@@ -4,6 +4,7 @@ import hashlib
 import html
 import json
 import re
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
 from urllib.parse import urlsplit
@@ -14,6 +15,10 @@ MAX_VISIBILITY_SOURCE_BYTES = 200_000
 MAX_VISIBILITY_REPORT_BYTES = 150_000
 MAX_VISIBILITY_EVIDENCE_BYTES = 2_000_000
 MAX_SOURCES_PER_ANSWER = 20
+MAX_VISIBILITY_RESPONSE_BYTES = 250_000
+DOMAIN_PATTERN = r"(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,63}"
+ResponseRequest = Callable[[], Awaitable[dict[str, Any]]]
+ResponseCheckpoint = Callable[[ResponseRequest], Awaitable[dict[str, Any]]]
 QUESTION_FAMILIES = (
     "best_tool",
     "alternatives",
@@ -31,6 +36,10 @@ class ResponsesClient(Protocol):
 
 class VisibilityProtocolError(RuntimeError):
     """The visibility model returned data outside the audit contract."""
+
+
+class VisibilityRecoveryError(RuntimeError):
+    """A previous request has no durable response and cannot be purchased again."""
 
 
 @dataclass(frozen=True)
@@ -55,6 +64,7 @@ class VisibilityAuditor:
         project_name: str,
         target_request: str,
         sources: list[VisibilitySource],
+        checkpoint: ResponseCheckpoint | None = None,
     ) -> dict[str, Any]:
         target_request = target_request.strip()
         if not 1 <= len(target_request) <= 200:
@@ -74,7 +84,7 @@ class VisibilityAuditor:
                 for source in sources
             ],
         }
-        response = await self._responses.create(
+        response = await self._respond(
             {
                 "instructions": self._stage_instructions("BUILD_PANEL"),
                 "input": _json_input(reference),
@@ -88,16 +98,21 @@ class VisibilityAuditor:
                     },
                     "verbosity": "low",
                 },
-            }
+            },
+            checkpoint=checkpoint,
         )
         panel = _structured_output(response)
         panel["response_id"] = _response_id(response)
         panel["model"] = self.model
+        if isinstance(panel.get("target"), dict):
+            panel["target"]["domain"] = _canonical_domain(panel["target"].get("domain"))
         _validate_panel(panel, target_request=target_request)
         panel["panel_hash"] = _panel_hash(panel)
         return panel
 
-    async def answer(self, *, question: str, searched: bool) -> dict[str, Any]:
+    async def answer(
+        self, *, question: str, searched: bool, checkpoint: ResponseCheckpoint | None = None
+    ) -> dict[str, Any]:
         payload: dict[str, Any] = {
             "instructions": self._stage_instructions(
                 "ANSWER_WITH_SEARCH" if searched else "ANSWER_WITHOUT_SEARCH"
@@ -115,7 +130,7 @@ class VisibilityAuditor:
                     "max_tool_calls": 3,
                 }
             )
-        response = await self._responses.create(payload)
+        response = await self._respond(payload, checkpoint=checkpoint)
         return _normalize_answer(response, searched=searched)
 
     async def adjudicate(
@@ -123,13 +138,14 @@ class VisibilityAuditor:
         *,
         panel: dict[str, Any],
         measurements: list[dict[str, Any]],
+        checkpoint: ResponseCheckpoint | None = None,
     ) -> dict[str, Any]:
         reference = {
             "target": panel["target"],
             "questions": panel["questions"],
             "measurements": measurements,
         }
-        response = await self._responses.create(
+        response = await self._respond(
             {
                 "instructions": self._stage_instructions("ADJUDICATE"),
                 "input": _json_input(reference),
@@ -143,12 +159,21 @@ class VisibilityAuditor:
                     },
                     "verbosity": "low",
                 },
-            }
+            },
+            checkpoint=checkpoint,
         )
         result = _structured_output(response)
         result["response_id"] = _response_id(response)
         _normalize_adjudication(result, panel=panel, measurements=measurements)
         return result
+
+    async def _respond(
+        self, payload: dict[str, Any], *, checkpoint: ResponseCheckpoint | None
+    ) -> dict[str, Any]:
+        async def request() -> dict[str, Any]:
+            return await self._responses.create(payload)
+
+        return await checkpoint(request) if checkpoint is not None else await request()
 
     def build_artifacts(
         self,
@@ -304,7 +329,13 @@ def _panel_schema() -> dict[str, Any]:
                 "additionalProperties": False,
                 "properties": {
                     "name": {"type": "string"},
-                    "domain": {"type": "string"},
+                    "domain": {
+                        "type": "string",
+                        "maxLength": 253,
+                        "pattern": rf"^(?:{DOMAIN_PATTERN})?$",
+                        "description": "Bare DNS hostname, without a scheme, path or port; "
+                        "empty when unknown. Do not invent a domain.",
+                    },
                     "aliases": {"type": "array", "items": {"type": "string"}},
                 },
                 "required": ["name", "domain", "aliases"],
@@ -817,6 +848,87 @@ def _json_input(value: dict[str, Any]) -> list[dict[str, Any]]:
     ]
 
 
+def visibility_response_checkpoint(response: dict[str, Any]) -> dict[str, Any]:
+    """Keep bounded answer/search evidence, never reasoning or the request payload."""
+    output = response.get("output")
+    saved: dict[str, Any] = {
+        "id": response.get("id") if isinstance(response.get("id"), str) else None,
+        "output": None if not isinstance(output, list) else [],
+        "usage": {},
+    }
+    usage = response.get("usage")
+    if isinstance(usage, dict):
+        saved["usage"] = {
+            key: usage[key]
+            for key in ("input_tokens", "output_tokens", "total_tokens")
+            if type(usage.get(key)) is int and usage[key] >= 0
+        }
+        for name, field in (
+            ("input_tokens_details", "cached_tokens"),
+            ("output_tokens_details", "reasoning_tokens"),
+        ):
+            details = usage.get(name)
+            if (
+                isinstance(details, dict)
+                and type(details.get(field)) is int
+                and details[field] >= 0
+            ):
+                saved["usage"][name] = {field: details[field]}
+    for item in output if isinstance(output, list) else []:
+        if not isinstance(item, dict):
+            continue
+        if item.get("type") == "web_search_call":
+            action = item.get("action")
+            action = action if isinstance(action, dict) else {}
+            queries = action.get("queries")
+            sources = action.get("sources")
+            saved["output"].append(
+                {
+                    "type": "web_search_call",
+                    "action": {
+                        "query": action.get("query")
+                        if isinstance(action.get("query"), str)
+                        else None,
+                        "queries": [q for q in queries if isinstance(q, str)]
+                        if isinstance(queries, list)
+                        else [],
+                        "sources": _normalize_links(sources) if isinstance(sources, list) else [],
+                    },
+                }
+            )
+        elif item.get("type") == "message" and isinstance(item.get("content"), list):
+            content = []
+            for part in item["content"]:
+                if not isinstance(part, dict) or part.get("type") != "output_text":
+                    continue
+                annotations = part.get("annotations")
+                content.append(
+                    {
+                        "type": "output_text",
+                        "text": part.get("text") if isinstance(part.get("text"), str) else None,
+                        "annotations": _normalize_links(annotations)
+                        if isinstance(annotations, list)
+                        else [],
+                    }
+                )
+            saved["output"].append({"type": "message", "content": content})
+    if len(json.dumps(saved, ensure_ascii=False).encode()) > MAX_VISIBILITY_RESPONSE_BYTES:
+        return {"version": 1, "error": "visibility response exceeds its checkpoint limit"}
+    return {"version": 1, "response": saved}
+
+
+def read_visibility_response_checkpoint(checkpoint: dict[str, Any] | None) -> dict[str, Any]:
+    if not isinstance(checkpoint, dict) or checkpoint.get("version") != 1:
+        raise VisibilityRecoveryError("visibility response checkpoint is invalid")
+    if checkpoint.get("error") == "visibility response exceeds its checkpoint limit":
+        raise VisibilityProtocolError(checkpoint["error"])
+    response = checkpoint.get("response")
+    if not isinstance(response, dict):
+        raise VisibilityRecoveryError("visibility response checkpoint is invalid")
+    # Parsing/identity/search validation runs again on every replay of this response.
+    return response
+
+
 def _structured_output(response: dict[str, Any]) -> dict[str, Any]:
     text = _output_text(response)
     try:
@@ -876,13 +988,38 @@ def _contains_target(text: str, markers: list[str]) -> bool:
 
 
 def _valid_domain(value: str) -> bool:
-    return bool(
-        len(value) <= 253
-        and re.fullmatch(
-            r"(?=.{1,253}$)(?:[a-zA-Z0-9](?:[a-zA-Z0-9-]{0,61}[a-zA-Z0-9])?\.)+[a-zA-Z]{2,63}",
-            value.strip(),
+    return bool(len(value) <= 253 and re.fullmatch(DOMAIN_PATTERN, value))
+
+
+def _canonical_domain(value: Any) -> str:
+    """Normalize a hostname or HTTP(S) URL without guessing or changing its identity."""
+    if not isinstance(value, str) or len(value) > 2048:
+        raise VisibilityProtocolError("visibility target domain is invalid")
+    candidate = value.strip()
+    if not candidate:
+        return ""
+    if (
+        any(character.isspace() or ord(character) < 32 for character in candidate)
+        or "\\" in candidate
+    ):
+        raise VisibilityProtocolError("visibility target domain is invalid")
+    try:
+        parsed = urlsplit(
+            candidate if "://" in candidate or candidate.startswith("//") else f"//{candidate}"
         )
-    )
+        # Accessing port also rejects malformed and out-of-range ports.
+        _ = parsed.port
+        hostname = (parsed.hostname or "").lower().removesuffix(".")
+        if (
+            parsed.scheme not in {"", "http", "https"}
+            or parsed.username is not None
+            or parsed.password is not None
+            or not _valid_domain(hostname)
+        ):
+            raise ValueError("invalid hostname")
+    except ValueError:
+        raise VisibilityProtocolError("visibility target domain is invalid") from None
+    return hostname
 
 
 def _requested_domain(value: str) -> str | None:
@@ -891,7 +1028,7 @@ def _requested_domain(value: str) -> str | None:
         parsed = urlsplit(candidate if "://" in candidate else f"//{candidate}")
     except ValueError:
         return None
-    hostname = parsed.hostname
+    hostname = parsed.hostname.removesuffix(".") if parsed.hostname else None
     if hostname is None or not _valid_domain(hostname):
         return None
     return hostname.casefold().removeprefix("www.")

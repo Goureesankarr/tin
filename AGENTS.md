@@ -117,7 +117,8 @@ cross-cutting implementation safeguards, not historical deployment logs.
   Hosted credits use the existing ledger, ownership checks and configured limits.
 - Both Start here workflows and their approved initial setup children remain included.
   Later independent or scheduled work does not inherit this exemption.
-- Use configured estimates before admission and internal per-provider funding. Charge
+- Use configured cost previews before admission and the pinned funding policy (one
+  session budget for ordinary Codex procedures, per-operation funding elsewhere). Charge
   verified actual usage once. Do not expose holds or require quote-approval loops in UI.
 - Preserve usage/rate pins, uncertain attempts, reservations and financial history.
   Missing usage is not free. Supplier overruns do not increase customer ceilings.

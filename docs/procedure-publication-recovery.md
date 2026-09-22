@@ -49,7 +49,8 @@ readable result. This release does not add an action to apply a conflicting resu
 
 Migration `024_retained_procedure_output.sql` adds nullable `workflow_runs.retained_output`.
 Old rows remain valid. Public run views expose only path, revision, media type, byte count,
-and `publication_pending`, `reconciliation_pending`, or `output_conflict` reason.
+and `publication_pending`, `reconciliation_pending`, `output_conflict`, or
+`execution_interrupted` reason.
 
 - `GET /api/workflows/runs/{id}/artifact?source=retained` returns validated checkpoint bytes.
 - The existing `/artifact/document` adapter accepts the same `source` option for Markdown.
@@ -61,6 +62,36 @@ and `publication_pending`, `reconciliation_pending`, or `output_conflict` reason
 - Chat, run details, and Activity offer `View generated result`; Markdown uses the existing
   reader and other formats use an authenticated download. Polling notices availability changes.
   Retained readers have no new approval, replacement, publishing, or conflict-resolution action.
+
+## Interrupted Codex procedures
+
+An interrupted paid attempt is not permission to purchase another attempt. The relay records
+allowlisted spending/request/token stop codes in the existing attempt receipt after admission
+rolls back. Cleanup merges its outcome into that receipt without replacing the stop code.
+Retries check completed output first, including the immutable revision recorded when the
+controller returned. Without completed output they stop before allocating another sandbox and
+report the original trusted stop reason, or an explicit failed/interrupted/unconfirmed outcome.
+
+Before destroying an interrupted isolated sandbox, Tin revokes its model admission and makes
+one bounded attempt to retain changed Markdown. The installed isolation helper first kills
+the author and freezes regular files; unchanged, missing, linked, oversized, non-UTF-8, or
+credential-bearing output is excluded. The switchboard revalidates the pinned output contract.
+This covers default/isolated plain Markdown research and `memory-section.v1` code maps; section
+ownership still applies. Browser/Studio profiles, identity-enabled procedures, companion
+documents and other validators remain excluded.
+
+An incomplete result goes only to `interrupted-procedures/{run_id}/{generation}`, with a
+separate metadata-only intent/completion receipt and an `execution_interrupted` retained-output
+projection. A lost storage acknowledgment can be reconciled from that branch before the run
+fails. It cannot complete the normal persist receipt, reach canonical Files, or enter the saved
+conflict application flow. Chat, Activity and run details label it **Partial result**. A partial
+result passing structural checks is still incomplete; those checks do not prove the task finished.
+
+Retention is best effort, bounded to 45 seconds after admission revocation. If the sandbox has
+already disappeared or no acceptable changed output exists, the failed run has no retained
+file. This does not reconstruct historical output lost with deleted sandboxes, restart work,
+refund verified usage, change a quote, or bypass review. No sandbox image rebuild or database
+migration is needed; capture uses the existing protected runtime's freeze command.
 
 ## Storage contract and bounds
 

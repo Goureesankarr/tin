@@ -27,7 +27,7 @@ class CodexUsage:
     total: dict[str, int] | None = None
     updates: int = 0
     rejected: bool = False
-    limit: int = MAX_OBSERVED_TOKENS
+    limit: int | None = MAX_OBSERVED_TOKENS
     limit_reached: bool = False
     _seen: set[tuple[int, ...]] = field(default_factory=set)
 
@@ -68,7 +68,7 @@ class CodexUsage:
         self._seen.add(key)
         self.total = counts
         self.updates += 1
-        self.limit_reached = counts["totalTokens"] >= self.limit
+        self.limit_reached = self.limit is not None and counts["totalTokens"] >= self.limit
         return True
 
     def record(self) -> dict[str, Any]:

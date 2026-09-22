@@ -18,7 +18,9 @@ if TYPE_CHECKING:
 
 _SHA = re.compile(r"[0-9a-f]{40}\Z")
 _DIGEST = re.compile(r"[0-9a-f]{64}\Z")
-OUTPUT_REASONS = frozenset({"publication_pending", "reconciliation_pending", "output_conflict"})
+OUTPUT_REASONS = frozenset(
+    {"publication_pending", "reconciliation_pending", "output_conflict", "execution_interrupted"}
+)
 RETAINED_OUTPUT_EXECUTORS = frozenset({"codex.procedure", "style.capture", "workflow.code"})
 
 
@@ -143,6 +145,7 @@ class OutputCheckpoint:
                 "text/csv",
                 "text/vnd.mermaid",
                 "text/plain",
+                "application/json",
                 "image/svg+xml",
                 "video/mp4",
             }

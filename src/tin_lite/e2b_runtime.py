@@ -4,6 +4,7 @@ import asyncio
 import base64
 import json
 import logging
+import shlex
 from collections.abc import Awaitable, Callable
 from contextlib import ExitStack, asynccontextmanager
 from dataclasses import dataclass, replace
@@ -45,6 +46,43 @@ CodexUsageSink = Callable[[dict[str, Any]], Awaitable[None]]
 # sandbox, on success and failure alike, within the bounds below so capture can never
 # hold a sandbox open for long or fail a run.
 CODEX_SESSIONS_DIR = "/home/user/.codex/sessions"
+
+# Only executed after the root-owned isolation helper has frozen the author.
+# Compare to the checkout itself so an unchanged old report is not a new draft.
+_INTERRUPTED_OUTPUT_READER = r"""
+import base64, os, stat, subprocess, sys
+from pathlib import Path
+relative, limit, *roots = sys.argv[1:]
+limit = int(limit)
+for root in roots:
+    path = Path(root) / relative
+    try:
+        if any(p.is_symlink() for p in (path, *path.parents)):
+            continue
+        info = path.lstat()
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1 or not 0 < info.st_size <= limit:
+            continue
+        with open(path, 'rb') as stream:
+            content = stream.read(limit + 1)
+        content.decode('utf-8')
+        if len(content) > limit:
+            continue
+        head = subprocess.run(['git', '-C', root, 'rev-parse', '--verify', 'HEAD'],
+                              capture_output=True, timeout=3)
+        if head.returncode:
+            continue
+        previous = subprocess.run(['git', '-C', root, 'rev-parse', '--verify', 'HEAD:' + relative],
+                                  capture_output=True, timeout=3)
+        if previous.returncode == 0:
+            current = subprocess.run(['git', '-C', root, 'hash-object', '--stdin'], input=content,
+                                     capture_output=True, timeout=3, check=True)
+            if previous.stdout == current.stdout:
+                continue
+        print(base64.b64encode(content).decode())
+        break
+    except (OSError, UnicodeError, subprocess.SubprocessError):
+        continue
+"""
 ROLLOUT_FILE_MAX_BYTES = 16 * 1024 * 1024
 ROLLOUT_TOTAL_MAX_BYTES = 48 * 1024 * 1024
 ROLLOUT_MAX_FILES = 32
@@ -102,6 +140,8 @@ class SandboxProcedureInput(SandboxRunInput):
     api_contract: dict | None = None
     api_grant: str | None = None
     project_revision: str | None = None
+    failure_sink: Callable[[BaseException], Awaitable[None]] | None = None
+    interrupted_output_sink: Callable[[bytes], Awaitable[None]] | None = None
 
 
 @dataclass(frozen=True)
@@ -551,7 +591,11 @@ class E2BRuntime:
                     raise RuntimeError("isolated sandbox did not confirm its runtime protocol")
                 if run_input.api_url is not None:
                     protocol = (run_input.api_contract or {}).get("protocol")
-                    version = {"tin-codex-api-v2": 2, "tin-codex-api-v3": 3}.get(protocol, 1)
+                    version = {
+                        "tin-codex-api-v2": 2,
+                        "tin-codex-api-v3": 3,
+                        "tin-codex-api-v4": 4,
+                    }.get(protocol, 1)
                     ready = await sandbox.commands.run(
                         "python3 /opt/tin-lite/codex_api_config.py "
                         + (f"--check-v{version}" if version > 1 else "--check"),
@@ -615,11 +659,56 @@ class E2BRuntime:
                     else None
                 ),
             )
+        except BaseException as exc:
+            # Close the paid capability first, then salvage only a frozen file.
+            # Neither failed retention nor cleanup may replace the original cause.
+            try:
+                if run_input.failure_sink is not None:
+                    await asyncio.wait_for(run_input.failure_sink(exc), timeout=5)
+                if run_input.interrupted_output_sink is not None and run_input.isolated:
+                    await asyncio.wait_for(
+                        self._capture_interrupted_output(sandbox, run_input), timeout=45
+                    )
+            except BaseException:  # noqa: S110 — best effort; original failure remains authoritative
+                pass
+            raise
         finally:
             try:
                 await self._capture_rollouts(sandbox, sandbox_id=sandbox_id, run_input=run_input)
             finally:
                 await self._delete_sandbox(sandbox)
+
+    async def _capture_interrupted_output(self, sandbox, run_input):
+        from tin_lite.project_files import safe_project_file_path
+
+        if not safe_project_file_path(run_input.output_path):
+            return
+        # This installed root-owned helper kills the author and rejects symlinks,
+        # hardlinks and special files before giving files to the controller.
+        await sandbox.commands.run(
+            "/usr/bin/sudo -n /opt/tin-lite/isolated-procedure freeze", timeout=20
+        )
+        roots = ["/home/user/project"]
+        if run_input.workspace_archive is not None:
+            roots.insert(0, "/home/user/state")
+        result = await sandbox.commands.run(
+            "python3 -c "
+            + shlex.quote(_INTERRUPTED_OUTPUT_READER)
+            + " "
+            + shlex.join(
+                [run_input.output_path, str(min(run_input.output_max_bytes, 1_000_000)), *roots]
+            ),
+            timeout=15,
+        )
+        if not result.stdout.strip() or len(result.stdout) > 1_400_000:
+            return
+        content = base64.b64decode(result.stdout.strip(), validate=True)
+        if not 0 < len(content) <= min(run_input.output_max_bytes, 1_000_000):
+            return
+        content.decode("utf-8")
+        if any(secret.encode() in content for secret in _run_secrets(run_input) if secret):
+            return
+        await run_input.interrupted_output_sink(content)
 
     async def prepare_diagram(self, *, sandbox_id: str) -> None:
         # Read-only startup checks precede the paid-attempt receipt. A transient

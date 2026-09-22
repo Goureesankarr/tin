@@ -697,7 +697,9 @@ def execute() -> int:
             if os.environ.get("TIN_CODEX_API_URL"):
                 contract = json.loads(os.environ.get("TIN_CODEX_API_CONTRACT", "{}"))
                 usage.limit = (
-                    2_000_000
+                    None
+                    if contract.get("protocol") == "tin-codex-api-v4"
+                    else 2_000_000
                     if contract.get("protocol") in {"tin-codex-api-v2", "tin-codex-api-v3"}
                     else 100_000
                 )

@@ -1,0 +1,469 @@
+{
+  "provenance": "Fabricated inline event CTEs executed through PostHog HogQL on 2026-09-21 and 2026-09-22; no customer events or metadata. CI replays these responses, without live access.",
+  "cases": {
+    "accounts": {
+      "inventory": {
+        "query_sha256": "78b994e9dea1a39a56de8144b7c5fa1158c32f1b26ad6fb86240de111463fcba",
+        "data": {
+          "columns": [
+            "event",
+            "observed",
+            "prior",
+            "current",
+            "first_seen",
+            "last_seen",
+            "total_event_types"
+          ],
+          "results": [
+            [
+              "Invite sent",
+              7,
+              0,
+              7,
+              "2026-01-05T00:00:02Z",
+              "2026-01-05T00:00:12Z",
+              3
+            ],
+            [
+              "Workspace created",
+              7,
+              0,
+              7,
+              "2026-01-05T00:00:01Z",
+              "2026-01-05T00:00:10Z",
+              3
+            ],
+            [
+              "Report viewed",
+              2,
+              0,
+              2,
+              "2026-01-05T00:00:03Z",
+              "2026-01-05T00:00:03Z",
+              3
+            ]
+          ],
+          "hasMore": null,
+          "error": null,
+          "query_status": null
+        }
+      },
+      "coverage": {
+        "query_sha256": "a99b0fbeb92c3d8c8b5543307b040512851b956f989b637cbdc79a94953dd692",
+        "data": {
+          "columns": [
+            "event",
+            "period",
+            "raw",
+            "actor_rows",
+            "eligible_rows",
+            "actors",
+            "eligible_actors",
+            "chains",
+            "first_seen",
+            "last_seen"
+          ],
+          "results": [
+            [
+              "Invite sent",
+              "current",
+              7,
+              7,
+              7,
+              7,
+              7,
+              7,
+              "2026-01-05T00:00:02Z",
+              "2026-01-05T00:00:12Z"
+            ],
+            [
+              "Report viewed",
+              "current",
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              "2026-01-05T00:00:03Z",
+              "2026-01-05T00:00:03Z"
+            ],
+            [
+              "Workspace created",
+              "current",
+              7,
+              7,
+              7,
+              6,
+              6,
+              6,
+              "2026-01-05T00:00:01Z",
+              "2026-01-05T00:00:10Z"
+            ]
+          ],
+          "hasMore": null,
+          "error": null,
+          "query_status": null
+        }
+      },
+      "trends": {
+        "query_sha256": "c8d21859d16f6cb004e1db867f21eeeee1b87cabb1717424a195d83dd0c05824",
+        "data": {
+          "columns": [
+            "day",
+            "resolution",
+            "event",
+            "raw",
+            "actors",
+            "chains"
+          ],
+          "results": [
+            [
+              "2026-01-05",
+              "day",
+              "Report viewed",
+              2,
+              2,
+              2
+            ],
+            [
+              "2026-01-05",
+              "day",
+              "Workspace created",
+              7,
+              6,
+              6
+            ]
+          ],
+          "hasMore": null,
+          "error": null,
+          "query_status": null
+        }
+      },
+      "funnel": {
+        "query_sha256": "ed41720372802bd6f80a187faaa65bce1ed0bbf25de36d1f84ed37710cef9b69",
+        "data": {
+          "columns": [
+            "period",
+            "day",
+            "n1",
+            "n2",
+            "n3",
+            "median_d1_2",
+            "median_d1_3",
+            "median_d2_3",
+            "order_violations",
+            "duplicate_choices"
+          ],
+          "results": [
+            [
+              "current",
+              "2026-01-05",
+              6,
+              3,
+              2,
+              1,
+              2,
+              1,
+              0,
+              0
+            ]
+          ],
+          "hasMore": null,
+          "error": null,
+          "query_status": null
+        }
+      }
+    },
+    "website": {
+      "inventory": {
+        "query_sha256": "78b994e9dea1a39a56de8144b7c5fa1158c32f1b26ad6fb86240de111463fcba",
+        "data": {
+          "columns": [
+            "event",
+            "observed",
+            "prior",
+            "current",
+            "first_seen",
+            "last_seen",
+            "total_event_types"
+          ],
+          "results": [
+            [
+              "$pageview",
+              7,
+              0,
+              7,
+              "2026-01-05T00:00:01Z",
+              "2026-01-05T00:00:10Z",
+              4
+            ],
+            [
+              "signup_started",
+              7,
+              0,
+              7,
+              "2026-01-05T00:00:02Z",
+              "2026-01-05T00:00:12Z",
+              4
+            ],
+            [
+              "first_export",
+              2,
+              0,
+              2,
+              "2026-01-05T00:00:04Z",
+              "2026-01-05T00:00:04Z",
+              4
+            ],
+            [
+              "signup_completed",
+              2,
+              0,
+              2,
+              "2026-01-05T00:00:03Z",
+              "2026-01-05T00:00:03Z",
+              4
+            ]
+          ],
+          "hasMore": null,
+          "error": null,
+          "query_status": null
+        }
+      },
+      "coverage": {
+        "query_sha256": "ea3c24cc2fd0d3cef126d2ade1b75f45fb9a92550e94c29f2758947832e78cc9",
+        "data": {
+          "columns": [
+            "event",
+            "period",
+            "raw",
+            "actor_rows",
+            "eligible_rows",
+            "actors",
+            "eligible_actors",
+            "chains",
+            "first_seen",
+            "last_seen",
+            "missing_p0",
+            "missing_p1",
+            "missing_p2"
+          ],
+          "results": [
+            [
+              "$pageview",
+              "current",
+              7,
+              7,
+              7,
+              6,
+              6,
+              6,
+              "2026-01-05T00:00:01Z",
+              "2026-01-05T00:00:10Z",
+              0,
+              0,
+              0
+            ],
+            [
+              "first_export",
+              "current",
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              "2026-01-05T00:00:04Z",
+              "2026-01-05T00:00:04Z",
+              0,
+              0,
+              0
+            ],
+            [
+              "signup_completed",
+              "current",
+              2,
+              2,
+              2,
+              2,
+              2,
+              2,
+              "2026-01-05T00:00:03Z",
+              "2026-01-05T00:00:03Z",
+              0,
+              0,
+              0
+            ],
+            [
+              "signup_started",
+              "current",
+              7,
+              7,
+              7,
+              7,
+              7,
+              7,
+              "2026-01-05T00:00:02Z",
+              "2026-01-05T00:00:12Z",
+              0,
+              0,
+              0
+            ]
+          ],
+          "hasMore": null,
+          "error": null,
+          "query_status": null
+        }
+      },
+      "funnel": {
+        "query_sha256": "f0ea713b1ac5c2a2d2de5048477c638e59939ecec45f8dd393975c318b741c76",
+        "data": {
+          "columns": [
+            "period",
+            "day",
+            "n1",
+            "n2",
+            "n3",
+            "n4",
+            "median_d1_2",
+            "median_d1_3",
+            "median_d1_4",
+            "median_d2_3",
+            "median_d3_4",
+            "order_violations",
+            "duplicate_choices"
+          ],
+          "results": [
+            [
+              "current",
+              "2026-01-05",
+              6,
+              3,
+              2,
+              2,
+              1,
+              2,
+              3,
+              1,
+              1,
+              0,
+              0
+            ]
+          ],
+          "hasMore": null,
+          "error": null,
+          "query_status": null
+        }
+      },
+      "traffic": {
+        "query_sha256": "a70c3d90411d2afa77d723b23d14cdfa010c5872d0084a32dba390d5190085dc",
+        "data": {
+          "columns": [
+            "period",
+            "path",
+            "source",
+            "sessions",
+            "pageviews"
+          ],
+          "results": [
+            [
+              "current",
+              "/start",
+              "search.example",
+              6,
+              7
+            ]
+          ],
+          "hasMore": null,
+          "error": null,
+          "query_status": null
+        }
+      },
+      "dimensions": {
+        "query_sha256": "5cf1908ed3eda74037da04c0393805f515709d542acfaa243541fcf986ecb9df",
+        "data": {
+          "columns": [
+            "kind",
+            "value",
+            "volume"
+          ],
+          "results": [
+            [
+              "categories",
+              "Desktop",
+              7
+            ],
+            [
+              "paths",
+              "/start",
+              7
+            ],
+            [
+              "sources",
+              "search.example",
+              7
+            ]
+          ],
+          "hasMore": null,
+          "error": null,
+          "query_status": null
+        }
+      },
+      "breakdown": {
+        "query_sha256": "d1f681693d5064fd23df8c384c5bc75dd442db5102949e25bc98d5b632efe5f2",
+        "data": {
+          "columns": [
+            "category",
+            "total",
+            "converted"
+          ],
+          "results": [
+            [
+              "Desktop",
+              6,
+              2
+            ]
+          ],
+          "hasMore": null,
+          "error": null,
+          "query_status": null
+        }
+      },
+      "trends": {
+        "query_sha256": "c4af516563317620b0bd3f59602fe6bed28ecbb936608e75e775bbe70db034f7",
+        "data": {
+          "columns": [
+            "day",
+            "resolution",
+            "event",
+            "raw",
+            "actors",
+            "chains"
+          ],
+          "results": [
+            [
+              "2026-01-05",
+              "day",
+              "$pageview",
+              7,
+              6,
+              6
+            ],
+            [
+              "2026-01-05",
+              "day",
+              "first_export",
+              2,
+              2,
+              2
+            ]
+          ],
+          "hasMore": null,
+          "error": null,
+          "query_status": null
+        }
+      }
+    }
+  }
+}

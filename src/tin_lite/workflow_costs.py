@@ -5,6 +5,7 @@ from functools import lru_cache
 from tin_lite.billing_contracts import NANOS_PER_CENT, digest
 
 FUNDING = "per_operation_v1"
+SESSION_FUNDING = "procedure_session_v1"
 POLICY = "configured-cost-bound-v1"
 
 
@@ -26,7 +27,7 @@ def configured_terms(terms, definition, inputs):
     )
     return {
         **terms,
-        "funding": FUNDING,
+        "funding": terms.get("funding", FUNDING),
         "estimate": {
             "id": estimate_id,
             "policy": POLICY,
@@ -38,6 +39,10 @@ def configured_terms(terms, definition, inputs):
 
 def incremental(terms):
     return terms.get("funding") == FUNDING
+
+
+def session_funded(terms):
+    return terms.get("funding") == SESSION_FUNDING
 
 
 def liability(terms, committed):

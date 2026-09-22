@@ -6,7 +6,7 @@ import httpx
 import pytest
 from fastapi import FastAPI
 from mcp.server.mcpserver.exceptions import ToolError
-from test_technical_fix_sources import source_fixture
+from test_technical_fix_sources import content_source_fixture, source_fixture
 
 from tin_lite.auth import AuthContext, require_user
 from tin_lite.mcp_server import create_mcp_app
@@ -14,8 +14,12 @@ from tin_lite.technical_fix_api import router, system_router
 
 
 @pytest.fixture
-async def surface_fixture(monkeypatch):
-    f = source_fixture()
+async def surface_fixture(monkeypatch, request):
+    f = (
+        content_source_fixture()
+        if getattr(request, "param", None) == "content"
+        else source_fixture()
+    )
     token = SimpleNamespace(subject="outsider", scopes=["openid"], client_id="test_client")
     monkeypatch.setattr("tin_lite.mcp_server.get_access_token", lambda: token)
 
@@ -102,6 +106,32 @@ async def test_members_read_the_same_verified_source_and_preview_over_http_and_m
     first, second = f.integrations.github_repository_binding.await_args_list
     assert first == second
     assert first.kwargs == {"project_id": f.project.id, "expected_repository": "owner/site"}
+
+
+@pytest.mark.parametrize("surface_fixture", ["content"], indirect=True)
+async def test_content_only_audit_is_visible_and_rejected_consistently(surface_fixture):
+    f = surface_fixture
+    f.token.subject = "member"
+    response = await f.client.get(f.root + f"/sources/{f.run.id}")
+    assert response.status_code == 200
+    result = await f.server.call_tool(
+        "get_technical_fix_source",
+        {"project_id": str(f.project.id), "audit_run_id": str(f.run.id)},
+    )
+    assert result.structured_content == response.json()
+    assert response.json()["repair_availability"]["reason"] == "no_technical_findings"
+    for row in response.json()["excluded_findings"]:
+        f.selection["finding_id"] = row["finding"]["id"]
+        args = arguments(f)
+        rejected = await f.client.post(
+            f.root + "/preflight", json={k: v for k, v in args.items() if k != "project_id"}
+        )
+        assert rejected.status_code == 409
+        assert rejected.json()["detail"] == {"code": "content_finding", "message": row["message"]}
+        with pytest.raises(ToolError, match="content_finding") as error:
+            await f.server.call_tool("preflight_technical_fix", args)
+        assert row["message"] in str(error.value)
+    f.integrations.github_repository_binding.assert_not_awaited()
 
 
 @pytest.mark.parametrize(

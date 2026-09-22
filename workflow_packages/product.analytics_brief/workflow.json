@@ -1,0 +1,103 @@
+{
+  "package_format": "tin-workflow-package-v1",
+  "definition": {
+    "key": "product.analytics_brief",
+    "title": "Product analytics brief",
+    "description": "A recurring PostHog brief: ordered activation, event trends, traffic, error signals and a supported breakdown, with reproducible evidence.",
+    "version": "1.0.1",
+    "executor": "codex.procedure",
+    "schedule_modes": [
+      "on_demand",
+      "daily",
+      "weekly"
+    ],
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "project_id": {
+          "type": "string",
+          "format": "uuid"
+        },
+        "posthog_project_id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 20,
+          "title": "PostHog project ID"
+        },
+        "reporting_days": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 31,
+          "default": 7,
+          "title": "Reporting window (days)"
+        },
+        "as_of_utc": {
+          "type": "string",
+          "maxLength": 10,
+          "default": "",
+          "title": "Optional UTC end date, exclusive"
+        },
+        "event_mapping": {
+          "type": "string",
+          "maxLength": 2000,
+          "default": "",
+          "title": "Optional funnel and event meanings"
+        },
+        "exclusions": {
+          "type": "string",
+          "maxLength": 2000,
+          "default": "",
+          "title": "Optional team or test exclusions"
+        }
+      },
+      "required": [
+        "project_id",
+        "posthog_project_id"
+      ]
+    },
+    "integration_requirements": [
+      {
+        "provider_key": "custom.api.posthog",
+        "capabilities": [
+          "http.read",
+          "http.write"
+        ],
+        "required": true
+      }
+    ],
+    "procedure": {
+      "prompt_path": "PROMPT.md",
+      "skills_path": "skills",
+      "skill_files": [
+        "skills/product-analytics/SKILL.md",
+        "skills/product-analytics/CALCULATIONS.md",
+        "skills/product-analytics/REPORT.md",
+        "skills/product-analytics/STATISTICS.md"
+      ],
+      "entry_skill": "product-analytics",
+      "workspace": {
+        "kind": "project.state"
+      },
+      "sandbox": {
+        "profile": "isolated",
+        "egress": "fenced",
+        "timeout_seconds": 900
+      },
+      "services": {
+        "analytics": {
+          "provider_key": "custom.api.posthog",
+          "max_calls": 8,
+          "max_response_bytes": 64000
+        }
+      },
+      "output": {
+        "kind": "project.artifact",
+        "media_type": "text/markdown",
+        "max_bytes": 192000,
+        "path_template": "reports/analytics/{run_id}.md"
+      }
+    },
+    "system": "product-qa"
+  }
+}

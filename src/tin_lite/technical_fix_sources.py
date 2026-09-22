@@ -28,6 +28,11 @@ from tin_lite.organic_audit_scope import audit_hosts
 from tin_lite.technical_metadata_rules import SUPPORTED_CHECKS
 
 MAX_AFFECTED_PAGES = 5
+CONTENT_FINDING_MESSAGE = (
+    "This audit finding recommends reviewing buyer-answer coverage. It does not establish "
+    "a technical defect. Inspect existing content; consider content.plan with this audit "
+    "and matching keyword research if content work is needed."
+)
 
 
 class TechnicalFixError(ValueError):
@@ -115,9 +120,16 @@ def _validate_inventory(*, evidence, inventory, run, project_id):
     expected, coverage = technical_findings(pages, host)
     findings = inventory["findings"]
     if not isinstance(findings, list) or any(
-        not isinstance(row, dict) or row.get("category") not in {"technical", "content"}
+        not isinstance(row, dict)
+        or row.get("category") not in {"technical", "content"}
+        or not isinstance(row.get("id"), str)
+        or not re.fullmatch(r"oa_[0-9a-f]{20}", row["id"])
+        or not isinstance(row.get("check_id"), str)
+        or not re.fullmatch(r"[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*", row["check_id"])
         for row in findings
     ):
+        raise _invalid_source()
+    if len({row["id"] for row in findings}) != len(findings):
         raise _invalid_source()
     technical = [row for row in findings if row["category"] == "technical"]
     # Digests, not Python equality: booleans must not impersonate integer counts/versions.
@@ -125,7 +137,20 @@ def _validate_inventory(*, evidence, inventory, run, project_id):
         coverage
     ):
         raise _invalid_source()
-    return scope, crawl, expected, coverage
+    # Content recommendations are recognized only to explain their exclusion. They
+    # never gain the recomputed crawl evidence or eligibility of a technical finding.
+    excluded = [
+        {
+            "finding": {key: row[key] for key in ("id", "check_id", "category")},
+            "source_eligible": False,
+            "ineligible_reason": "content_finding",
+            "next_action": "content.plan",
+            "message": CONTENT_FINDING_MESSAGE,
+        }
+        for row in findings
+        if row["category"] == "content"
+    ]
+    return scope, crawl, expected, coverage, excluded
 
 
 class TechnicalFixSources:
@@ -204,7 +229,7 @@ class TechnicalFixSources:
                 )
                 for name in ("evidence.json", "findings.json")
             )
-            scope, crawl, findings, coverage = _validate_inventory(
+            scope, crawl, findings, coverage, excluded = _validate_inventory(
                 evidence=evidence, inventory=inventory, run=run, project_id=project_id
             )
         except (KeyError, TypeError, ValueError, AttributeError, RecursionError) as exc:
@@ -228,6 +253,7 @@ class TechnicalFixSources:
                     "ineligible_reason": reason,
                 }
             )
+        available = any(row["source_eligible"] for row in selections)
         return {
             "source": {
                 "audit_run_id": str(run.id),
@@ -245,6 +271,15 @@ class TechnicalFixSources:
             "crawl_status": crawl["status"],
             "check_coverage": coverage,
             "findings": selections,
+            "excluded_findings": excluded,
+            "repair_availability": {
+                "available": available,
+                "reason": None
+                if available
+                else "no_technical_findings"
+                if not selections
+                else "no_eligible_findings",
+            },
             "execution_available": True,
             "limitations": [
                 "Saved crawl observations, not a live verification of the website.",
@@ -279,6 +314,12 @@ class TechnicalFixSources:
             (row for row in source["findings"] if row["finding"]["id"] == finding_id), None
         )
         if selection is None:
+            excluded = next(
+                (row for row in source["excluded_findings"] if row["finding"]["id"] == finding_id),
+                None,
+            )
+            if excluded is not None:
+                raise TechnicalFixError(excluded["ineligible_reason"], excluded["message"])
             raise TechnicalFixError(
                 "finding_not_found", "Finding not found in this audit.", status_code=404
             )
@@ -286,7 +327,7 @@ class TechnicalFixSources:
             reason = selection["ineligible_reason"]
             message = {
                 "check_not_supported": (
-                    "The pinned repair policy does not support this metadata finding; it "
+                    "The pinned repair policy does not support this technical finding; it "
                     f"is {selection['finding']['check_id']}."
                 ),
                 "crawl_incomplete": "A completed technical crawl is required before repair.",

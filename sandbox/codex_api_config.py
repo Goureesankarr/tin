@@ -50,16 +50,23 @@ def configure(path, env):
         raise ValueError("Codex API controller must not contain ChatGPT credentials")
     contract = json.loads(env.get("TIN_CODEX_API_CONTRACT", "{}"))
     context = ""
-    if contract.get("protocol") in {"tin-codex-api-v2", "tin-codex-api-v3"}:
-        if (
-            contract.get("context_window") != 128_000
-            or contract.get("auto_compact_tokens") != 96_000
+    protocol = contract.get("protocol")
+    contexts = {
+        "tin-codex-api-v2": (128_000, 96_000),
+        "tin-codex-api-v3": (128_000, 96_000),
+        "tin-codex-api-v4": (1_050_000, 922_000),
+    }
+    if protocol in contexts:
+        window, compact = contexts[protocol]
+        if (contract.get("context_window"), contract.get("auto_compact_tokens")) != (
+            window,
+            compact,
         ):
             raise ValueError("Unknown Codex API context contract")
         if "model_context_window" in config or "model_auto_compact_token_limit" in config:
             raise ValueError("Codex API requires a fresh context configuration")
-        context = "model_context_window = 128000\nmodel_auto_compact_token_limit = 96000\n"
-    elif contract.get("protocol") not in (None, "tin-codex-api-v1"):
+        context = f"model_context_window = {window}\nmodel_auto_compact_token_limit = {compact}\n"
+    elif protocol not in (None, "tin-codex-api-v1"):
         raise ValueError("Unknown Codex API protocol")
     # Prefix root keys; appending them after an MCP table would change their meaning.
     content = (
@@ -96,5 +103,7 @@ if __name__ == "__main__":
         print("TIN_CODEX_API_READY_V2")
     elif sys.argv[1:] == ["--check-v3"]:
         print("TIN_CODEX_API_READY_V3")
+    elif sys.argv[1:] == ["--check-v4"]:
+        print("TIN_CODEX_API_READY_V4")
     else:
         configure(Path("/home/user/.codex/config.toml"), os.environ)

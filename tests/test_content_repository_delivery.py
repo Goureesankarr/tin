@@ -17,22 +17,40 @@ from tin_lite.run_service import start_workflow_run
 from tin_lite.workflow_inputs import WorkflowInputError
 
 
-def test_snapshot_bounds_are_pinned_and_do_not_expand_existing_workflows():
+def test_snapshot_bounds_are_explicit_and_legacy_definitions_keep_their_limits():
     from tin_lite.procedures import validate_codex_procedure_definition
 
     chosen = next(w for w in BUILTIN_WORKFLOWS if w.key == delivery.KEY)
     definition, _ = chosen.definition_and_resource_files()
     spec = validate_codex_procedure_definition(definition)
-    assert (spec.workspace_max_files, spec.workspace_max_bytes) == (1000, 20_000_000)
+    assert (spec.workspace_max_files, spec.workspace_max_bytes) == (1000, 100_000_000)
     for workflow in BUILTIN_WORKFLOWS:
-        if workflow.executor == "codex.procedure" and workflow.key != delivery.KEY:
-            old, _ = workflow.definition_and_resource_files()
-            original = validate_codex_procedure_definition(old)
+        if workflow.executor != "codex.procedure":
+            continue
+        current, _ = workflow.definition_and_resource_files()
+        parsed = validate_codex_procedure_definition(current)
+        if parsed.repository_workspace:
+            assert current["procedure"]["workspace"]["limits"] == {
+                "max_files": 1000,
+                "max_bytes": 100_000_000,
+            }
+            assert (parsed.workspace_max_files, parsed.workspace_max_bytes) == (1000, 100_000_000)
+            legacy = deepcopy(current)
+            del legacy["procedure"]["workspace"]["limits"]
+            original = validate_codex_procedure_definition(legacy)
             assert (original.workspace_max_files, original.workspace_max_bytes) == (500, 10_000_000)
+        else:
+            assert "limits" not in current["procedure"]["workspace"]
+    # Previously explicit 20 MB contracts remain unchanged too.
+    older = deepcopy(definition)
+    older["procedure"]["workspace"]["limits"] = {"max_files": 1000, "max_bytes": 20_000_000}
+    assert validate_codex_procedure_definition(older).workspace_max_bytes == 20_000_000
     for limits in (
         {"max_files": 1001, "max_bytes": 20_000_000},
         {"max_files": True, "max_bytes": 1},
-        {"max_files": 1, "max_bytes": 20_000_001},
+        {"max_files": 1, "max_bytes": 100_000_001},
+        {"max_files": 1, "max_bytes": True},
+        {"max_files": 1, "max_bytes": 0},
     ):
         changed = deepcopy(definition)
         changed["procedure"]["workspace"]["limits"] = limits
@@ -350,7 +368,7 @@ async def test_explicit_failed_adaptation_retry_is_not_delivery_retry(publicatio
     assert (await delivery.saved_source(f.db, repeated.id))["source_run_id"] == str(f.source.id)
 
 
-async def test_delivery_uses_api_budget_without_quote_or_upfront_hold(publication_db, monkeypatch):
+async def test_delivery_funds_one_api_session_without_quote_approval(publication_db, monkeypatch):
     from tin_lite.billing import BillingService
     from tin_lite.billing_contracts import ProjectSpendingPolicy, object_value
 
@@ -396,6 +414,7 @@ async def test_delivery_uses_api_budget_without_quote_or_upfront_hold(publicatio
     terms = object_value(
         await f.db.pool.fetchval("SELECT terms FROM billing_run_budgets WHERE run_id=$1", run.id)
     )
-    assert terms["kind"] == "codex_api" and terms["funding"] == "per_operation_v1"
-    assert await f.db.pool.fetchval("SELECT reserved_nanos FROM billing_accounts") == 0
+    assert terms["kind"] == "codex_api" and terms["funding"] == "procedure_session_v1"
+    assert terms["codex_contract"]["protocol"] == "tin-codex-api-v4"
+    assert await f.db.pool.fetchval("SELECT reserved_nanos FROM billing_accounts") == 5_000_000_000
     assert await f.db.pool.fetchval("SELECT count(*) FROM billing_quotes") == 0

@@ -34,8 +34,15 @@ returns qualification.json as a separate proposed file at workflow_evals/<key>/q
 it does not belong in the runtime manifest. No test results or dollar claims belong in this format.
 
 Cases: 1–12, unique lowercase IDs, concrete inputs without project_id (Tin binds it),
-expected_status succeeded or failed. Successful cases need assertions or a rubric. The optional
-expect.json_schema uses the same bounded JSON Schema subset as managed model output: closed
+expected_status succeeded or failed. Successful cases need assertions or a rubric.
+For expected failures, omit output assertions unless the contract supplies a canonical artifact.
+Error diagnostics are not artifact text; check validation diagnostics in local tests.
+A procedure's final message cannot set its Tin run status. For semantic input errors, prefer a
+fresh diagnostic artifact with expected_status succeeded and assertions on its explicit invalid
+status; do not promise a failed run just by telling Codex to stop. An existing output file is not
+evidence that this run produced a result. Cases must check the supplied configuration and findings,
+not only headings that an earlier report could also satisfy.
+The optional expect.json_schema uses the same bounded JSON Schema subset as managed model output: closed
 objects with every property required, bounded arrays, scalar types and enum; no refs or regex.
 contains/excludes are literal text checks, not proof that a calculation or narrative is correct.
 Keep rubric questions independent; no overall score. Maintainers review cases and the rubric.
@@ -51,11 +58,14 @@ Keep rubric questions independent; no overall score. Maintainers review cases an
   output tokens 64–4096. Call await ctx.models.generate(route=..., step=..., instructions=...,
   data=..., output_schema=...). Validate result["parsed"] before use. Keep step IDs stable.
 - codex.procedure: PROMPT.md plus skills/<name>/SKILL.md and declared text resources.
+  Candidate resources use .md, .json, .txt, .yaml or .yml; .py files belong to workflow.code.
+  SQL/Python examples may live in skill instructions for use inside the procedure sandbox.
   Private profile isolated/fenced, on_demand, bounded timeout up to 3600 seconds. One project
   artifact, or a separately reviewed GitHub PR contract. Existing model budgets remain binding.
   Choosing this executor does not grant recursion, scheduling or extra integrations.
 - API services: declare integration_requirements plus code.services or procedure.services.
-  Up to four aliases, eight total provider calls, 16 KB requests, 1–64 KB responses per alias.
+  Up to four aliases, eight total provider calls, 16000-byte requests, and responses bounded
+  to 1024–64000 bytes per alias. Use these exact byte counts, not KiB conversions.
   Code calls await ctx.services.request(service=..., step=..., method=..., path=..., params=...,
   body=...). Procedures use request_service with the same arguments. Provider keys stay in Tin.
   GET needs http.read; POST needs http.write and the connection's POST permission even for a
@@ -64,6 +74,10 @@ Keep rubric questions independent; no overall score. Maintainers review cases an
   not individual paths. Required setup belongs in the candidate's instructions.
 
 Input schemas are closed objects. project_id is exactly {"type":"string","format":"uuid"}.
+Tin binds and validates project_id before execution. Procedure context.inputs deliberately omits
+it. Validate sandbox inputs against the client schema (remove project_id from properties and
+required), or validate only the workflow-specific semantic constraints. Never demand or invent
+a project_id inside procedure inputs; a provider's project ID is a separate workflow input.
 Other fields are bounded strings, numbers, booleans or bounded arrays of bounded strings.
 No nested input objects. Code may declare on_demand plus daily/weekly; private procedures only
 on_demand. Human review is {"eligible":true,"reason":"..."} when supported, not a string.

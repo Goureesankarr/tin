@@ -105,7 +105,7 @@ from tin_lite.procedures import (
 from tin_lite.publication import OutputCheckpoint, OutputConflictError, PublicationPendingError
 from tin_lite.rollouts import RolloutCapture
 from tin_lite.scan import ScanReporter, ScanSource, validate_scan_report
-from tin_lite.schedules import WorkflowSchedule, next_run_after
+from tin_lite.schedules import ScheduledWorkflowSkip, WorkflowSchedule, next_run_after
 from tin_lite.settings import Settings
 from tin_lite.site_health import (
     SiteHealthImprover,
@@ -115,13 +115,19 @@ from tin_lite.site_health import (
     validate_site_health_model_route,
 )
 from tin_lite.system_wiki import read_system_wiki_document
-from tin_lite.usage_capture import external_usage_scope
+from tin_lite.usage_capture import external_usage_scope, observation_key
 from tin_lite.visibility import (
+    ResponseCheckpoint,
+    ResponseRequest,
     VisibilityAuditor,
+    VisibilityProtocolError,
+    VisibilityRecoveryError,
     VisibilitySource,
+    read_visibility_response_checkpoint,
     validate_visibility_artifacts,
     validate_visibility_publication,
     visibility_publication_facts,
+    visibility_response_checkpoint,
 )
 from tin_lite.weekly_brief import (
     WeeklyBriefReporter,
@@ -309,20 +315,28 @@ class TinActivities:
             workflow=workflow_definition,
             normalized_inputs=configured.inputs,
         )
-        run, created = await self._db.create_run(
-            project_id=configured.project_id,
-            workflow_id=configured.workflow_id,
-            start_idempotency_key=f"schedule:{payload['occurrence_id']}",
-            input_payload=configured.inputs,
-            project_workflow_id=configured.id,
-            definition_commit_sha=configured.definition_commit_sha,
-            pinned_definition=workflow_definition.definition,
-            trigger_source="schedule",
-            scheduled_for=scheduled_for,
-            prerequisite_evidence=(
-                evaluation.evidence(inputs=configured.inputs) if evaluation.results else None
-            ),
-        )
+        try:
+            run, created = await self._db.create_run(
+                project_id=configured.project_id,
+                workflow_id=configured.workflow_id,
+                start_idempotency_key=f"schedule:{payload['occurrence_id']}",
+                input_payload=configured.inputs,
+                project_workflow_id=configured.id,
+                definition_commit_sha=configured.definition_commit_sha,
+                pinned_definition=workflow_definition.definition,
+                trigger_source="schedule",
+                scheduled_for=scheduled_for,
+                prerequisite_evidence=(
+                    evaluation.evidence(inputs=configured.inputs) if evaluation.results else None
+                ),
+            )
+        except ScheduledWorkflowSkip:
+            await self._db.advance_project_workflow_schedule(
+                project_workflow_id=configured.id,
+                next_run_at=next_run_after(schedule, scheduled_for),
+                expected_settings_revision=configured.settings_revision,
+            )
+            return {}
         schedule = WorkflowSchedule.model_validate(configured.schedule)
         await self._db.advance_project_workflow_schedule(
             project_workflow_id=configured.id,
@@ -1649,10 +1663,11 @@ class TinActivities:
                 run_id=run_id,
                 step_id="panel",
                 operation="visibility_panel",
-                execute=lambda: self._visibility_auditor.prepare_panel(
+                execute=lambda checkpoint: self._visibility_auditor.prepare_panel(
                     project_name=project.name,
                     target_request=target_request,
                     sources=sources,
+                    checkpoint=checkpoint,
                 ),
             ),
             details={"stage": "visibility_panel"},
@@ -1668,9 +1683,10 @@ class TinActivities:
                     run_id=run_id,
                     step_id=f"answer:{question_id}:{mode}",
                     operation="visibility_answer",
-                    execute=lambda: self._visibility_auditor.answer(
+                    execute=lambda checkpoint: self._visibility_auditor.answer(
                         question=question_text,
                         searched=searched,
+                        checkpoint=checkpoint,
                     ),
                 )
 
@@ -1687,9 +1703,13 @@ class TinActivities:
                     )
                 )
         answers = await self._await_with_heartbeats(
-            asyncio.gather(*answer_tasks),
+            asyncio.gather(*answer_tasks, return_exceptions=True),
             details={"stage": "visibility_answers"},
         )
+        # Let all dispatched calls save their receipts before projecting a failure.
+        for answer in answers:
+            if isinstance(answer, BaseException):
+                raise answer
         grouped: dict[str, dict[str, dict]] = {}
         for (question_id, mode), answer in zip(answer_slots, answers, strict=True):
             grouped.setdefault(question_id, {})[mode] = answer
@@ -1706,9 +1726,10 @@ class TinActivities:
                 run_id=run_id,
                 step_id="adjudication",
                 operation="visibility_adjudication",
-                execute=lambda: self._visibility_auditor.adjudicate(
+                execute=lambda checkpoint: self._visibility_auditor.adjudicate(
                     panel=panel,
                     measurements=measurements,
+                    checkpoint=checkpoint,
                 ),
             ),
             details={"stage": "visibility_adjudication"},
@@ -2584,7 +2605,14 @@ class TinActivities:
             database=self._db, storage=self._storage, integrations=self._integrations
         )
         handled = await self._await_with_heartbeats(
-            execution.prepare(run, policy=procedure.repair_policy),
+            execution.prepare(
+                run,
+                policy=procedure.repair_policy,
+                workspace_limits={
+                    "max_files": procedure.workspace_max_files,
+                    "max_bytes": procedure.workspace_max_bytes,
+                },
+            ),
             details={"stage": "technical_verification"},
         )
         if not handled:
@@ -2742,6 +2770,9 @@ class TinActivities:
                 raise RuntimeError("procedure result has no checkpoint path")
             recovered_revision = None
             from tin_lite import content_repository_delivery
+            from tin_lite.codex_api import attempt_failure, attempt_key, record_attempt_failure
+
+            api_attempt = await self._db.get_effect(attempt_key(run_id), conn=conn)
 
             repository_delivery = run.workflow_id == content_repository_delivery.WORKFLOW_ID
             if (
@@ -2755,6 +2786,15 @@ class TinActivities:
                     repo_id=project.state_repo_id,
                     branch=run.ephemeral_branch,
                 )
+                if (
+                    recovered_revision is None
+                    and api_attempt is not None
+                    and api_attempt.status == "completed"
+                    and (api_attempt.result or {}).get("generation") == run.generation
+                    and (api_attempt.result or {}).get("definition_commit_sha")
+                    == run.definition_commit_sha
+                ):
+                    recovered_revision = (api_attempt.result or {}).get("procedure_revision")
                 recovered = (
                     await self._storage.read_procedure_checkpoint(
                         repo_id=project.state_repo_id,
@@ -2843,6 +2883,28 @@ class TinActivities:
 
             sandbox_id: str | None = None
             try:
+                from tin_lite import interrupted_procedure
+
+                async def retain_interrupted(content=None):
+                    await interrupted_procedure.retain(
+                        db=self._db,
+                        conn=conn,
+                        storage=self._storage,
+                        run=run,
+                        project=project,
+                        spec=procedure,
+                        base=await self._procedure_artifact_base(run=run, procedure=procedure),
+                        content=content,
+                    )
+
+                if api_attempt is not None:
+                    sandbox_id = run.sandbox_id  # Cleanup the old attempt; never allocate another.
+                    await record_attempt_failure(conn, attempt_key(run_id))
+                    await retain_interrupted()
+                    failure = attempt_failure(api_attempt.result or {})
+                    raise ApplicationError(
+                        str(failure), type=type(failure).__name__, non_retryable=True
+                    )
                 await self._check_private_attempt(run, workflow_definition)
                 from tin_lite.codex_api import execution_profile, pinned_contract
 
@@ -3097,6 +3159,11 @@ class TinActivities:
                             ),
                             output_path=checkpoint_path,
                             output_max_bytes=procedure.output_max_bytes,
+                            interrupted_output_sink=(
+                                retain_interrupted
+                                if interrupted_procedure.eligible(procedure)
+                                else None
+                            ),
                             project_revision=(
                                 run.expected_head_sha
                                 if (
@@ -3225,10 +3292,19 @@ class TinActivities:
                 if sandbox_id is not None:
                     with suppress(Exception):
                         await self._sandboxes.kill(sandbox_id)
+                failed_attempt = await self._db.get_effect(attempt_key(run_id), conn=conn)
+                reported_failure = exc
+                if failed_attempt is not None and (failed_attempt.result or {}).get("outcome") in {
+                    "failed",
+                    "cancelled",
+                    "timed_out",
+                    "unconfirmed",
+                }:
+                    reported_failure = attempt_failure(failed_attempt.result or {})
                 await self._db.fail_effect(
                     conn,
                     execution_key=execution_key,
-                    error_message=_safe_failure(exc),
+                    error_message=_safe_failure(reported_failure),
                 )
                 raise
 
@@ -4488,7 +4564,7 @@ class TinActivities:
         run_id: UUID,
         step_id: str,
         operation: str,
-        execute: Callable[[], Awaitable[dict[str, object]]],
+        execute: Callable[[ResponseCheckpoint], Awaitable[dict[str, object]]],
     ) -> dict:
         execution_key = f"{run_id}:visibility:{step_id}"
         async with self._db.effect_lock(execution_key, operation) as (conn, existing):
@@ -4497,9 +4573,43 @@ class TinActivities:
                     raise RuntimeError("completed visibility effect has no result")
                 return existing.result
             await self._db.start_effect(conn, execution_key=execution_key, operation=operation)
+
+            async def checkpoint(request: ResponseRequest) -> dict:
+                # This child receipt is serialized by the owning effect's lock and
+                # reuses its connection. Accounting receipts remain metadata-only.
+                response_key = f"{execution_key}:response"
+                saved = await self._db.get_effect(response_key, conn=conn)
+                if saved is not None:
+                    if saved.status != "completed":
+                        raise VisibilityRecoveryError(
+                            "visibility model response could not be recovered; "
+                            "the request was not repeated"
+                        )
+                    return read_visibility_response_checkpoint(saved.result)
+                if (
+                    await self._db.get_effect(
+                        observation_key(run_id, f"visibility:{step_id}", "responses"), conn=conn
+                    )
+                    is not None
+                ):
+                    raise VisibilityRecoveryError(
+                        "visibility model request was already attempted without a recoverable "
+                        "response; the request was not repeated"
+                    )
+                # The provider's existing usage observation records dispatch intent.
+                # A billing rejection before that intent must remain retryable as
+                # an admission failure, not become an uncertain paid attempt here.
+                response = await request()
+                result = visibility_response_checkpoint(response)
+                await self._db.start_effect(
+                    conn, execution_key=response_key, operation="visibility_response_v1"
+                )
+                await self._db.complete_effect(conn, execution_key=response_key, result=result)
+                return read_visibility_response_checkpoint(result)
+
             try:
                 with external_usage_scope(self._db, conn, run_id, f"visibility:{step_id}"):
-                    result = await execute()
+                    result = await execute(checkpoint)
                 await self._db.complete_effect(
                     conn,
                     execution_key=execution_key,
@@ -4512,6 +4622,10 @@ class TinActivities:
                     execution_key=execution_key,
                     error_message=_safe_failure(exc),
                 )
+                if isinstance(exc, (VisibilityProtocolError, VisibilityRecoveryError)):
+                    raise ApplicationError(
+                        str(exc), type=type(exc).__name__, non_retryable=True
+                    ) from exc
                 raise
 
     async def _visibility_sources(self, *, run_id: UUID, project) -> list[VisibilitySource]:

@@ -16,6 +16,12 @@ from tin_lite.code_storage import CodeStorage
 from tin_lite.diagram_compositions import parse_diagram_v2
 from tin_lite.domain import CODEX_PROCEDURE_EXECUTOR, MEMORY_INDEX_PATH
 from tin_lite.memory import MAX_MEMORY_BYTES, validate_memory_index
+from tin_lite.repository_limits import (
+    LEGACY_REPOSITORY_BYTES,
+    LEGACY_REPOSITORY_FILES,
+    MAX_REPOSITORY_BYTES,
+    MAX_REPOSITORY_FILES,
+)
 from tin_lite.studio_contracts import (
     CHARACTER_SVG_MEDIA_TYPE,
     CHARACTER_SVG_VALIDATOR,
@@ -274,8 +280,8 @@ class GitHubPullRequestProcedure:
     provider_key: str = "infra.github"
     repair_policy: str | None = None
     allow_no_change: bool = False
-    workspace_max_files: int = 500
-    workspace_max_bytes: int = 10_000_000
+    workspace_max_files: int = MAX_REPOSITORY_FILES
+    workspace_max_bytes: int = MAX_REPOSITORY_BYTES
 
 
 @dataclass(frozen=True)
@@ -284,6 +290,8 @@ class GitHubRepositoryWorkspace:
 
     provider_key: str = "infra.github"
     capabilities: tuple[str, ...] = ("contents.read",)
+    max_files: int = MAX_REPOSITORY_FILES
+    max_bytes: int = MAX_REPOSITORY_BYTES
 
 
 @dataclass(frozen=True)
@@ -626,6 +634,10 @@ class CodexProcedureSource:
                     "kind": GITHUB_REPOSITORY_WORKSPACE,
                     "provider_key": self.github_workspace.provider_key,
                     "capabilities": list(self.github_workspace.capabilities),
+                    "limits": {
+                        "max_files": self.github_workspace.max_files,
+                        "max_bytes": self.github_workspace.max_bytes,
+                    },
                 }
             output = {
                 "kind": PROJECT_ARTIFACT_RESULT,
@@ -653,8 +665,8 @@ class CodexProcedureSource:
                 "capabilities": ["contents.read", "pull_requests.read"],
             }
             if (pull_request.workspace_max_files, pull_request.workspace_max_bytes) != (
-                500,
-                10_000_000,
+                LEGACY_REPOSITORY_FILES,
+                LEGACY_REPOSITORY_BYTES,
             ):
                 workspace["limits"] = {
                     "max_files": pull_request.workspace_max_files,
@@ -757,14 +769,16 @@ def validate_codex_procedure_definition(definition: dict[str, Any]) -> CodexProc
             raise ValueError("GitHub procedure workspace capabilities are invalid")
         workspace_capabilities = tuple(capabilities)
 
-    limits = workspace.get("limits", {"max_files": 500, "max_bytes": 10_000_000})
+    limits = workspace.get(
+        "limits", {"max_files": LEGACY_REPOSITORY_FILES, "max_bytes": LEGACY_REPOSITORY_BYTES}
+    )
     if (
         not isinstance(limits, dict)
         or set(limits) != {"max_files", "max_bytes"}
         or type(limits["max_files"]) is not int
-        or not 1 <= limits["max_files"] <= 1000
+        or not 1 <= limits["max_files"] <= MAX_REPOSITORY_FILES
         or type(limits["max_bytes"]) is not int
-        or not 1 <= limits["max_bytes"] <= 20_000_000
+        or not 1 <= limits["max_bytes"] <= MAX_REPOSITORY_BYTES
         or ("limits" in workspace and workspace_kind != GITHUB_REPOSITORY_WORKSPACE)
     ):
         raise ValueError("Codex repository workspace limits are invalid")
@@ -813,8 +827,17 @@ def validate_codex_procedure_definition(definition: dict[str, Any]) -> CodexProc
                 raise ValueError("procedure artifact output path template is invalid")
             placeholders = re.findall(r"\{[^{}]*\}", raw_output_template)
             if placeholders == ["{run_id}"]:
-                if output_validator not in {*content_draft.VALIDATORS, PUBLIC_ARTICLE_VALIDATOR}:
-                    raise ValueError("run-owned draft paths require content draft validation")
+                plain_report = (
+                    output_validator is None
+                    and raw_output_template.startswith("reports/")
+                    and raw_output_template.endswith("/{run_id}.md")
+                    and output.get("media_type") == "text/markdown"
+                )
+                if not plain_report and output_validator not in {
+                    *content_draft.VALIDATORS,
+                    PUBLIC_ARTICLE_VALIDATOR,
+                }:
+                    raise ValueError("run-owned paths require a plain report or draft validation")
                 sample = raw_output_template.replace(
                     "{run_id}", "00000000-0000-4000-8000-000000000031"
                 )

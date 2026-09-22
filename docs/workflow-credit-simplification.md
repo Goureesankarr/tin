@@ -1,4 +1,4 @@
-# Workflow credits: configured estimates, internal per-call funding
+# Workflow credits: cost previews and internal funding
 
 ## Outcome
 
@@ -20,7 +20,7 @@ balance and project limits. It charges verified usage, not the estimate.
    ID. Check the estimate, available credits, project limits and concurrency before
    dispatch. Preserve explicit scheduled spending authority. Free onboarding and
    approved setup children remain free. No enrollment, limit or Stripe-mode changes.
-3. **Per-call funding.** Reuse `billing_operations` and `committed_nanos`. New budgets
+3. **Managed-operation funding.** Reuse `billing_operations` and `committed_nanos`. Managed model and service budgets
    pin `funding=per_operation_v1`; admission reserves zero. Under the existing wallet
    lock, a paid call checks its own bounded cost and adds only that liability. On
    observation replace it with actual cost and immediately free the difference.
@@ -39,10 +39,27 @@ balance and project limits. It charges verified usage, not the estimate.
    cost and actual usage, with a clear add-credits error when a start cannot be funded.
    MCP preview is optional; agent instructions must not demand a quote/approval loop.
 
+## Ordinary Codex sessions
+
+New customer-funded root procedures with a default or isolated profile use
+`funding=procedure_session_v1`. Admission holds the configured session maximum once;
+parallel starts cannot spend the same credits. Model responses record actual usage
+against that session, without a new wallet reservation or repricing previous calls.
+An outstanding/uncertain request blocks the next. Current project limits, membership,
+account suspension and the run's active lease still govern continuation. Final
+settlement releases unused credits and creates one charge; no per-call Stripe payment
+or new UI approval is involved.
+
+The model's context/output capacity replaces arbitrary lifetime token limits. The
+session threshold stops further requests after observed usage reaches it. It does not
+promise to stop supplier spending in the middle of an accepted response: Tin absorbs
+excess while the customer maximum remains binding. See [execution limits and supplier
+exposure](codex-api-pilot.md#transport-and-usage). Other executors and specialized
+profiles retain their pinned funding and runtime policy.
+
 ## Compatibility
 
-Old quotes and budgets retain their whole-run reservation semantics and pinned
-prices. The new funding marker is stored in existing JSON terms; no schema migration,
+Old quotes and budgets retain their original funding semantics and pinned prices. Each funding marker is stored in existing JSON terms; no schema migration,
 Temporal command change, new state machine, credential change or executor migration.
 Explicit legacy quote IDs continue to validate their original binding. No existing
 run, invoice, welcome grant, payment or ledger history is rewritten.
@@ -56,8 +73,9 @@ unused per-call liability, which does not depend on estimate accuracy.
 `POST /api/projects/{id}/billing/estimate` and MCP `estimate_workflow_run` return
 the same preview without creating quotes, budgets or runs. Existing `/quotes`
 and `quote_workflow_run` remain optional compatibility interfaces. Configuration
-panels show a quiet estimate using existing UI styles; saved cards explicitly label
-it as the saved estimate. No supplier credentials or model-provider routes change.
+panels label an unmeasured configured bound as **Maximum charge**, using existing UI
+styles. The estimate basis remains available through HTTP/MCP; a configured maximum
+is not presented as a measured expected cost. No supplier credentials or model-provider routes change.
 
 ## Verification and rollout
 

@@ -4,7 +4,15 @@ Not a supplier invoice. Never apply this tariff to ChatGPT OAuth observations.
 """
 
 from tin_lite.billing_contracts import NANOS_PER_DOLLAR, digest, token_charge
-from tin_lite.codex_api import CONTRACT, MODE, MODEL, procedure_contract
+from tin_lite.codex_api import (
+    CONTRACT,
+    DIAGRAM_CONTRACT,
+    MODE,
+    MODEL,
+    SESSION_CONTRACT,
+    procedure_contract,
+)
+from tin_lite.workflow_costs import SESSION_FUNDING
 
 RATE_CARD = {
     "id": "openai-codex-standard-2026-09-12-v1",
@@ -36,7 +44,7 @@ REQUEST_MAXIMUM = (
 )
 
 
-def api_terms(definition):
+def api_terms(definition, *, session_budget=False):
     terms = {
         "rate_card": RATE_CARD["id"],
         "pricing": RATE_CARD,
@@ -75,6 +83,19 @@ def api_terms(definition):
         from tin_lite.studio_billing import CARD
 
         terms.update(studio_pricing=CARD, operations=["codex_api", "tool"])
+    procedure = definition.get("procedure", {})
+    if (
+        session_budget
+        and definition.get("executor") == "codex.procedure"
+        and procedure.get("sandbox", {}).get("profile", "default") in {"default", "isolated"}
+        and procedure_contract(procedure.get("output", {}).get("validator")) != DIAGRAM_CONTRACT
+    ):
+        terms.update(
+            funding=SESSION_FUNDING,
+            codex_contract=SESSION_CONTRACT,
+            request_maximum_input_bytes=SESSION_CONTRACT["max_request_bytes"],
+        )
+        terms.pop("request_maximum_nanos")
     return terms
 
 

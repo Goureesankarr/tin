@@ -452,7 +452,7 @@ BUILTIN_WORKFLOWS = (
         "existing format and components. Preserve its copy, leave a reviewable GitHub PR "
         "unmerged, and keep the Markdown original in Tin.",
         executor=CODEX_PROCEDURE_EXECUTOR,
-        version_label="1.0.0",
+        version_label="1.0.1",
         system=ORGANIC_TRAFFIC_SYSTEM,
         schedule_modes=("on_demand",),
         input_schema={
@@ -514,8 +514,6 @@ BUILTIN_WORKFLOWS = (
                 verification_commands=(content_repository_delivery.CHECK_COMMAND,),
                 max_files=5,
                 max_bytes=180_000,
-                workspace_max_files=1000,
-                workspace_max_bytes=20_000_000,
             ),
         ),
     ),
@@ -662,7 +660,7 @@ BUILTIN_WORKFLOWS = (
             "If no safe repair is available, explain why "
             "without a PR. Never merges or deploys; GitHub may run its configured PR checks."
         ),
-        version_label="0.4.0",
+        version_label="0.4.1",
         prerequisites=(
             WorkflowPrerequisite(
                 kind="run",
@@ -939,7 +937,7 @@ BUILTIN_WORKFLOWS = (
             "When no safe change is justified, save a no-change report without opening a PR."
         ),
         executor=CODEX_PROCEDURE_EXECUTOR,
-        version_label="2.2.1",
+        version_label="2.2.2",
         system=ORGANIC_TRAFFIC_SYSTEM,
         presentation=WorkflowDiagram(
             nodes=(
@@ -1653,7 +1651,7 @@ BUILTIN_WORKFLOWS = (
             "integrations, and tech stack, each cited to file and line."
         ),
         executor=CODEX_PROCEDURE_EXECUTOR,
-        version_label="1.0.0",
+        version_label="1.0.1",
         system=PRODUCT_QA_SYSTEM,
         schedule_modes=("on_demand", "weekly"),
         input_schema={
