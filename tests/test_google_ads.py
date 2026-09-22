@@ -864,3 +864,29 @@ def test_campaign_bundle_creates_a_held_group_paused():
     held["ad_groups"][0]["status"] = "REMOVED"
     with pytest.raises(ValueError):
         requests.campaign_bundle(held, customer_id=CID)
+
+
+def test_api_from_settings_prefers_the_dedicated_manager_oauth_client():
+    from types import SimpleNamespace
+
+    from pydantic import SecretStr
+
+    from tin_lite import google_ads
+
+    base = dict(
+        google_ads_manager_customer_id="1002174488",
+        google_ads_manager_refresh_token=SecretStr("refresh"),
+        google_ads_developer_token=None,
+        google_ads_api_version="v25",
+        google_oauth_client_id="tin-client",
+        google_oauth_client_secret=SecretStr("tin-secret"),
+    )
+    assert google_ads.manager_oauth_client(SimpleNamespace(**base))[0] == "tin-client"
+    dedicated = SimpleNamespace(
+        **base,
+        google_ads_oauth_client_id="ads-client",
+        google_ads_oauth_client_secret=SecretStr("ads-secret"),
+    )
+    assert google_ads.manager_oauth_client(dedicated)[0] == "ads-client"
+    assert google_ads.api_from_settings(dedicated) is not None
+    assert google_ads.api_from_settings(SimpleNamespace(google_oauth_client_id="x")) is None

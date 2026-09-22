@@ -101,7 +101,8 @@ under `ads/google/{launch}/monitor/{run}.md` and the run finishes; it never wait
 ## Configuration
 
 `TIN_LITE_GOOGLE_ADS_MANAGER_CUSTOMER_ID`, `TIN_LITE_GOOGLE_ADS_MANAGER_REFRESH_TOKEN`
-(minted with the existing `TIN_LITE_GOOGLE_OAUTH_CLIENT_ID`/`SECRET`), optional
+(minted with the existing `TIN_LITE_GOOGLE_OAUTH_CLIENT_ID`/`SECRET`, or with the dedicated
+`TIN_LITE_GOOGLE_ADS_OAUTH_CLIENT_ID`/`SECRET` pair when the token came from another client), optional
 `TIN_LITE_GOOGLE_ADS_DEVELOPER_TOKEN` (sent but ignored by Google since September 2026) and
 `TIN_LITE_GOOGLE_ADS_API_VERSION` (`v25`). The Google Ads API must be enabled on the same Cloud
 project as the OAuth client, and that project needs at least Basic access. `executor_gates.

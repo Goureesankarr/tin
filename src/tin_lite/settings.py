@@ -118,6 +118,14 @@ class Settings(BaseSettings):
     google_ads_developer_token: SecretStr | None = Field(
         default=None, alias="TIN_LITE_GOOGLE_ADS_DEVELOPER_TOKEN"
     )
+    # The OAuth client the manager refresh token was minted against. Defaults to Tin's Google
+    # OAuth client; set both when the token came from another client (a migration case).
+    google_ads_oauth_client_id: str | None = Field(
+        default=None, alias="TIN_LITE_GOOGLE_ADS_OAUTH_CLIENT_ID"
+    )
+    google_ads_oauth_client_secret: SecretStr | None = Field(
+        default=None, alias="TIN_LITE_GOOGLE_ADS_OAUTH_CLIENT_SECRET"
+    )
     google_ads_api_version: str = Field(
         default="v25", pattern=r"^v\d{1,3}$", alias="TIN_LITE_GOOGLE_ADS_API_VERSION"
     )
@@ -317,9 +325,18 @@ class Settings(BaseSettings):
                     "TIN_LITE_GOOGLE_ADS_MANAGER_CUSTOMER_ID and "
                     "TIN_LITE_GOOGLE_ADS_MANAGER_REFRESH_TOKEN must be configured together"
                 )
-            if self.google_oauth_client_id is None:
+            ads_client = (self.google_ads_oauth_client_id, self.google_ads_oauth_client_secret)
+            if any(value is not None for value in ads_client) and not all(
+                value is not None for value in ads_client
+            ):
                 raise ValueError(
-                    "TIN_LITE_GOOGLE_ADS_MANAGER_REFRESH_TOKEN requires the Google OAuth client"
+                    "TIN_LITE_GOOGLE_ADS_OAUTH_CLIENT_ID and "
+                    "TIN_LITE_GOOGLE_ADS_OAUTH_CLIENT_SECRET must be configured together"
+                )
+            if self.google_oauth_client_id is None and self.google_ads_oauth_client_id is None:
+                raise ValueError(
+                    "TIN_LITE_GOOGLE_ADS_MANAGER_REFRESH_TOKEN requires the Google OAuth client "
+                    "it was minted against"
                 )
             digits = self.google_ads_manager_customer_id.replace("-", "")
             if not digits.isdigit() or len(digits) != 10:

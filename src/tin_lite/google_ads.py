@@ -383,11 +383,23 @@ class GoogleAdsApi:
         return payload, request_id
 
 
+def manager_oauth_client(settings) -> tuple:
+    """The OAuth client that minted the manager refresh token: the dedicated Google Ads pair
+    when set, otherwise Tin's Google OAuth client."""
+    client_id = getattr(settings, "google_ads_oauth_client_id", None)
+    client_secret = getattr(settings, "google_ads_oauth_client_secret", None)
+    if client_id and client_secret is not None:
+        return client_id, client_secret
+    return (
+        getattr(settings, "google_oauth_client_id", None),
+        getattr(settings, "google_oauth_client_secret", None),
+    )
+
+
 def api_from_settings(settings, *, transport=None) -> GoogleAdsApi | None:
     manager = getattr(settings, "google_ads_manager_customer_id", None)
     refresh = getattr(settings, "google_ads_manager_refresh_token", None)
-    client_id = getattr(settings, "google_oauth_client_id", None)
-    client_secret = getattr(settings, "google_oauth_client_secret", None)
+    client_id, client_secret = manager_oauth_client(settings)
     if not manager or refresh is None or not client_id or client_secret is None:
         return None
     developer = getattr(settings, "google_ads_developer_token", None)
