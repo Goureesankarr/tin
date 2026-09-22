@@ -34,3 +34,11 @@ and execute through an authorized read-only connection, without ingestion. Their
 sanitized columns/results can be retained as regression fixtures. Query compilation
 and numerical provider compatibility are distinct from a full agent report and
 from scheduled execution after deployment.
+
+The large_catalog case adds 201 independently named one-row events to the four-event
+website fixture. Bounded discovery must disclose 200/205 types without blocking exact
+selected-event analysis or asserting absence of omitted events. A response that returns
+fewer rows than min(total_event_types, 200) is still an incomplete query and must fail.
+Web cases should exercise the documented PostHog defaults even when event descriptions
+are empty. Missing product session keys must not suppress independently valid traffic
+analysis or become a fabricated product conversion rate.

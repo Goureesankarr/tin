@@ -30,7 +30,9 @@ Use these five headings, in order:
   otherwise insufficient evidence or no supported breakdown. No recommendation.
 
 Every table caption names its exact window, population, unit and exclusions. Render checked
-numbers with Python. Include event coverage before interpretation. Keep narrative short.
+numbers with Python. Include event coverage before interpretation. State the discovered/total event-type counts
+and whether discovery covers the complete catalog. Partial discovery limits event selection,
+not the exact selected-event metrics; never describe it as exhaustive product coverage. Keep narrative short.
 If an earlier comparable window has been recomputed, lead with any changed counts and the
 matching old/new window; explain that late data or instrumentation may be involved only as
 possibilities. Different windows or units are not corrections. Keep prior labels unless the
@@ -41,7 +43,7 @@ derived copies) in a fenced evidence block preceded by `<!-- tin-analytics-evide
 
 - `binding`: settings hash; `generated_at`: UTC timestamp; `provider_project`: selected ID;
 - `state`: plan_state result, including validated plan, schema signature and any differences;
-- `windows`: exact boundaries; `requests`: executed step, HTTP/completion/cache metadata,
+- `inventory_scope`: inventory_scope() result; `windows`: exact boundaries; `requests`: executed step, HTTP/completion/cache metadata,
   safe generated SQL and original aggregate columns/results; `derived`: validated tables,
   comparisons, screening family/test results and error signals;
 - `limitations`: failed/skipped steps, uncertain mappings/exclusions, coverage and size limits.

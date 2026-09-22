@@ -1,9 +1,9 @@
 {
-  "provenance": "Fabricated inline event CTEs executed through PostHog HogQL on 2026-09-21; no customer events or metadata. CI replays these responses, without live access.",
+  "provenance": "Fabricated inline event CTEs executed through PostHog HogQL on 2026-09-21 and 2026-09-22; no customer events or metadata. CI replays these responses, without live access.",
   "cases": {
     "accounts": {
       "inventory": {
-        "query_sha256": "27c37fb06ccb1556eeacc5929028456f1edf2767ae57f490fbc8316a390b0b98",
+        "query_sha256": "78b994e9dea1a39a56de8144b7c5fa1158c32f1b26ad6fb86240de111463fcba",
         "data": {
           "columns": [
             "event",
@@ -11,7 +11,8 @@
             "prior",
             "current",
             "first_seen",
-            "last_seen"
+            "last_seen",
+            "total_event_types"
           ],
           "results": [
             [
@@ -20,15 +21,8 @@
               0,
               7,
               "2026-01-05T00:00:02Z",
-              "2026-01-05T00:00:12Z"
-            ],
-            [
-              "Report viewed",
-              2,
-              0,
-              2,
-              "2026-01-05T00:00:03Z",
-              "2026-01-05T00:00:03Z"
+              "2026-01-05T00:00:12Z",
+              3
             ],
             [
               "Workspace created",
@@ -36,7 +30,17 @@
               0,
               7,
               "2026-01-05T00:00:01Z",
-              "2026-01-05T00:00:10Z"
+              "2026-01-05T00:00:10Z",
+              3
+            ],
+            [
+              "Report viewed",
+              2,
+              0,
+              2,
+              "2026-01-05T00:00:03Z",
+              "2026-01-05T00:00:03Z",
+              3
             ]
           ],
           "hasMore": null,
@@ -173,7 +177,7 @@
     },
     "website": {
       "inventory": {
-        "query_sha256": "27c37fb06ccb1556eeacc5929028456f1edf2767ae57f490fbc8316a390b0b98",
+        "query_sha256": "78b994e9dea1a39a56de8144b7c5fa1158c32f1b26ad6fb86240de111463fcba",
         "data": {
           "columns": [
             "event",
@@ -181,7 +185,8 @@
             "prior",
             "current",
             "first_seen",
-            "last_seen"
+            "last_seen",
+            "total_event_types"
           ],
           "results": [
             [
@@ -190,23 +195,8 @@
               0,
               7,
               "2026-01-05T00:00:01Z",
-              "2026-01-05T00:00:10Z"
-            ],
-            [
-              "first_export",
-              2,
-              0,
-              2,
-              "2026-01-05T00:00:04Z",
-              "2026-01-05T00:00:04Z"
-            ],
-            [
-              "signup_completed",
-              2,
-              0,
-              2,
-              "2026-01-05T00:00:03Z",
-              "2026-01-05T00:00:03Z"
+              "2026-01-05T00:00:10Z",
+              4
             ],
             [
               "signup_started",
@@ -214,7 +204,26 @@
               0,
               7,
               "2026-01-05T00:00:02Z",
-              "2026-01-05T00:00:12Z"
+              "2026-01-05T00:00:12Z",
+              4
+            ],
+            [
+              "first_export",
+              2,
+              0,
+              2,
+              "2026-01-05T00:00:04Z",
+              "2026-01-05T00:00:04Z",
+              4
+            ],
+            [
+              "signup_completed",
+              2,
+              0,
+              2,
+              "2026-01-05T00:00:03Z",
+              "2026-01-05T00:00:03Z",
+              4
             ]
           ],
           "hasMore": null,
