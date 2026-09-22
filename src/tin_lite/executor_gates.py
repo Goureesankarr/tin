@@ -68,11 +68,14 @@ def organic_system_gate(settings: Any, *, keyword_max_cost_usd: float = 9) -> st
 
 
 def google_ads_gate(settings: Any) -> str | None:
+    from tin_lite.google_ads import manager_oauth_client
+
+    client_id, client_secret = manager_oauth_client(settings)
     if (
         not getattr(settings, "google_ads_manager_customer_id", None)
         or not getattr(settings, "google_ads_manager_refresh_token", None)
-        or not getattr(settings, "google_oauth_client_id", None)
-        or not getattr(settings, "google_oauth_client_secret", None)
+        or not client_id
+        or client_secret is None
         or not getattr(settings, "luna_api_key", None)
     ):
         return (

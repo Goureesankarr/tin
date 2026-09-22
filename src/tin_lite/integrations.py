@@ -468,9 +468,12 @@ class IntegrationService:
                 and self._settings.google_oauth_client_secret
             )
         if provider_key == ADS_PROVIDER:
+            from tin_lite.google_ads import manager_oauth_client
+
+            client_id, client_secret = manager_oauth_client(self._settings)
             return bool(
-                self._settings.google_oauth_client_id
-                and self._settings.google_oauth_client_secret
+                client_id
+                and client_secret is not None
                 and getattr(self._settings, "google_ads_manager_customer_id", None)
                 and getattr(self._settings, "google_ads_manager_refresh_token", None)
             )

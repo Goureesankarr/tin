@@ -515,7 +515,8 @@ environments.
 Google Ads is linked by manager invitation rather than OAuth. Configure Tin's manager account with
 `TIN_LITE_GOOGLE_ADS_MANAGER_CUSTOMER_ID` and `TIN_LITE_GOOGLE_ADS_MANAGER_REFRESH_TOKEN` (a refresh
 token minted once, with a passkey-capable manager admin, against the same Google OAuth client with
-the `https://www.googleapis.com/auth/adwords` scope), optionally
+the `https://www.googleapis.com/auth/adwords` scope; when it was minted against another client, set
+`TIN_LITE_GOOGLE_ADS_OAUTH_CLIENT_ID` and `TIN_LITE_GOOGLE_ADS_OAUTH_CLIENT_SECRET` too), optionally
 `TIN_LITE_GOOGLE_ADS_DEVELOPER_TOKEN` and `TIN_LITE_GOOGLE_ADS_API_VERSION`. Enable the Google Ads
 API on the `tin-lite-integrations` Cloud project; API access levels now attach to that project and
 Basic access is required for production accounts. Founders enter their ten-digit customer id, Tin
