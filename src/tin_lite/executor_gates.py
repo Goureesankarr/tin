@@ -65,3 +65,18 @@ def organic_system_gate(settings: Any, *, keyword_max_cost_usd: float = 9) -> st
             "No child workflow was started."
         )
     return None
+
+
+def google_ads_gate(settings: Any) -> str | None:
+    if (
+        not getattr(settings, "google_ads_manager_customer_id", None)
+        or not getattr(settings, "google_ads_manager_refresh_token", None)
+        or not getattr(settings, "google_oauth_client_id", None)
+        or not getattr(settings, "google_oauth_client_secret", None)
+        or not getattr(settings, "luna_api_key", None)
+    ):
+        return (
+            "Google Ads workflows require Tin's manager account credentials, the Google OAuth "
+            "client and the native model."
+        )
+    return None

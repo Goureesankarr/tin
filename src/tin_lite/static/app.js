@@ -102,7 +102,7 @@ const CUSTOM_API_TEMPLATE = Object.freeze({
   status: "available",
 });
 const CONNECT_REQUEST_KEY = "tin-lite:connect-providers";
-const CONNECT_PROVIDERS = new Set(["infra.github", "analytics.gsc", "workspace.google"]);
+const CONNECT_PROVIDERS = new Set(["infra.github", "analytics.gsc", "workspace.google", "ads.google"]);
 let pendingConnectRequest = null;
 
 function rememberConnectRequest(projectId, providers) {
@@ -5473,6 +5473,9 @@ function bindIntegrationCardControls() {
   document.querySelectorAll("[data-integration-disconnect]").forEach((button) => {
     button.addEventListener("click", () => disconnectIntegration(button.dataset.integrationDisconnect));
   });
+  document.querySelectorAll("[data-integration-refresh]").forEach((button) => {
+    button.addEventListener("click", () => refreshGoogleAds(button));
+  });
   document.querySelectorAll("[data-integration-form]").forEach((form) => {
     bindTinControls(form);
     const selection = form.querySelector('input[name="option_id"]');
@@ -5562,6 +5565,7 @@ function renderIntegrationCard(integration) {
     "analytics.gsc": "/assets/integrations/google-search-console.svg",
     "infra.github": "/assets/integrations/github.svg",
     "workspace.google": "/assets/integrations/google-workspace.svg",
+    "ads.google": "/assets/integrations/google-ads.svg",
   };
   const logo = logoPaths[integration.key]
     ? `<img src="${logoPaths[integration.key]}" alt="" />`
@@ -5571,6 +5575,8 @@ function renderIntegrationCard(integration) {
     : selected || integration.external_account_label || "Choose an account";
   const health = integration.key.startsWith("custom.api.")
     ? integration.configuration?.access_verified ? "access verified" : "saved · not verified"
+    : integration.key === "ads.google" && connected
+    ? googleAdsHealth(integration)
     : needsResource
     ? "setup required"
     : integration.status === "needs_attention"
@@ -5597,18 +5603,33 @@ function renderIntegrationCard(integration) {
   </article>`;
 }
 
+function googleAdsHealth(integration) {
+  const link = integration.configuration?.link_status;
+  const health = integration.configuration?.health || {};
+  if (link === "pending") return "accept Tin's request in Google Ads";
+  if (link && link !== "active") return "invitation " + link + " · send it again";
+  if (!health.checked_at) return "linked · check the account";
+  if (health.account_status && health.account_status !== "ENABLED") return "account not enabled";
+  if (!health.billing_approved) return "billing missing in Google Ads";
+  if (!health.conversion_actions_with_data) return "no conversions recorded yet";
+  return "ready for workflows";
+}
+
 function renderIntegrationExpanded(integration) {
   const options = state.integrationOptions.get(integration.key);
   const selected = integration.configuration?.selected_site_url ||
     integration.configuration?.selected_repository || "";
   const optionLabel = integration.key === "infra.github" ? "Repository" : "Search property";
   const isWorkspace = integration.key === "workspace.google";
+  const isAds = integration.key === "ads.google";
   const setupPrompt = RESOURCE_SCOPED_INTEGRATIONS.has(integration.key) && !selected
     ? `<p class="integration-setup-prompt" role="status"><strong>Finish setup.</strong> OAuth is connected, but workflows cannot use ${escapeHtml(integration.name)} until you choose ${integration.key === "infra.github" ? "a repository" : "a Search Console property"} for ${escapeHtml(state.project.name)}.</p>`
     : "";
   const workspaceCanSend = (integration.configuration?.granted_capabilities || []).includes("gmail.messages.send");
   const accessValue = integration.key === "infra.github"
     ? "selected repositories · Contents + Pull requests write"
+    : isAds
+      ? "one linked account · campaign read + write via Tin's manager account"
     : isWorkspace
       ? workspaceCanSend
         ? "Gmail read + send · Calendar read"
@@ -5616,6 +5637,8 @@ function renderIntegrationExpanded(integration) {
       : "read only · search performance + indexing signals";
   const accessCopy = integration.key === "infra.github"
     ? "By installing the Tin GitHub App, you opt in to Contents and Pull requests write access for only the repositories granted in GitHub. Tin uses short-lived installation tokens; it never stores a personal access token."
+    : isAds
+      ? "Tin's manager account is linked to your Google Ads account by an invitation you accept inside Google Ads. Tin stores no Google credential of yours. Every campaign change waits for your approval; removing the manager in Google Ads ends Tin's access at once."
     : isWorkspace
       ? workspaceCanSend
         ? "Tin stores an encrypted Google refresh token. Workflow sandboxes receive only short-lived, run-bound Tin tools and never receive Google credentials. Campaigns still require explicit review before Tin sends anything."
@@ -5624,6 +5647,15 @@ function renderIntegrationExpanded(integration) {
   let selectionControl;
   if (isWorkspace) {
     selectionControl = `<div class="integration-detail-row"><span class="integration-detail-label">Account</span><span class="integration-detail-value">${escapeHtml(integration.external_account_label || "Google Workspace")}</span></div>`;
+  } else if (isAds) {
+    const link = integration.configuration?.link_status || "pending";
+    const linkCopy = link === "active"
+      ? "Linked to Tin's manager account."
+      : link === "pending"
+        ? "Invitation sent. In Google Ads open Admin, then Access and security, then Managers, and accept the request from Tin Computer."
+        : `The invitation is ${escapeHtml(link)}. Send it again to link the account.`;
+    selectionControl = `<div class="integration-detail-row"><span class="integration-detail-label">Account</span><span class="integration-detail-value">${escapeHtml(integration.external_account_label || "Google Ads")}</span></div>
+      <p class="integration-setup-prompt" role="status">${linkCopy} <button class="integration-row-action" type="button" data-integration-refresh="${escapeHtml(integration.key)}">Check again</button>${link !== "active" && link !== "pending" ? ` <button class="integration-row-action" type="button" data-integration-connect="${escapeHtml(integration.key)}">Send again</button>` : ""}</p>`;
   } else if (state.integrationLoading === integration.key) {
     selectionControl = `<span class="integration-detail-value is-muted">Checking the connected account…</span>`;
   } else if (options) {
@@ -5660,7 +5692,7 @@ function renderIntegrationExpanded(integration) {
       <span class="integration-detail-value is-muted">${escapeHtml((integration.unlocks || []).join(" · "))}</span>
     </div>
     <div class="integration-control-footer">
-      <span>connected ${escapeHtml(connectedLabel)} · via OAuth · ${escapeHtml(checkedLabel)}</span>
+      <span>connected ${escapeHtml(connectedLabel)} · via ${isAds ? "manager invitation" : "OAuth"} · ${escapeHtml(checkedLabel)}</span>
       ${isWorkspace && !workspaceCanSend ? `<button class="integration-reconnect" type="button" data-integration-upgrade="${escapeHtml(integration.key)}">Enable sending</button>` : ""}
       ${integration.status === "needs_attention" ? `<button class="integration-reconnect" type="button" data-integration-connect="${escapeHtml(integration.key)}">Reconnect</button>` : ""}
       <button class="integration-disconnect" type="button" data-integration-disconnect="${escapeHtml(integration.key)}">Disconnect</button>
@@ -5682,7 +5714,7 @@ async function toggleIntegration(providerKey) {
   state.expandedIntegration = providerKey;
   const integration = state.integrations.find((item) => item.key === providerKey);
   const context = currentProjectContext();
-  if (integration?.connection_id && providerKey !== "workspace.google" && !state.integrationOptions.has(providerKey)) {
+  if (integration?.connection_id && providerKey !== "workspace.google" && providerKey !== "ads.google" && !state.integrationOptions.has(providerKey)) {
     state.integrationLoading = providerKey;
     renderIntegrations();
     try {
@@ -5782,6 +5814,10 @@ async function connectIntegration(providerKey, capabilities = null, targetProjec
   const integration = state.integrations.find((item) => item.key === providerKey);
   if (!integration?.configured) {
     showToast(`${integration?.name || "This integration"} is not configured on this Tin deployment.`);
+    return;
+  }
+  if (providerKey === "ads.google") {
+    chooseGoogleAdsAccount(targetProjectId || currentProjectContext().projectId);
     return;
   }
   if (
@@ -6419,6 +6455,79 @@ async function confirmGitHubRepository() {
   }
 }
 
+function chooseGoogleAdsAccount(projectId) {
+  // Google Ads links by invitation, not OAuth: the founder types the customer id here, Tin's
+  // manager account sends the request, and the founder accepts it inside Google Ads.
+  if (!projectId) return;
+  const existing = state.integrations.find((item) => item.key === "ads.google");
+  state.googleAdsChoice = { projectId, customerId: existing?.configuration?.customer_id || "" };
+  integrationProjectTitle.textContent = `Link Google Ads to ${state.project?.name || "this project"}`;
+  integrationProjectCopy.textContent =
+    "Enter the ten-digit customer id shown at the top right of Google Ads. Tin sends a manager request from Tin Computer; you accept it under Admin, Access and security, Managers. Tin never sees your Google password.";
+  integrationProjectForm.querySelector("[data-confirm-integration-project]").textContent = "Send invitation";
+  integrationProjectOptions.replaceChildren();
+  const field = document.createElement("label");
+  field.className = "project-create-field";
+  field.innerHTML = `<span>Google Ads customer id</span><input type="text" name="customer_id" inputmode="numeric" autocomplete="off" placeholder="123-456-7890" maxlength="14" required />`;
+  const input = field.querySelector("input");
+  input.value = state.googleAdsChoice.customerId;
+  input.addEventListener("input", () => { state.googleAdsChoice.customerId = input.value; });
+  integrationProjectOptions.append(field);
+  integrationProjectDialog.showModal();
+  input.focus();
+}
+
+async function confirmGoogleAdsAccount() {
+  const choice = state.googleAdsChoice;
+  if (!choice) return;
+  const digits = (choice.customerId || "").replace(/[^0-9]/g, "");
+  if (digits.length !== 10) {
+    showToast("A Google Ads customer id has ten digits, like 123-456-7890.");
+    return;
+  }
+  const confirm = integrationProjectForm.querySelector("[data-confirm-integration-project]");
+  confirm.disabled = true;
+  confirm.textContent = "Sending…";
+  try {
+    const updated = await api(`/api/projects/${encodeURIComponent(choice.projectId)}/integrations/ads.google/link`, {
+      method: "POST",
+      body: JSON.stringify({ customer_id: digits }),
+    });
+    if (state.project?.id === choice.projectId) {
+      const index = state.integrations.findIndex((item) => item.key === "ads.google");
+      if (index >= 0) state.integrations[index] = updated;
+      else state.integrations.push(updated);
+    }
+    if (integrationProjectDialog.open) integrationProjectDialog.close();
+    showToast(updated.configuration?.link_status === "active"
+      ? "Google Ads is linked to Tin's manager account."
+      : "Invitation sent. Accept it in Google Ads, then press Check again.");
+    if (state.view === "integrations") renderIntegrations();
+  } catch (error) {
+    showToast(`Could not link Google Ads: ${error.message}`);
+    confirm.disabled = false;
+    confirm.textContent = "Send invitation";
+  }
+}
+
+async function refreshGoogleAds(button) {
+  const context = currentProjectContext();
+  if (!context.projectId) return;
+  button.disabled = true;
+  try {
+    const updated = await api(`/api/projects/${encodeURIComponent(context.projectId)}/integrations/ads.google/refresh`, { method: "POST" });
+    if (!isCurrentProjectContext(context)) return;
+    const index = state.integrations.findIndex((item) => item.key === "ads.google");
+    if (index >= 0) state.integrations[index] = updated;
+    showToast(`Google Ads: ${googleAdsHealth(updated)}.`);
+    renderIntegrations();
+  } catch (error) {
+    if (!isCurrentProjectContext(context)) return;
+    button.disabled = false;
+    showToast(`Could not check Google Ads: ${error.message}`);
+  }
+}
+
 function chooseGitHubInstallation() {
   const choice = state.githubInstallationChoice;
   if (!choice) return;
@@ -6832,6 +6941,10 @@ integrationProjectForm.addEventListener("submit", async (event) => {
     await confirmGitHubInstallation();
     return;
   }
+  if (state.googleAdsChoice) {
+    await confirmGoogleAdsAccount();
+    return;
+  }
   const intent = state.integrationConnectIntent;
   if (!intent) return;
   const confirm = integrationProjectForm.querySelector("[data-confirm-integration-project]");
@@ -6853,6 +6966,7 @@ integrationProjectDialog.addEventListener("close", () => {
   state.integrationConnectIntent = null;
   state.githubInstallationChoice = null;
   state.repositoryChoice = null;
+  state.googleAdsChoice = null;
   integrationProjectForm.querySelector("[data-confirm-integration-project]").disabled = false;
 });
 

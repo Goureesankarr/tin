@@ -512,6 +512,16 @@ ID, mints short-lived installation tokens on demand, and never stores a user PAT
 credentials remain on the trusted switchboard and are explicitly rejected from E2B sandbox
 environments.
 
+Google Ads is linked by manager invitation rather than OAuth. Configure Tin's manager account with
+`TIN_LITE_GOOGLE_ADS_MANAGER_CUSTOMER_ID` and `TIN_LITE_GOOGLE_ADS_MANAGER_REFRESH_TOKEN` (a refresh
+token minted once, with a passkey-capable manager admin, against the same Google OAuth client with
+the `https://www.googleapis.com/auth/adwords` scope), optionally
+`TIN_LITE_GOOGLE_ADS_DEVELOPER_TOKEN` and `TIN_LITE_GOOGLE_ADS_API_VERSION`. Enable the Google Ads
+API on the `tin-lite-integrations` Cloud project; API access levels now attach to that project and
+Basic access is required for production accounts. Founders enter their ten-digit customer id, Tin
+sends the invitation from the manager account, and they accept it under Admin, Access and
+security, Managers in Google Ads.
+
 The first provider capabilities are bounded rather than generic HTTP proxies. Search Console can
 list verified properties and read a validated analytics panel for one selected property. GitHub
 can list installation repositories and, only after the write-permission opt-in, create or recover

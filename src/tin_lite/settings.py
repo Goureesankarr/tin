@@ -106,6 +106,21 @@ class Settings(BaseSettings):
     paid_ads_max_cost_usd: float = Field(
         default=0, ge=0, le=25, allow_inf_nan=False, alias="TIN_LITE_PAID_ADS_MAX_COST_USD"
     )
+    # Tin's Google Ads manager account. The refresh token is a deployment credential minted
+    # once by an operator against the Google OAuth client below; customers link their own
+    # account to the manager by accepting an invitation, so no customer token is ever stored.
+    google_ads_manager_customer_id: str | None = Field(
+        default=None, alias="TIN_LITE_GOOGLE_ADS_MANAGER_CUSTOMER_ID"
+    )
+    google_ads_manager_refresh_token: SecretStr | None = Field(
+        default=None, alias="TIN_LITE_GOOGLE_ADS_MANAGER_REFRESH_TOKEN"
+    )
+    google_ads_developer_token: SecretStr | None = Field(
+        default=None, alias="TIN_LITE_GOOGLE_ADS_DEVELOPER_TOKEN"
+    )
+    google_ads_api_version: str = Field(
+        default="v25", pattern=r"^v\d{1,3}$", alias="TIN_LITE_GOOGLE_ADS_API_VERSION"
+    )
 
     integration_credential_key: SecretStr | None = Field(
         default=None, alias="TIN_LITE_INTEGRATION_CREDENTIAL_KEY"
@@ -295,6 +310,22 @@ class Settings(BaseSettings):
             raise ValueError(
                 "TIN_LITE_INTEGRATION_CREDENTIAL_KEY is required when Google OAuth is configured"
             )
+        ads_values = (self.google_ads_manager_customer_id, self.google_ads_manager_refresh_token)
+        if any(value is not None for value in ads_values):
+            if not all(value is not None for value in ads_values):
+                raise ValueError(
+                    "TIN_LITE_GOOGLE_ADS_MANAGER_CUSTOMER_ID and "
+                    "TIN_LITE_GOOGLE_ADS_MANAGER_REFRESH_TOKEN must be configured together"
+                )
+            if self.google_oauth_client_id is None:
+                raise ValueError(
+                    "TIN_LITE_GOOGLE_ADS_MANAGER_REFRESH_TOKEN requires the Google OAuth client"
+                )
+            digits = self.google_ads_manager_customer_id.replace("-", "")
+            if not digits.isdigit() or len(digits) != 10:
+                raise ValueError(
+                    "TIN_LITE_GOOGLE_ADS_MANAGER_CUSTOMER_ID must be a ten-digit customer id"
+                )
         if (self.gak_url is None) != (self.gak_token is None):
             raise ValueError("TIN_LITE_GAK_URL and TIN_LITE_GAK_TOKEN must be configured together")
         if self.gak_token is not None and len(self.gak_token.get_secret_value()) < 32:

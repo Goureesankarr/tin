@@ -54,7 +54,8 @@ Existing workflow-specific spending ceilings and retry policies remain in force.
 ## Coverage and limits of the September 10 slice
 
 The paid ads assessment adds two routes (`paid-ads-judgment-v1`, `paid-ads-drafting-v1`) and
-the zero-cost `gak` tool provider. All shared-router callers are connected: paid ads assessment, keyword planning, content planning,
+the zero-cost `gak` tool provider; the Google Ads launch adds `paid-ads-launch-copy-v1` and the
+zero-cost `google_ads` tool provider, which the monitor and proposal approvals share. All shared-router callers are connected: paid ads assessment, keyword planning, content planning,
 native character design (draft, bounded repairs, refinement), and the retained native
 site-health executor for older histories. There is no schema migration, new Temporal
 implementation, change to the dashboard/MCP start contract, or sandbox image rebuild.

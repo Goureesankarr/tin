@@ -28,7 +28,9 @@ from tin_lite.domain import (
     Workflow,
     WorkflowStatus,
 )
+from tin_lite.google_ads import GoogleAdsApi
 from tin_lite.integrations import (
+    ADS_PROVIDER,
     GITHUB_PROVIDER,
     GOOGLE_WORKSPACE_PROVIDER,
     GSC_PROVIDER,
@@ -38,11 +40,13 @@ from tin_lite.integrations import (
     GitHubInstallationRequiredError,
     GitHubRepositoryFile,
     GitHubRepositorySnapshot,
+    GoogleAdsCallError,
     IntegrationAuthorizationError,
     IntegrationDeliveryUnknownError,
     IntegrationError,
     IntegrationRequirement,
     IntegrationService,
+    IntegrationUpstreamError,
     load_pinned_integration_requirements,
     parse_integration_requirements,
     registered_integrations,
@@ -171,7 +175,16 @@ class FakeIntegrationDatabase:
     async def mark_integration_attention(self, **values) -> None:
         current = self.connections[(values["project_id"], values["provider_key"])]
         self.connections[(current.project_id, current.provider_key)] = IntegrationConnection(
-            **{**current.__dict__, "status": "needs_attention"}
+            **{
+                **current.__dict__,
+                "status": "needs_attention",
+                "last_error_code": values.get("error_code"),
+            }
+        )
+
+    async def delete_integration_connection(self, **values) -> bool:
+        return (
+            self.connections.pop((values["project_id"], values["provider_key"]), None) is not None
         )
 
     @asynccontextmanager
@@ -2447,3 +2460,500 @@ async def test_repository_bundle_expanded_bounds_and_legacy_rejection(
                 await service.github_repository_bundle(**args)
             assert f"{file_count:,} files / {file_count * file_bytes:,} bytes" in str(error.value)
             assert not blob_reads  # Reject before downloading any file contents.
+
+
+# ---------------------------------------------------------------- Google Ads (ads.google)
+
+ADS_CID = "1234567890"
+ADS_MCC = "1002174488"
+ADS_BASE = "https://googleads.googleapis.com/v25/customers"
+
+
+def ads_settings(**overrides):
+    return settings(
+        google_ads_manager_customer_id="100-217-4488",
+        google_ads_manager_refresh_token=SecretStr("1//manager-refresh"),
+        google_ads_developer_token=None,
+        google_ads_api_version="v25",
+        **overrides,
+    )
+
+
+def ads_error(category, value):
+    return httpx.Response(
+        400,
+        json={
+            "error": {
+                "code": 400,
+                "message": "secret detail",
+                "status": "INVALID_ARGUMENT",
+                "details": [{"errors": [{"errorCode": {category: value}, "message": "x"}]}],
+            }
+        },
+    )
+
+
+class AdsBackend:
+    """A tiny Google Ads REST double: routes by path, records every request."""
+
+    def __init__(self) -> None:
+        self.requests: list[tuple[str, dict, dict]] = []
+        self.link_status = "PENDING"
+        self.link_error: tuple[str, str] | None = None
+        self.search_error: tuple[str, str] | None = None
+        self.mutate_error: tuple[str, str] | None = None
+        self.link_rows: list[dict] | None = None
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content or b"{}")
+        self.requests.append((request.url.path, body, dict(request.headers)))
+        path = request.url.path
+        if path.endswith("customerClientLinks:mutate"):
+            if self.link_error:
+                return ads_error(*self.link_error)
+            create = body["operation"].get("create") or body["operation"].get("update")
+            client = create.get("clientCustomer", f"customers/{ADS_CID}").rsplit("/", 1)[-1]
+            return httpx.Response(
+                200,
+                headers={"request-id": "req-link"},
+                json={
+                    "result": {
+                        "resourceName": f"customers/{ADS_MCC}/customerClientLinks/{client}~555"
+                    }
+                },
+            )
+        if path.endswith("googleAds:search"):
+            if self.search_error:
+                return ads_error(*self.search_error)
+            query = body["query"]
+            rows: list[dict] = []
+            if "FROM customer_client_link" in query:
+                rows = (
+                    self.link_rows
+                    if self.link_rows is not None
+                    else [
+                        {
+                            "customerClientLink": {
+                                "resourceName": (
+                                    f"customers/{ADS_MCC}/customerClientLinks/{ADS_CID}~555"
+                                ),
+                                "clientCustomer": f"customers/{ADS_CID}",
+                                "managerLinkId": "555",
+                                "status": self.link_status,
+                            }
+                        }
+                    ]
+                )
+            elif "FROM customer " in query or query.rstrip().endswith("FROM customer"):
+                rows = [
+                    {
+                        "customer": {
+                            "id": ADS_CID,
+                            "descriptiveName": "Acme Ltd",
+                            "currencyCode": "USD",
+                            "timeZone": "Europe/London",
+                            "status": "ENABLED",
+                            "autoTaggingEnabled": True,
+                            "conversionTrackingSetting": {
+                                "conversionTrackingId": "17707549309",
+                                "conversionTrackingStatus": "CONVERSION_TRACKING_MANAGED_BY_SELF",
+                                "acceptedCustomerDataTerms": True,
+                            },
+                        }
+                    }
+                ]
+            elif "FROM billing_setup" in query:
+                rows = [{"billingSetup": {"id": "1", "status": "APPROVED"}}]
+            elif "FROM conversion_action" in query:
+                rows = [
+                    {
+                        "conversionAction": {
+                            "resourceName": f"customers/{ADS_CID}/conversionActions/9",
+                            "id": "9",
+                            "name": "Scan started",
+                            "category": "SIGNUP",
+                            "status": "ENABLED",
+                            "type": "WEBPAGE",
+                            "primaryForGoal": True,
+                        },
+                        "metrics": {"allConversions": 12.0},
+                    },
+                    {
+                        "conversionAction": {
+                            "resourceName": f"customers/{ADS_CID}/conversionActions/10",
+                            "id": "10",
+                            "name": "Call booked",
+                            "category": "BOOK_APPOINTMENT",
+                            "status": "ENABLED",
+                            "type": "WEBPAGE",
+                            "primaryForGoal": True,
+                        },
+                        "metrics": {"allConversions": 0},
+                    },
+                ]
+            elif "FROM campaign" in query:
+                rows = [
+                    {"campaign": {"id": "22", "resourceName": f"customers/{ADS_CID}/campaigns/22"}}
+                ]
+            return httpx.Response(200, headers={"request-id": "req-search"}, json={"results": rows})
+        if path.endswith("googleAds:mutate"):
+            if self.mutate_error:
+                return ads_error(*self.mutate_error)
+            responses = [{"campaignResult": {"resourceName": f"customers/{ADS_CID}/campaigns/22"}}]
+            return httpx.Response(
+                200,
+                headers={"request-id": "req-mutate"},
+                json={"mutateOperationResponses": responses},
+            )
+        if path.endswith(":mutate"):
+            if self.mutate_error:
+                return ads_error(*self.mutate_error)
+            return httpx.Response(
+                200,
+                headers={"request-id": "req-resource"},
+                json={"results": [{"resourceName": f"customers/{ADS_CID}/campaigns/22"}]},
+            )
+        raise AssertionError(f"unexpected Google Ads request {request.url}")
+
+
+async def manager_token():
+    return "manager-token"
+
+
+def ads_service(backend: AdsBackend, database=None, **overrides):
+    database = database or FakeIntegrationDatabase()
+    api = GoogleAdsApi(
+        manager_customer_id=ADS_MCC,
+        token_source=manager_token,
+        transport=httpx.MockTransport(backend),
+    )
+    service = IntegrationService(
+        database=database,  # type: ignore[arg-type]
+        settings=ads_settings(**overrides),  # type: ignore[arg-type]
+        client=httpx.AsyncClient(transport=httpx.MockTransport(backend)),
+        google_ads=api,
+    )
+    return service, database
+
+
+def test_registry_declares_google_ads_as_a_manager_linked_connection() -> None:
+    definition = next(item for item in registered_integrations() if item.key == ADS_PROVIDER)
+    assert definition.key == "ads.google"
+    assert definition.capabilities == ("account.read", "campaigns.read", "campaigns.write")
+    assert "manager account" in definition.access_label
+    assert definition.unlocks == ("Google Ads launch", "Google Ads monitor")
+
+
+def test_google_ads_is_configured_only_with_manager_credentials_and_oauth_client() -> None:
+    database = FakeIntegrationDatabase()
+    plain = IntegrationService(database=database, settings=settings())  # type: ignore[arg-type]
+    assert plain.is_configured(ADS_PROVIDER) is False
+    ready = IntegrationService(database=database, settings=ads_settings())  # type: ignore[arg-type]
+    assert ready.is_configured(ADS_PROVIDER) is True
+    no_client = IntegrationService(
+        database=database,  # type: ignore[arg-type]
+        settings=ads_settings(google_oauth_client_id=None, google_oauth_client_secret=None),  # type: ignore[arg-type]
+    )
+    assert no_client.is_configured(ADS_PROVIDER) is False
+
+
+@pytest.mark.asyncio
+async def test_connect_google_ads_refuses_bad_ids_and_tin_own_manager() -> None:
+    service, _ = ads_service(AdsBackend())
+    with pytest.raises(IntegrationError, match="ten-digit"):
+        await service.connect_google_ads(
+            project_id=PROJECT_ID, customer_id="12345", clerk_user_id=USER_ID
+        )
+    with pytest.raises(IntegrationError, match="not Tin's"):
+        await service.connect_google_ads(
+            project_id=PROJECT_ID, customer_id="100-217-4488", clerk_user_id=USER_ID
+        )
+
+
+@pytest.mark.asyncio
+async def test_connect_google_ads_sends_the_manager_invitation_and_records_it() -> None:
+    backend = AdsBackend()
+    service, database = ads_service(backend)
+    connection = await service.connect_google_ads(
+        project_id=PROJECT_ID, customer_id="123-456-7890", clerk_user_id=USER_ID
+    )
+    path, body, headers = backend.requests[-1]
+    assert path == f"/v25/customers/{ADS_MCC}/customerClientLinks:mutate"
+    assert body == {
+        "operation": {"create": {"clientCustomer": f"customers/{ADS_CID}", "status": "PENDING"}}
+    }
+    assert headers["login-customer-id"] == ADS_MCC
+    assert headers["authorization"] == "Bearer manager-token"
+    assert "developer-token" not in headers
+    assert connection.provider_key == ADS_PROVIDER
+    assert connection.external_account_id == ADS_CID
+    assert connection.external_account_label == "Google Ads 123-456-7890"
+    assert connection.credential_ciphertext is None
+    assert connection.configuration["link_status"] == "pending"
+    assert connection.configuration["manager_link_id"] == "555"
+    assert connection.configuration["customer_id"] == ADS_CID
+    assert connection.configuration["write_opted_in"] is True
+    receipt = database.calls[-1]
+    assert receipt["provider_key"] == ADS_PROVIDER
+    assert receipt["capability"] == "account.read"
+    assert receipt["status"] == "completed"
+    assert receipt["provider_request_id"] == "req-link"
+    assert database.activities[-1]["event_type"] == "integration_connected"
+    assert "Accept it in Google Ads" in database.activities[-1]["summary"]
+
+
+@pytest.mark.asyncio
+async def test_connect_google_ads_already_invited_falls_back_to_the_link_status() -> None:
+    backend = AdsBackend()
+    backend.link_error = ("managerLinkError", "ALREADY_MANAGED_BY_THIS_MANAGER")
+    backend.link_status = "ACTIVE"
+    service, database = ads_service(backend)
+    connection = await service.connect_google_ads(
+        project_id=PROJECT_ID, customer_id=ADS_CID, clerk_user_id=USER_ID
+    )
+    assert connection.configuration["link_status"] == "active"
+    assert connection.status == "connected"
+    statuses = [call["status"] for call in database.calls]
+    assert statuses == ["completed", "completed"]
+    assert database.calls[0]["response_summary"] == {
+        "code": "ManagerLinkError.ALREADY_MANAGED_BY_THIS_MANAGER"
+    }
+    assert backend.requests[-1][1]["query"].startswith("SELECT customer_client_link")
+
+
+@pytest.mark.asyncio
+async def test_connect_google_ads_maps_provider_refusals_to_founder_messages() -> None:
+    backend = AdsBackend()
+    backend.link_error = ("managerLinkError", "TOO_MANY_INVITES")
+    service, database = ads_service(backend)
+    with pytest.raises(IntegrationUpstreamError, match="too many open manager"):
+        await service.connect_google_ads(
+            project_id=PROJECT_ID, customer_id=ADS_CID, clerk_user_id=USER_ID
+        )
+    receipt = database.calls[-1]
+    assert receipt["status"] == "failed"
+    assert receipt["error_code"] == "ManagerLinkError.TOO_MANY_INVITES"
+    assert "secret detail" not in json.dumps(receipt, default=str)
+
+
+@pytest.mark.asyncio
+async def test_google_ads_link_status_records_acceptance_and_refusal() -> None:
+    backend = AdsBackend()
+    service, database = ads_service(backend)
+    await service.connect_google_ads(
+        project_id=PROJECT_ID, customer_id=ADS_CID, clerk_user_id=USER_ID
+    )
+    backend.link_status = "ACTIVE"
+    connection = await service.google_ads_link_status(project_id=PROJECT_ID)
+    assert connection.configuration["link_status"] == "active"
+    assert connection.configuration["manager_link_id"] == "555"
+    assert database.activities[-1]["event_type"] == "integration_configured"
+    assert "linked to Tin's manager account" in database.activities[-1]["summary"]
+    assert backend.requests[-1][0] == f"/v25/customers/{ADS_MCC}/googleAds:search"
+    backend.link_status = "REFUSED"
+    connection = await service.google_ads_link_status(project_id=PROJECT_ID)
+    assert connection.configuration["link_status"] == "refused"
+    assert connection.status == "needs_attention"
+    assert connection.last_error_code == "manager_link_refused"
+
+
+@pytest.mark.asyncio
+async def test_google_ads_health_summarises_billing_and_conversions() -> None:
+    backend = AdsBackend()
+    backend.link_status = "ACTIVE"
+    service, database = ads_service(backend)
+    await service.connect_google_ads(
+        project_id=PROJECT_ID, customer_id=ADS_CID, clerk_user_id=USER_ID
+    )
+    with pytest.raises(IntegrationAuthorizationError, match="Accept Tin's manager request"):
+        await service.google_ads_health(project_id=PROJECT_ID)
+    connection = await service.refresh_google_ads(project_id=PROJECT_ID)
+    health = connection.configuration["health"]
+    assert health["billing_approved"] is True
+    assert health["billing_statuses"] == ["APPROVED"]
+    assert health["account_status"] == "ENABLED"
+    assert health["descriptive_name"] == "Acme Ltd"
+    assert health["conversion_actions_with_data"] == 1
+    assert health["conversion_actions"][0]["name"] == "Scan started"
+    assert health["conversion_actions"][0]["conversions_30d"] == 12.0
+    assert connection.external_account_label == "Acme Ltd · 123-456-7890"
+    paths = [call[0] for call in backend.requests]
+    assert paths.count(f"/v25/customers/{ADS_CID}/googleAds:search") == 3
+    assert all(
+        call["capability"] == "account.read" and call["status"] == "completed"
+        for call in database.calls
+    )
+
+
+@pytest.mark.asyncio
+async def test_google_ads_requirements_wait_for_the_accepted_link_and_write_opt_in() -> None:
+    backend = AdsBackend()
+    service, database = ads_service(backend)
+    requirement = IntegrationRequirement(ADS_PROVIDER, ("campaigns.write",), required=True)
+    with pytest.raises(IntegrationAuthorizationError, match="Connect Google Ads"):
+        await service.ensure_requirements(project_id=PROJECT_ID, requirements=(requirement,))
+    await service.connect_google_ads(
+        project_id=PROJECT_ID, customer_id=ADS_CID, clerk_user_id=USER_ID
+    )
+    with pytest.raises(IntegrationAuthorizationError, match="Accept Tin's manager request"):
+        await service.ensure_requirements(project_id=PROJECT_ID, requirements=(requirement,))
+    backend.link_status = "ACTIVE"
+    await service.google_ads_link_status(project_id=PROJECT_ID)
+    await service.ensure_requirements(project_id=PROJECT_ID, requirements=(requirement,))
+    current = database.connections[(PROJECT_ID, ADS_PROVIDER)]
+    await database.update_integration_configuration(
+        project_id=PROJECT_ID,
+        provider_key=ADS_PROVIDER,
+        configuration={**current.configuration, "write_opted_in": False},
+    )
+    with pytest.raises(IntegrationAuthorizationError, match="explicitly enabled"):
+        await service.ensure_requirements(project_id=PROJECT_ID, requirements=(requirement,))
+    read_only = IntegrationRequirement(ADS_PROVIDER, ("campaigns.read",), required=True)
+    await service.ensure_requirements(project_id=PROJECT_ID, requirements=(read_only,))
+
+
+@pytest.mark.asyncio
+async def test_google_ads_call_receipts_reads_and_writes_for_a_run() -> None:
+    backend = AdsBackend()
+    service, database = ads_service(backend)
+    await service.connect_google_ads(
+        project_id=PROJECT_ID, customer_id=ADS_CID, clerk_user_id=USER_ID
+    )
+    with pytest.raises(IntegrationAuthorizationError, match="Accept Tin's manager request"):
+        await service.google_ads_call(
+            project_id=PROJECT_ID,
+            kind="search",
+            request={"query": "SELECT campaign.id FROM campaign"},
+            execution_key="run:read",
+            run_id=RUN_ID,
+        )
+    backend.link_status = "ACTIVE"
+    await service.google_ads_link_status(project_id=PROJECT_ID)
+    read = await service.google_ads_call(
+        project_id=PROJECT_ID,
+        kind="search",
+        request={"query": "SELECT campaign.id FROM campaign"},
+        execution_key="run:read",
+        run_id=RUN_ID,
+    )
+    assert read["customer_id"] == ADS_CID
+    assert read["rows"][0]["campaign"]["id"] == "22"
+    receipt = database.call_receipts["run:read"]
+    assert receipt.run_id == RUN_ID
+    assert receipt.capability == "campaigns.read"
+    assert receipt.status == "completed"
+    assert receipt.provider_request_id == "req-search"
+    write = await service.google_ads_call(
+        project_id=PROJECT_ID,
+        kind="mutate",
+        request={
+            "operations": [{"campaignOperation": {"create": {"name": "x"}}}],
+            "validate_only": True,
+        },
+        execution_key="run:validate",
+        run_id=RUN_ID,
+        expected_customer_id=ADS_CID,
+    )
+    assert write["results"] == [
+        {"campaignResult": {"resourceName": f"customers/{ADS_CID}/campaigns/22"}}
+    ]
+    assert backend.requests[-1][1]["validateOnly"] is True
+    assert database.call_receipts["run:validate"].capability == "campaigns.write"
+    with pytest.raises(IntegrationAuthorizationError, match="changed after this run started"):
+        await service.google_ads_call(
+            project_id=PROJECT_ID,
+            kind="search",
+            request={"query": "SELECT campaign.id FROM campaign"},
+            execution_key="run:other",
+            run_id=RUN_ID,
+            expected_customer_id="9999999999",
+        )
+    backend.mutate_error = ("policyFindingError", "POLICY_FINDING")
+    with pytest.raises(GoogleAdsCallError) as error:
+        await service.google_ads_call(
+            project_id=PROJECT_ID,
+            kind="mutate_resource",
+            request={
+                "segment": "campaigns",
+                "body": {"operations": [{"update": {"resourceName": "x"}, "updateMask": "status"}]},
+            },
+            execution_key="run:enable",
+            run_id=RUN_ID,
+        )
+    assert error.value.code == "PolicyFindingError.POLICY_FINDING"
+    failed = database.call_receipts["run:enable"]
+    assert failed.status == "failed" and failed.error_code == "PolicyFindingError.POLICY_FINDING"
+    assert failed.capability == "campaigns.write"
+
+
+@pytest.mark.asyncio
+async def test_google_ads_call_requires_the_write_opt_in() -> None:
+    backend = AdsBackend()
+    backend.link_status = "ACTIVE"
+    service, database = ads_service(backend)
+    await service.connect_google_ads(
+        project_id=PROJECT_ID, customer_id=ADS_CID, clerk_user_id=USER_ID
+    )
+    await service.google_ads_link_status(project_id=PROJECT_ID)
+    current = database.connections[(PROJECT_ID, ADS_PROVIDER)]
+    await database.update_integration_configuration(
+        project_id=PROJECT_ID,
+        provider_key=ADS_PROVIDER,
+        configuration={**current.configuration, "write_opted_in": False},
+    )
+    with pytest.raises(IntegrationAuthorizationError, match="not enabled"):
+        await service.google_ads_call(
+            project_id=PROJECT_ID,
+            kind="mutate",
+            request={"operations": [], "validate_only": True},
+            execution_key="run:validate",
+            run_id=RUN_ID,
+        )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("link_status", "expected"), [("PENDING", "CANCELED"), ("ACTIVE", "INACTIVE")]
+)
+async def test_disconnect_google_ads_ends_the_manager_link_then_deletes(
+    link_status, expected
+) -> None:
+    backend = AdsBackend()
+    backend.link_status = link_status
+    service, database = ads_service(backend)
+    await service.connect_google_ads(
+        project_id=PROJECT_ID, customer_id=ADS_CID, clerk_user_id=USER_ID
+    )
+    await service.google_ads_link_status(project_id=PROJECT_ID)
+    assert await service.disconnect(project_id=PROJECT_ID, provider_key=ADS_PROVIDER) is True
+    path, body, headers = backend.requests[-1]
+    assert path == f"/v25/customers/{ADS_MCC}/customerClientLinks:mutate"
+    assert body == {
+        "operation": {
+            "update": {
+                "resourceName": f"customers/{ADS_MCC}/customerClientLinks/{ADS_CID}~555",
+                "status": expected,
+            },
+            "updateMask": "status",
+        }
+    }
+    assert headers["login-customer-id"] == ADS_MCC
+    assert (PROJECT_ID, ADS_PROVIDER) not in database.connections
+    assert database.activities[-1]["event_type"] == "integration_disconnected"
+
+
+@pytest.mark.asyncio
+async def test_disconnect_google_ads_is_authoritative_when_google_is_down() -> None:
+    backend = AdsBackend()
+    service, database = ads_service(backend)
+    await service.connect_google_ads(
+        project_id=PROJECT_ID, customer_id=ADS_CID, clerk_user_id=USER_ID
+    )
+    backend.link_error = ("internalError", "INTERNAL_ERROR")
+
+    async def no_sleep(seconds):
+        return None
+
+    service.google_ads._sleep = no_sleep
+    assert await service.disconnect(project_id=PROJECT_ID, provider_key=ADS_PROVIDER) is True
+    assert (PROJECT_ID, ADS_PROVIDER) not in database.connections

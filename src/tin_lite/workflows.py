@@ -23,6 +23,8 @@ from tin_lite.domain import (
     CREATIVE_CHARACTER_WORKFLOW_NAME,
     EMAIL_CAMPAIGN_WORKFLOW_NAME,
     PAID_ADS_ASSESSMENT_WORKFLOW_NAME,
+    PAID_ADS_LAUNCH_WORKFLOW_NAME,
+    PAID_ADS_MONITOR_WORKFLOW_NAME,
     PROJECT_MEMORY_WORKFLOW_NAME,
     PROJECT_TASK_WORKFLOW_NAME,
     SCAN_REPORT_WORKFLOW_NAME,
@@ -920,6 +922,108 @@ class EmailCampaignWorkflow:
             raise
 
 
+@workflow.defn(name=PAID_ADS_LAUNCH_WORKFLOW_NAME)
+class PaidAdsLaunchWorkflow:
+    """Prepare, gather, draft, then one founder approval before anything is created in Google
+    Ads; apply and publish follow. A blocked launch settles with its setup note instead.
+    Only the run identifier and a one-word mode enter history."""
+
+    def __init__(self) -> None:
+        self._approved = False
+        self._stopped = False
+
+    @workflow.signal(name="approve")
+    async def approve(self) -> None:
+        self._approved = True
+
+    @workflow.signal(name="stop")
+    async def stop(self) -> None:
+        self._stopped = True
+
+    @workflow.run
+    async def run(self, run_id: str) -> None:
+        async def execute(name, *, minutes, heartbeat=None):
+            return await workflow.execute_activity(
+                name,
+                run_id,
+                start_to_close_timeout=timedelta(minutes=minutes),
+                heartbeat_timeout=timedelta(minutes=heartbeat) if heartbeat else None,
+                retry_policy=RetryPolicy(
+                    maximum_attempts=3, maximum_interval=timedelta(seconds=10)
+                ),
+            )
+
+        try:
+            await execute("paid_ads_launch_prepare", minutes=5)
+            if self._stopped:
+                return
+            await execute("paid_ads_launch_gather", minutes=10, heartbeat=3)
+            if self._stopped:
+                return
+            mode = await execute("paid_ads_launch_draft", minutes=20, heartbeat=6)
+            if mode == "setup":
+                await execute("paid_ads_launch_settle_setup", minutes=2)
+                return
+            if self._stopped:
+                return
+            await execute("paid_ads_launch_request_review", minutes=2)
+            await workflow.wait_condition(lambda: self._approved or self._stopped)
+            if self._stopped:
+                return
+            await execute("paid_ads_launch_record_approval", minutes=2)
+            await execute("paid_ads_launch_apply", minutes=20, heartbeat=5)
+            if self._stopped:
+                return
+            await execute("paid_ads_launch_publish", minutes=5)
+        except BaseException:
+            if not self._stopped:
+                await execute("paid_ads_launch_failure", minutes=2)
+                raise
+
+
+@workflow.defn(name=PAID_ADS_MONITOR_WORKFLOW_NAME)
+class PaidAdsMonitorWorkflow:
+    """Read, decide, apply the bounded automatic changes, save proposals, publish. The run
+    never waits for a person; proposals are approved outside it."""
+
+    def __init__(self) -> None:
+        self._stopped = False
+
+    @workflow.signal(name="stop")
+    async def stop(self) -> None:
+        self._stopped = True
+
+    @workflow.run
+    async def run(self, run_id: str) -> None:
+        async def execute(name, *, minutes, heartbeat=None):
+            return await workflow.execute_activity(
+                name,
+                run_id,
+                start_to_close_timeout=timedelta(minutes=minutes),
+                heartbeat_timeout=timedelta(minutes=heartbeat) if heartbeat else None,
+                retry_policy=RetryPolicy(
+                    maximum_attempts=3, maximum_interval=timedelta(seconds=10)
+                ),
+            )
+
+        try:
+            for name, minutes, heartbeat in (
+                ("paid_ads_monitor_prepare", 5, None),
+                ("paid_ads_monitor_read", 10, 3),
+                ("paid_ads_monitor_decide", 10, 4),
+                ("paid_ads_monitor_apply", 10, 3),
+                ("paid_ads_monitor_propose", 5, None),
+                ("paid_ads_monitor_publish", 10, 4),
+            ):
+                if self._stopped:
+                    return
+                await execute(name, minutes=minutes, heartbeat=heartbeat)
+        except BaseException:
+            if not self._stopped:
+                await execute("paid_ads_monitor_failure", minutes=2)
+                raise
+
+
 @workflow.defn(name="organic.keyword_plan")
 class KeywordPlanWorkflow:
     def __init__(self) -> None:
@@ -1218,6 +1322,8 @@ def registered_workflows() -> list[type]:
         OrganicAuditWorkflow,
         KeywordPlanWorkflow,
         PaidAdsAssessmentWorkflow,
+        PaidAdsLaunchWorkflow,
+        PaidAdsMonitorWorkflow,
         AnswerPageWorkflow,
         CharacterDesignWorkflow,
         CodexProcedureWorkflow,
@@ -1246,6 +1352,8 @@ def registered_workflow_implementations() -> dict[str, type]:
         "organic.audit": OrganicAuditWorkflow,
         "organic.keyword_plan": KeywordPlanWorkflow,
         PAID_ADS_ASSESSMENT_WORKFLOW_NAME: PaidAdsAssessmentWorkflow,
+        PAID_ADS_LAUNCH_WORKFLOW_NAME: PaidAdsLaunchWorkflow,
+        PAID_ADS_MONITOR_WORKFLOW_NAME: PaidAdsMonitorWorkflow,
         ANSWER_PAGE_WORKFLOW_NAME: AnswerPageWorkflow,
         CODEX_PROCEDURE_EXECUTOR: CodexProcedureWorkflow,
         WEEKLY_BRIEF_WORKFLOW_NAME: WeeklyBriefWorkflow,

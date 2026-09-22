@@ -46,6 +46,7 @@ from tin_lite.domain import (
 from tin_lite.growth_onboarding import KEY as GROWTH_ONBOARDING_KEY
 from tin_lite.growth_onboarding_control import OnboardingPickError, ensure_onboarding_approvable
 from tin_lite.integrations import (
+    ADS_PROVIDER,
     GITHUB_PROVIDER,
     GOOGLE_WORKSPACE_PROVIDER,
     GSC_PROVIDER,
@@ -65,6 +66,15 @@ from tin_lite.output_resolution import OutputResolutionError, OutputResolutionRe
 from tin_lite.paid_ads_control import (
     stop_paid_ads_assessment as stop_paid_ads_assessment_service,
 )
+from tin_lite.paid_ads_control import stop_paid_ads_launch as stop_paid_ads_launch_service
+from tin_lite.paid_ads_control import stop_paid_ads_monitor as stop_paid_ads_monitor_service
+from tin_lite.paid_ads_proposals import (
+    approve_paid_ads_proposal as approve_paid_ads_proposal_service,
+)
+from tin_lite.paid_ads_proposals import (
+    discard_paid_ads_proposal as discard_paid_ads_proposal_service,
+)
+from tin_lite.paid_ads_proposals import list_paid_ads_proposals as list_paid_ads_proposals_service
 from tin_lite.private_workflow_api import router as private_workflow_router
 from tin_lite.private_workflows import private_execution_ready, workflow_source_view
 from tin_lite.product_urls import dashboard_url
@@ -238,6 +248,105 @@ async def stop_paid_ads_assessment_run(
     except (ValueError, SideEffectConflictError) as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     return {"id": str(run.id), "status": run.status.value}
+
+
+@router.post("/api/workflows/runs/{run_id}/stop-paid-ads-launch")
+async def stop_paid_ads_launch_run(
+    run_id: UUID, request: Request, user: AuthContext = AUTHENTICATED_USER
+) -> dict:
+    try:
+        run = await stop_paid_ads_launch_service(
+            runtime=request.app.state.runtime, run_id=run_id, clerk_user_id=user.clerk_user_id
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail="run not found") from exc
+    except (ValueError, SideEffectConflictError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"id": str(run.id), "status": run.status.value}
+
+
+@router.post("/api/workflows/runs/{run_id}/stop-paid-ads-monitor")
+async def stop_paid_ads_monitor_run(
+    run_id: UUID, request: Request, user: AuthContext = AUTHENTICATED_USER
+) -> dict:
+    try:
+        run = await stop_paid_ads_monitor_service(
+            runtime=request.app.state.runtime, run_id=run_id, clerk_user_id=user.clerk_user_id
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail="run not found") from exc
+    except (ValueError, SideEffectConflictError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return {"id": str(run.id), "status": run.status.value}
+
+
+@router.get("/api/projects/{project_id}/paid-ads/proposals")
+async def list_paid_ads_proposals_route(
+    project_id: UUID, request: Request, user: AuthContext = AUTHENTICATED_USER
+) -> list[dict]:
+    try:
+        rows = await list_paid_ads_proposals_service(
+            runtime=request.app.state.runtime,
+            project_id=project_id,
+            clerk_user_id=user.clerk_user_id,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail="project not found") from exc
+    return [_proposal_view(row) for row in rows]
+
+
+@router.post("/api/paid-ads/proposals/{proposal_id}/approve")
+async def approve_paid_ads_proposal_route(
+    proposal_id: UUID, request: Request, user: AuthContext = AUTHENTICATED_USER
+) -> dict:
+    try:
+        row = await approve_paid_ads_proposal_service(
+            runtime=request.app.state.runtime,
+            proposal_id=proposal_id,
+            clerk_user_id=user.clerk_user_id,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail="proposal not found") from exc
+    except (RuntimeError, ValueError, SideEffectConflictError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return _proposal_view(row)
+
+
+@router.post("/api/paid-ads/proposals/{proposal_id}/discard")
+async def discard_paid_ads_proposal_route(
+    proposal_id: UUID, request: Request, user: AuthContext = AUTHENTICATED_USER
+) -> dict:
+    try:
+        row = await discard_paid_ads_proposal_service(
+            runtime=request.app.state.runtime,
+            proposal_id=proposal_id,
+            clerk_user_id=user.clerk_user_id,
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=404, detail="proposal not found") from exc
+    except (RuntimeError, ValueError, SideEffectConflictError) as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    return _proposal_view(row)
+
+
+def _proposal_view(row: dict) -> dict:
+    return {
+        "id": str(row["id"]),
+        "project_id": str(row["project_id"]),
+        "campaign_run_id": str(row["campaign_run_id"]),
+        "monitor_run_id": str(row["monitor_run_id"]),
+        "number": row["proposal_number"],
+        "kind": row["kind"],
+        "status": row["status"],
+        "previous": row["previous"],
+        "proposed": row["proposed"],
+        "rationale": row["rationale"],
+        "review_path": row["review_path"],
+        "review_commit_sha": row.get("review_commit_sha"),
+        "requested_at": row["requested_at"].isoformat() if row.get("requested_at") else None,
+        "reviewed_at": row["reviewed_at"].isoformat() if row.get("reviewed_at") else None,
+        "error_code": row.get("error_code"),
+    }
 
 
 @router.post("/api/workflows/runs/{run_id}/stop-keyword-plan")
@@ -1108,6 +1217,12 @@ class IntegrationSelection(BaseModel):
     option_id: str = Field(min_length=1, max_length=500)
 
 
+class GoogleAdsLinkRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    customer_id: str = Field(min_length=10, max_length=14)
+
+
 @router.api_route(
     "/", methods=["GET", "HEAD"], response_class=HTMLResponse, include_in_schema=False
 )
@@ -1580,11 +1695,60 @@ async def list_integration_options(
             raise IntegrationAuthorizationError(
                 "Google Workspace connects an account and has no selectable property"
             )
+        elif provider_key == ADS_PROVIDER:
+            raise IntegrationAuthorizationError(
+                "Google Ads links one account by customer id and has no selectable property"
+            )
         else:
             raise IntegrationAuthorizationError("unknown integration provider")
     except IntegrationError as exc:
         raise _integration_http_error(exc) from exc
     return [IntegrationOptionView.model_validate(item, from_attributes=True) for item in options]
+
+
+@router.post(
+    "/api/projects/{project_id}/integrations/ads.google/link",
+    response_model=IntegrationView,
+)
+async def link_google_ads_account(
+    project_id: UUID,
+    payload: GoogleAdsLinkRequest,
+    request: Request,
+    user: AuthContext = AUTHENTICATED_USER,
+) -> IntegrationView:
+    """Record the founder's Google Ads customer id and send Tin's manager invitation."""
+    await _require_project_access(project_id, request, user)
+    service = request.app.state.runtime.integrations
+    try:
+        connection = await service.connect_google_ads(
+            project_id=project_id,
+            customer_id=payload.customer_id,
+            clerk_user_id=user.clerk_user_id,
+        )
+    except IntegrationError as exc:
+        raise _integration_http_error(exc) from exc
+    definition = next(item for item in registered_integrations() if item.key == ADS_PROVIDER)
+    return _integration_view(definition, connection, configured=True)
+
+
+@router.post(
+    "/api/projects/{project_id}/integrations/ads.google/refresh",
+    response_model=IntegrationView,
+)
+async def refresh_google_ads_account(
+    project_id: UUID,
+    request: Request,
+    user: AuthContext = AUTHENTICATED_USER,
+) -> IntegrationView:
+    """Re-read the manager link, then billing and conversion health once it is active."""
+    await _require_project_access(project_id, request, user)
+    service = request.app.state.runtime.integrations
+    try:
+        connection = await service.refresh_google_ads(project_id=project_id)
+    except IntegrationError as exc:
+        raise _integration_http_error(exc) from exc
+    definition = next(item for item in registered_integrations() if item.key == ADS_PROVIDER)
+    return _integration_view(definition, connection, configured=True)
 
 
 @router.put(

@@ -533,7 +533,7 @@ def test_definition_pins_the_contract_and_the_assets_stay_consistent():
     } <= set(properties)
 
     programs = plan.PROGRAMS["programs"]
-    providers = {"infra.github", "workspace.google", "analytics.gsc"}
+    providers = {"infra.github", "workspace.google", "analytics.gsc", "ads.google"}
     assert len(programs) == 15 and len({row["id"] for row in programs}) == 15
     for row in programs:
         assert row["tin"]["coverage"] in {"full", "partial", "none"}

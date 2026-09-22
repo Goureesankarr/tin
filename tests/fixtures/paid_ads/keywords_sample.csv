@@ -1,0 +1,7 @@
+id,keyword,intent,relevance,volume,cpc,low_bid,high_bid,competition_index,cluster,gsc_clicks,gsc_position
+kw_api,imessage api,bofu,3,720,27.8,10.0,30.5,61,c1,68,7.0
+kw_openclaw,openclaw imessage,captive,3,590,,0.0,0.0,2,c2,,
+kw_business,imessage for business,mofu,2,320,8.0,8.4,36.0,58,c1,,
+kw_bot,imessage bot,mofu,2,90,4.0,4.0,10.1,25,c3,,
+kw_alt,sendblue alternative,brand_competitor,2,50,10.0,10.1,58.2,68,c3,,
+kw_android,imessage on android,irrelevant,0,15000,0.5,0.5,2.0,5,,,

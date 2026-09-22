@@ -218,6 +218,12 @@ async def access_needs(
             "email sends need separate approval.",
             "Confirm the selected workflow needs a Google mailbox before connecting it.",
         ),
+        "ads.google": (
+            "Launch and look after one approved Google Search campaign in the founder's "
+            "own Ads account.",
+            "Ask for the ten-digit customer id; the founder accepts Tin's manager request "
+            "inside Google Ads.",
+        ),
     }
     needs = []
     for provider in registered_integrations():
@@ -241,13 +247,23 @@ async def access_needs(
                 "permissions": provider.access_label,
                 "resource_selection": selection,
                 "estimated_setup": "about one minute in the browser",
-                "connect": {
-                    "name": "start_integration_connection",
-                    "arguments": {
-                        "project_id": str(project_id),
-                        "provider_key": provider.key,
-                    },
-                },
+                "connect": (
+                    {
+                        "name": "connect_google_ads",
+                        "arguments": {
+                            "project_id": str(project_id),
+                            "customer_id": "<ten-digit customer id>",
+                        },
+                    }
+                    if provider.key == "ads.google"
+                    else {
+                        "name": "start_integration_connection",
+                        "arguments": {
+                            "project_id": str(project_id),
+                            "provider_key": provider.key,
+                        },
+                    }
+                ),
             }
         )
     return needs

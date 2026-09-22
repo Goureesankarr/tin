@@ -47,7 +47,44 @@ logger = logging.getLogger(__name__)
 GSC_PROVIDER = "analytics.gsc"
 GITHUB_PROVIDER = "infra.github"
 GOOGLE_WORKSPACE_PROVIDER = "workspace.google"
-PROVIDER_KEYS = frozenset({GSC_PROVIDER, GITHUB_PROVIDER, GOOGLE_WORKSPACE_PROVIDER})
+ADS_PROVIDER = "ads.google"
+PROVIDER_KEYS = frozenset({GSC_PROVIDER, GITHUB_PROVIDER, GOOGLE_WORKSPACE_PROVIDER, ADS_PROVIDER})
+ADS_CAPABILITIES = ("account.read", "campaigns.read", "campaigns.write")
+# Google's ManagerLinkStatus values, lower-cased for the connection's configuration.
+ADS_LINK_STATES = {
+    "ACTIVE": "active",
+    "PENDING": "pending",
+    "REFUSED": "refused",
+    "CANCELED": "canceled",
+    "INACTIVE": "inactive",
+}
+ADS_LINK_MESSAGES = {
+    "ManagerLinkError.TOO_MANY_INVITES": (
+        "Google Ads refused the invitation: this account already has too many open manager "
+        "invitations. Decline an old one in Google Ads, then try again."
+    ),
+    "ManagerLinkError.CLIENT_HAS_NO_ADMIN_USER": (
+        "Google Ads refused the invitation: the account has no admin user to accept it."
+    ),
+    "ManagerLinkError.ACCOUNTS_NOT_COMPATIBLE_FOR_LINKING": (
+        "Google Ads refused the invitation: that account cannot be linked to a manager account."
+    ),
+    "ManagerLinkError.TOO_MANY_ACCOUNTS": (
+        "Tin's manager account cannot take another client account right now."
+    ),
+    "ManagerLinkError.SUSPENDED_ACCOUNT_CANNOT_ADD_CLIENTS": (
+        "Tin's manager account cannot send invitations right now."
+    ),
+    "RequestError.INVALID_CUSTOMER_ID": "That is not a Google Ads customer id.",
+    "AuthorizationError.USER_PERMISSION_DENIED": (
+        "Tin's manager account is not allowed to invite that customer id."
+    ),
+}
+ADS_ALREADY_LINKED = {
+    "ManagerLinkError.ALREADY_INVITED_BY_THIS_MANAGER",
+    "ManagerLinkError.ALREADY_MANAGED_BY_THIS_MANAGER",
+    "ManagerLinkError.ALREADY_MANAGED_IN_HIERARCHY",
+}
 GOOGLE_SCOPE = "https://www.googleapis.com/auth/webmasters.readonly"
 GOOGLE_IDENTITY_SCOPES = frozenset({"openid", "email", "profile"})
 WORKSPACE_CAPABILITY_SCOPES = {
@@ -97,6 +134,14 @@ class GitHubInstallationChoiceError(IntegrationAuthorizationError):
     def __init__(self, message: str, *, choices: list[dict[str, Any]], project_id: UUID) -> None:
         super().__init__(message)
         self.choices, self.project_id = choices, project_id
+
+
+class GoogleAdsCallError(IntegrationUpstreamError):
+    """A Google Ads request failed; `code` is the opaque error code, never provider text."""
+
+    def __init__(self, code: str) -> None:
+        super().__init__("Google Ads did not accept the request.")
+        self.code = code
 
 
 class IntegrationDeliveryUnknownError(IntegrationUpstreamError):
@@ -242,6 +287,18 @@ def registered_integrations() -> tuple[IntegrationDefinition, ...]:
             capabilities=tuple(WORKSPACE_CAPABILITY_SCOPES),
             unlocks=("Email shortlist", "Approved email campaigns"),
         ),
+        IntegrationDefinition(
+            key=ADS_PROVIDER,
+            name="Google Ads",
+            badge="GA",
+            description=(
+                "Link your Google Ads account to Tin's manager account so Tin can launch "
+                "and look after one Search campaign you approve."
+            ),
+            access_label="Campaign read + write through Tin's manager account",
+            capabilities=ADS_CAPABILITIES,
+            unlocks=("Google Ads launch", "Google Ads monitor"),
+        ),
     )
 
 
@@ -362,11 +419,13 @@ class IntegrationService:
         database: Database,
         settings: Settings,
         client: httpx.AsyncClient | None = None,
+        google_ads: Any = None,
     ) -> None:
         self._database = database
         self._settings = settings
         self._client = client or httpx.AsyncClient(timeout=30.0)
         self._owns_client = client is None
+        self._google_ads = google_ads
         self._cipher = (
             CredentialCipher(settings.integration_credential_key.get_secret_value())
             if settings.integration_credential_key is not None
@@ -407,6 +466,13 @@ class IntegrationService:
                 self._cipher
                 and self._settings.google_oauth_client_id
                 and self._settings.google_oauth_client_secret
+            )
+        if provider_key == ADS_PROVIDER:
+            return bool(
+                self._settings.google_oauth_client_id
+                and self._settings.google_oauth_client_secret
+                and getattr(self._settings, "google_ads_manager_customer_id", None)
+                and getattr(self._settings, "google_ads_manager_refresh_token", None)
             )
         return bool(
             self._settings.github_app_slug
@@ -484,6 +550,22 @@ class IntegrationService:
                 ):
                     raise IntegrationAuthorizationError(
                         "Google Workspace needs additional permission before starting this workflow"
+                    )
+                continue
+            if requirement.provider_key == ADS_PROVIDER:
+                link = connection.configuration.get("link_status")
+                if link != "active":
+                    raise IntegrationAuthorizationError(
+                        "Accept Tin's manager request in Google Ads before starting this workflow"
+                        if link == "pending"
+                        else "Reconnect Google Ads before starting this workflow"
+                    )
+                if (
+                    "campaigns.write" in requirement.capabilities
+                    and connection.configuration.get("write_opted_in") is not True
+                ):
+                    raise IntegrationAuthorizationError(
+                        "Google Ads campaign changes must be explicitly enabled for this workflow"
                     )
                 continue
             if any(
@@ -3066,6 +3148,12 @@ class IntegrationService:
 
     async def disconnect(self, *, project_id: UUID, provider_key: str) -> bool:
         definition = self._definition(provider_key)
+        if provider_key == ADS_PROVIDER:
+            connection = await self._database.get_integration_connection(
+                project_id=project_id, provider_key=provider_key
+            )
+            if connection is not None:
+                await self._cancel_google_ads_link(connection)
         if provider_key in {GSC_PROVIDER, GOOGLE_WORKSPACE_PROVIDER}:
             connection = await self._database.get_integration_connection(
                 project_id=project_id, provider_key=provider_key
@@ -3195,6 +3283,383 @@ class IntegrationService:
         if not isinstance(first, dict):
             return None
         return _gmail_send_result(first)
+
+    # ------------------------------------------------------------------ Google Ads
+
+    @property
+    def google_ads(self):
+        """Tin's manager-account client; built once from settings, injectable for tests."""
+        if self._google_ads is None:
+            from tin_lite.google_ads import api_from_settings
+
+            self._google_ads = api_from_settings(self._settings)
+        if self._google_ads is None:
+            raise IntegrationNotConfiguredError(
+                "Google Ads is not configured on this Tin deployment"
+            )
+        return self._google_ads
+
+    async def connect_google_ads(
+        self, *, project_id: UUID, customer_id: str, clerk_user_id: str
+    ) -> IntegrationConnection:
+        """Record the founder's account and send Tin's manager invitation to it.
+
+        Nothing about the founder's Google identity is stored; accepting the invitation inside
+        their own Google Ads account is the proof of ownership.
+        """
+        self._require_configured(ADS_PROVIDER)
+        from tin_lite.google_ads import GoogleAdsError
+        from tin_lite.google_ads_requests import customer_id as normalize_customer_id
+
+        try:
+            account = normalize_customer_id(customer_id)
+        except ValueError as exc:
+            raise IntegrationError(
+                "Enter the ten-digit Google Ads customer id, for example 123-456-7890"
+            ) from exc
+        manager = normalize_customer_id(self._settings.google_ads_manager_customer_id)
+        if account == manager:
+            raise IntegrationError("Enter your own Google Ads customer id, not Tin's")
+        existing = await self._database.get_integration_connection(
+            project_id=project_id, provider_key=ADS_PROVIDER
+        )
+        if (
+            existing is not None
+            and existing.external_account_id not in {None, account}
+            and existing.configuration.get("link_status") == "active"
+        ):
+            raise IntegrationAuthorizationError(
+                "Disconnect the linked Google Ads account before connecting another one"
+            )
+        configuration = {
+            **(dict(existing.configuration) if existing is not None else {}),
+            "customer_id": account,
+            "manager_customer_id": manager,
+            "link_status": "pending",
+            "manager_link_id": None,
+            "write_opted_in": True,
+            "health": {},
+            "invited_at": datetime.now(UTC).isoformat(),
+        }
+        connection = await self._database.upsert_integration_connection(
+            project_id=project_id,
+            provider_key=ADS_PROVIDER,
+            external_account_id=account,
+            external_account_label=f"Google Ads {_format_customer_id(account)}",
+            configuration=configuration,
+            credential_ciphertext=None,
+            credential_key_version=None,
+            connected_by_clerk_user_id=clerk_user_id,
+        )
+        execution_key = f"integration:{uuid4()}"
+        fingerprint = _sha256(f"{project_id}:{ADS_PROVIDER}:link:{account}")
+        try:
+            result = await self.google_ads.client_link(account)
+        except GoogleAdsError as exc:
+            await self._record_ads_call(
+                execution_key=execution_key,
+                connection=connection,
+                capability="account.read",
+                fingerprint=fingerprint,
+                status="completed" if exc.code in ADS_ALREADY_LINKED else "failed",
+                response_summary={"code": exc.code},
+                error_code=None if exc.code in ADS_ALREADY_LINKED else exc.code[:120],
+            )
+            if exc.code in ADS_ALREADY_LINKED:
+                return await self.google_ads_link_status(project_id=project_id)
+            raise IntegrationUpstreamError(
+                ADS_LINK_MESSAGES.get(
+                    exc.code,
+                    "Google Ads could not send the manager invitation. Check the customer id "
+                    "and try again.",
+                )
+            ) from None
+        await self._record_ads_call(
+            execution_key=execution_key,
+            connection=connection,
+            capability="account.read",
+            fingerprint=fingerprint,
+            status="completed",
+            response_summary={"resource_name": result.get("resource_name")},
+            provider_request_id=result.get("provider_request_id"),
+        )
+        configuration["manager_link_id"] = _manager_link_id(result.get("resource_name"))
+        updated = await self._database.update_integration_configuration(
+            project_id=project_id, provider_key=ADS_PROVIDER, configuration=configuration
+        )
+        await self._record_activity(
+            updated,
+            "integration_connected",
+            f"Google Ads invitation sent to {_format_customer_id(account)}. Accept it in "
+            "Google Ads under Admin, Access and security, Managers.",
+            suffix=f"{account}:{configuration['invited_at']}",
+        )
+        return updated
+
+    async def google_ads_link_status(self, *, project_id: UUID) -> IntegrationConnection:
+        """Read the manager link from Tin's side and record the founder's answer."""
+        from tin_lite.google_ads import GoogleAdsError
+        from tin_lite.google_ads_requests import QUERIES
+
+        connection = await self._connection(project_id, ADS_PROVIDER)
+        account = _ads_account(connection)
+        manager = connection.configuration.get("manager_customer_id") or ""
+        execution_key = f"integration:{uuid4()}"
+        fingerprint = _sha256(f"{project_id}:{ADS_PROVIDER}:link_status:{account}")
+        try:
+            result = await self.google_ads.search(manager, QUERIES["client_link_status"](account))
+        except GoogleAdsError as exc:
+            await self._record_ads_call(
+                execution_key=execution_key,
+                connection=connection,
+                capability="account.read",
+                fingerprint=fingerprint,
+                status="failed",
+                error_code=exc.code[:120],
+            )
+            raise IntegrationUpstreamError(
+                "Google Ads did not answer the link status check. Try again in a minute."
+            ) from None
+        rows = result.get("rows") or []
+        raw = None
+        for row in rows:
+            link = row.get("customerClientLink") if isinstance(row, dict) else None
+            if isinstance(link, dict) and isinstance(link.get("status"), str):
+                raw = link
+                # Prefer an active link over stale refused or canceled rows.
+                if link["status"] == "ACTIVE":
+                    break
+        status = ADS_LINK_STATES.get(raw["status"], "pending") if raw else "missing"
+        await self._record_ads_call(
+            execution_key=execution_key,
+            connection=connection,
+            capability="account.read",
+            fingerprint=fingerprint,
+            status="completed",
+            response_summary={"link_status": status, "rows": len(rows)},
+            provider_request_id=result.get("provider_request_id"),
+        )
+        previous = connection.configuration.get("link_status")
+        configuration = {
+            **dict(connection.configuration),
+            "link_status": status,
+            "manager_link_id": (
+                str(raw.get("managerLinkId"))
+                if raw and raw.get("managerLinkId") is not None
+                else connection.configuration.get("manager_link_id")
+            ),
+            "link_checked_at": datetime.now(UTC).isoformat(),
+        }
+        updated = await self._database.update_integration_configuration(
+            project_id=project_id, provider_key=ADS_PROVIDER, configuration=configuration
+        )
+        if status in {"refused", "canceled", "inactive", "missing"}:
+            await self._database.mark_integration_attention(
+                project_id=project_id,
+                provider_key=ADS_PROVIDER,
+                error_code=f"manager_link_{status}",
+            )
+            updated = await self._connection(project_id, ADS_PROVIDER)
+        if status == "active" and previous != "active":
+            await self._record_activity(
+                updated,
+                "integration_configured",
+                f"Google Ads account {_format_customer_id(account)} is linked to Tin's manager "
+                "account.",
+                suffix=f"{account}:active",
+            )
+        return updated
+
+    async def google_ads_health(self, *, project_id: UUID) -> IntegrationConnection:
+        """Account status, billing and whether any conversion action records data."""
+        from tin_lite.google_ads import GoogleAdsError
+        from tin_lite.google_ads_requests import QUERIES
+
+        connection = await self._connection(project_id, ADS_PROVIDER)
+        if connection.configuration.get("link_status") != "active":
+            raise IntegrationAuthorizationError(
+                "Accept Tin's manager request in Google Ads before checking the account"
+            )
+        account = _ads_account(connection)
+        reads: dict[str, list] = {}
+        for name, query in (
+            ("account", QUERIES["account"]()),
+            ("billing", QUERIES["billing"]()),
+            ("conversions", QUERIES["conversion_actions"](30)),
+        ):
+            execution_key = f"integration:{uuid4()}"
+            fingerprint = _sha256(f"{project_id}:{ADS_PROVIDER}:health:{name}:{account}")
+            try:
+                result = await self.google_ads.search(account, query)
+            except GoogleAdsError as exc:
+                await self._record_ads_call(
+                    execution_key=execution_key,
+                    connection=connection,
+                    capability="account.read",
+                    fingerprint=fingerprint,
+                    status="failed",
+                    error_code=exc.code[:120],
+                )
+                if exc.code.startswith("AuthorizationError."):
+                    raise IntegrationAuthorizationError(
+                        "Google Ads has not granted Tin's manager account access yet"
+                    ) from None
+                raise IntegrationUpstreamError(
+                    "Google Ads did not answer the account check. Try again in a minute."
+                ) from None
+            reads[name] = result.get("rows") or []
+            await self._record_ads_call(
+                execution_key=execution_key,
+                connection=connection,
+                capability="account.read",
+                fingerprint=fingerprint,
+                status="completed",
+                response_summary={"rows": len(reads[name])},
+                provider_request_id=result.get("provider_request_id"),
+            )
+        health = ads_health_summary(reads)
+        configuration = {**dict(connection.configuration), "health": health}
+        return await self._database.update_integration_configuration(
+            project_id=project_id,
+            provider_key=ADS_PROVIDER,
+            configuration=configuration,
+            external_account_label=(
+                f"{health['descriptive_name']} · {_format_customer_id(account)}"
+                if health.get("descriptive_name")
+                else None
+            ),
+        )
+
+    async def refresh_google_ads(self, *, project_id: UUID) -> IntegrationConnection:
+        connection = await self.google_ads_link_status(project_id=project_id)
+        if connection.configuration.get("link_status") == "active":
+            connection = await self.google_ads_health(project_id=project_id)
+        return connection
+
+    async def google_ads_account(self, *, project_id: UUID) -> str:
+        """The linked customer id for a run; refuses unless the manager link is active."""
+        connection = await self._connection(project_id, ADS_PROVIDER)
+        if connection.status != "connected":
+            raise IntegrationAuthorizationError("Google Ads needs attention")
+        if connection.configuration.get("link_status") != "active":
+            raise IntegrationAuthorizationError("Accept Tin's manager request in Google Ads first")
+        return _ads_account(connection)
+
+    async def google_ads_call(
+        self,
+        *,
+        project_id: UUID,
+        kind: str,
+        request: dict[str, Any],
+        execution_key: str,
+        run_id: UUID | None = None,
+        expected_customer_id: str | None = None,
+    ) -> dict[str, Any]:
+        """One receipted Google Ads request for a run: search, bulk mutate or resource mutate.
+
+        `kind` is search | mutate | mutate_resource; `request` carries `query`, or `operations`
+        and `validate_only`, or `segment` and `body`. Writes require the connection's explicit
+        opt-in. Provider failures surface as GoogleAdsCallError with the opaque error code so
+        the owning receipt can keep it; nothing else from the provider leaves this method.
+        """
+        from tin_lite.google_ads import GoogleAdsError
+
+        connection = await self._connection(project_id, ADS_PROVIDER)
+        account = await self.google_ads_account(project_id=project_id)
+        if expected_customer_id is not None and account != expected_customer_id:
+            raise IntegrationAuthorizationError(
+                "The linked Google Ads account changed after this run started"
+            )
+        write = kind in {"mutate", "mutate_resource"}
+        if write and connection.configuration.get("write_opted_in") is not True:
+            raise IntegrationAuthorizationError("Google Ads campaign changes are not enabled")
+        capability = "campaigns.write" if write else "campaigns.read"
+        fingerprint = _sha256(_canonical_json({"kind": kind, "account": account, **request}))
+        try:
+            if kind == "search":
+                result = await self.google_ads.search(account, request["query"])
+            elif kind == "mutate":
+                result = await self.google_ads.mutate(
+                    account,
+                    request["operations"],
+                    validate_only=bool(request.get("validate_only", False)),
+                )
+            elif kind == "mutate_resource":
+                result = await self.google_ads.mutate_resource(
+                    account, request["segment"], request["body"]
+                )
+            else:
+                raise IntegrationError("unknown Google Ads request kind")
+        except GoogleAdsError as exc:
+            await self._record_ads_call(
+                execution_key=execution_key,
+                run_id=run_id,
+                connection=connection,
+                capability=capability,
+                fingerprint=fingerprint,
+                status="failed",
+                error_code=exc.code[:120],
+            )
+            raise GoogleAdsCallError(exc.code) from None
+        await self._record_ads_call(
+            execution_key=execution_key,
+            run_id=run_id,
+            connection=connection,
+            capability=capability,
+            fingerprint=fingerprint,
+            status="completed",
+            response_summary={
+                "rows": len(result.get("rows") or []),
+                "results": len(result.get("results") or []),
+            },
+            provider_request_id=result.get("provider_request_id"),
+        )
+        return {**result, "customer_id": account}
+
+    async def _cancel_google_ads_link(self, connection: IntegrationConnection) -> None:
+        """Best effort: the local disconnect is authoritative even when Google is down."""
+        link = connection.configuration.get("link_status")
+        manager_link_id = connection.configuration.get("manager_link_id")
+        if link not in {"pending", "active"} or not manager_link_id:
+            return
+        try:
+            await self.google_ads.client_link_update(
+                _ads_account(connection),
+                str(manager_link_id),
+                "CANCELED" if link == "pending" else "INACTIVE",
+            )
+        except Exception:
+            logger.warning(
+                "Google Ads manager link could not be ended",
+                extra={"project_id": str(connection.project_id)},
+            )
+
+    async def _record_ads_call(
+        self,
+        *,
+        execution_key: str,
+        connection: IntegrationConnection,
+        capability: str,
+        fingerprint: str,
+        status: str,
+        run_id: UUID | None = None,
+        response_summary: dict[str, Any] | None = None,
+        provider_request_id: str | None = None,
+        error_code: str | None = None,
+    ) -> None:
+        await self._database.record_integration_call(
+            execution_key=execution_key,
+            project_id=connection.project_id,
+            run_id=run_id,
+            connection_id=connection.id,
+            provider_key=ADS_PROVIDER,
+            capability=capability,
+            request_fingerprint=fingerprint,
+            status=status,
+            response_summary=response_summary,
+            provider_request_id=provider_request_id,
+            error_code=error_code,
+        )
 
     async def _google_access_token(self, connection: IntegrationConnection) -> str:
         if connection.credential_ciphertext is None or self._cipher is None:
@@ -3477,6 +3942,83 @@ class IntegrationService:
         if definition is None:
             raise IntegrationError("unknown integration provider")
         return definition
+
+
+def _format_customer_id(value: str) -> str:
+    return f"{value[:3]}-{value[3:6]}-{value[6:]}" if len(value) == 10 else value
+
+
+def _ads_account(connection: IntegrationConnection) -> str:
+    account = connection.configuration.get("customer_id") or connection.external_account_id
+    if not isinstance(account, str) or not account.isdigit() or len(account) != 10:
+        raise IntegrationAuthorizationError("Google Ads is not connected to an account")
+    return account
+
+
+def _manager_link_id(resource_name: Any) -> str | None:
+    if not isinstance(resource_name, str) or "~" not in resource_name:
+        return None
+    tail = resource_name.rsplit("~", 1)[-1]
+    return tail if tail.isdigit() else None
+
+
+def ads_health_summary(reads: dict[str, list]) -> dict[str, Any]:
+    """Bounded facts from the account, billing and conversion-action queries."""
+
+    def first(rows, key):
+        for row in rows:
+            value = row.get(key) if isinstance(row, dict) else None
+            if isinstance(value, dict):
+                return value
+        return {}
+
+    customer = first(reads.get("account") or [], "customer")
+    tracking = customer.get("conversionTrackingSetting") or {}
+    billing_statuses = sorted(
+        {
+            str((row.get("billingSetup") or {}).get("status"))
+            for row in reads.get("billing") or []
+            if isinstance(row, dict) and isinstance(row.get("billingSetup"), dict)
+        }
+    )
+    actions = []
+    for row in reads.get("conversions") or []:
+        if not isinstance(row, dict) or not isinstance(row.get("conversionAction"), dict):
+            continue
+        action = row["conversionAction"]
+        metrics = row.get("metrics") or {}
+        try:
+            conversions = float(metrics.get("allConversions") or 0)
+        except (TypeError, ValueError):
+            conversions = 0.0
+        actions.append(
+            {
+                "resource_name": action.get("resourceName"),
+                "id": str(action.get("id") or ""),
+                "name": str(action.get("name") or "")[:120],
+                "category": action.get("category"),
+                "status": action.get("status"),
+                "type": action.get("type"),
+                "primary_for_goal": bool(action.get("primaryForGoal")),
+                "conversions_30d": conversions,
+            }
+        )
+    actions.sort(key=lambda item: -item["conversions_30d"])
+    return {
+        "checked_at": datetime.now(UTC).isoformat(),
+        "descriptive_name": str(customer.get("descriptiveName") or "")[:120],
+        "account_status": customer.get("status"),
+        "currency_code": customer.get("currencyCode"),
+        "time_zone": customer.get("timeZone"),
+        "auto_tagging_enabled": bool(customer.get("autoTaggingEnabled")),
+        "conversion_tracking_status": tracking.get("conversionTrackingStatus"),
+        "accepted_customer_data_terms": bool(tracking.get("acceptedCustomerDataTerms")),
+        "conversion_tracking_id": str(tracking.get("conversionTrackingId") or ""),
+        "billing_statuses": billing_statuses,
+        "billing_approved": "APPROVED" in billing_statuses,
+        "conversion_actions": actions[:50],
+        "conversion_actions_with_data": sum(1 for a in actions if a["conversions_30d"] >= 1),
+    }
 
 
 def _test_identity_context(project_id: UUID, identity_id: UUID) -> str:
