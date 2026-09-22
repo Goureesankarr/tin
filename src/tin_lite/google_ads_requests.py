@@ -321,6 +321,9 @@ def campaign_bundle(plan: dict, *, customer_id: str) -> list[dict]:
         seen_groups.add(group_name)
         rn = resource("adGroups", ids.take())
         group_rns.append((rn, group))
+        group_status = group.get("status", "ENABLED")
+        if group_status not in {"ENABLED", "PAUSED"}:
+            raise ValueError("An ad group is ENABLED or PAUSED.")
         ops.append(
             {
                 "adGroupOperation": {
@@ -328,7 +331,7 @@ def campaign_bundle(plan: dict, *, customer_id: str) -> list[dict]:
                         "resourceName": rn,
                         "name": group_name,
                         "campaign": campaign_rn,
-                        "status": "ENABLED",
+                        "status": group_status,
                         "type": "SEARCH_STANDARD",
                     }
                 }

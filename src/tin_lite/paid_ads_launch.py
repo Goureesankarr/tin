@@ -94,6 +94,9 @@ LIMITS = {
 ACRONYMS = {"AI", "API", "SEO", "CRM", "B2B", "B2C", "SAAS", "IOS", "SMS", "PDF", "USD", "UK"}
 SUPERLATIVES = ("click here", "best", "#1", "no.1", "number one", "guaranteed", "cheapest")
 TRACKING_TEMPLATE = "{lpurl}?utm_source=google&utm_medium=cpc&utm_campaign={campaignid}"
+# The assessment sometimes shapes a group it wants held back until there is purchase
+# evidence; the words in its name are the only signal, so such a group is created paused.
+HOLD = re.compile(r"\b(hold|pending|later|not yet|phase\s*(2|two))\b", re.I)
 COUNTRY_NAMES = {
     "united states": "US",
     "usa": "US",
@@ -510,9 +513,11 @@ def plan_skeleton(
             keywords.append({"id": kid, "text": text, "match_type": match_type})
             chosen.append(row)
         if keywords:
+            group_name = str(group.get("name") or f"Group {len(groups) + 1}")[:60]
             groups.append(
                 {
-                    "name": str(group.get("name") or f"Group {len(groups) + 1}")[:60],
+                    "name": group_name,
+                    "status": "PAUSED" if HOLD.search(group_name) else "ENABLED",
                     "match_type": match_type,
                     "keywords": keywords,
                     "headlines": [],
@@ -1055,7 +1060,8 @@ def render_plan(plan: dict, brief: dict, assessment: dict, inputs: dict) -> dict
             f"[{k['text']}]" if match == "exact" else f'"{k["text"]}"' for k in group["keywords"]
         )
         lines += [
-            f"### {_md(group['name'])} ({match} match, {len(group['keywords'])} keywords)",
+            f"### {_md(group['name'])} ({match} match, {len(group['keywords'])} keywords"
+            + (", created paused)" if group.get("status") == "PAUSED" else ")"),
             "",
             f"Keywords: {terms}",
             "",

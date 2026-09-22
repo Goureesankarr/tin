@@ -46,7 +46,8 @@ last thirty days) and the landing page:
 `plan_skeleton()` decides everything code can: the campaign name carrying a deterministic
 marker, the budget, the click ceiling (a tenth of the daily budget or 1.2 times the median high
 bid, whichever is lower), the markets, the landing page, the ad groups with exact and phrase
-keywords from `keywords.csv` (never broad), and the shared negative list from the assessment,
+keywords from `keywords.csv` (never broad; a group the assessment named as held back, such as
+"pending purchase evidence", is created paused), and the shared negative list from the assessment,
 the starter list in `paid_ads_launch_assets/negatives.json` and the irrelevant keywords. Model
 steps then write twelve headlines and four descriptions per ad group, sitelinks and callouts
 (`paid-ads-launch-copy-v1`, `gpt-6-astra`), expand the negative themes and write the founder

@@ -587,3 +587,46 @@ def test_renders_stay_readable_and_within_limits():
         assert 0 < len(content.encode()) <= limits[name]
     assert launch.summary_line("ready", plan).startswith("Google Ads campaign live")
     assert launch.summary_line("needs_tracking").startswith("Install tracking")
+
+
+def test_plan_skeleton_creates_held_back_groups_paused():
+    data = assessment()
+    data["campaign"]["ad_groups"][0]["name"] = "Buyer terms — hold pending purchase evidence"
+    plan = launch.plan_skeleton(
+        assessment=data,
+        keywords_csv=keywords_csv(),
+        inputs=inputs(),
+        account={"customer": {}},
+        marker=MARKER,
+        today=TODAY,
+    )
+    statuses = {g["name"]: g["status"] for g in plan["ad_groups"]}
+    assert statuses["Buyer terms — hold pending purchase evidence"] == "PAUSED"
+    assert "ENABLED" in statuses.values()
+    text = launch.render_plan(
+        launch.merge_copy(
+            plan,
+            good_copy(
+                {
+                    **plan,
+                    "ad_groups": [
+                        {
+                            "name": g["name"],
+                            "keywords": [{"text": k["text"]} for k in g["keywords"]],
+                        }
+                        for g in plan["ad_groups"]
+                    ],
+                    "landing_page": plan["landing_page"],
+                }
+            ),
+        ),
+        {
+            "summary": "s",
+            "what_tin_will_do": ["a"],
+            "what_tin_will_not_do": ["b"],
+            "watch_for": ["c"],
+        },
+        data,
+        inputs(),
+    )["PLAN.md"]
+    assert "created paused)" in text

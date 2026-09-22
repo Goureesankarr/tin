@@ -853,3 +853,14 @@ async def test_no_usage_scope_means_no_receipt():
         "rows": [],
         "provider_request_id": None,
     }
+
+
+def test_campaign_bundle_creates_a_held_group_paused():
+    held = plan()
+    held["ad_groups"][0]["status"] = "PAUSED"
+    ops = requests.campaign_bundle(held, customer_id=CID)
+    groups = [op["adGroupOperation"]["create"] for op in ops if "adGroupOperation" in op]
+    assert groups[0]["status"] == "PAUSED" and all(g["status"] == "ENABLED" for g in groups[1:])
+    held["ad_groups"][0]["status"] = "REMOVED"
+    with pytest.raises(ValueError):
+        requests.campaign_bundle(held, customer_id=CID)
