@@ -62,12 +62,14 @@ def _reject_constant(value):
 
 
 def _validate_inventory(*, evidence, inventory, run, project_id):
-    """Recompute the version-1 technical inventory from the complete saved page list."""
+    """Recompute the pinned technical inventory from the complete saved page list."""
+    policy = audit_policy(evidence["policy"]["version"])
+    schema = 2 if policy.get("check_applicability") else 1
     if (
         type(evidence["schema_version"]) is not int
         or evidence["schema_version"] != 1
         or type(inventory["schema_version"]) is not int
-        or inventory["schema_version"] != 1
+        or inventory["schema_version"] != schema
         or evidence["run_id"] != str(run.id)
         or inventory["run_id"] != str(run.id)
         or evidence["project_id"] != str(project_id)
@@ -117,7 +119,26 @@ def _validate_inventory(*, evidence, inventory, run, project_id):
         seen.add(page_url)
     if [page["url"] for page in pages] != sorted(seen):
         raise _invalid_source()
-    expected, coverage = technical_findings(pages, host)
+    expected, coverage = technical_findings(pages, host, policy_version=policy["version"])
+    if schema == 2:
+        for page in pages:
+            context = page.get("provider_context", {})
+            if (
+                not isinstance(context, dict)
+                or set(context) - {"canonical", "respect_sitemap"}
+                or context.get("canonical") is not None
+                and type(context["canonical"]) is not bool
+                or "respect_sitemap" in context
+                and type(context["respect_sitemap"]) is not bool
+            ):
+                raise _invalid_source()
+        expected_status = (
+            "partial"
+            if not pages or any(row["outcomes"]["unknown"] for row in coverage)
+            else "complete"
+        )
+        if inventory.get("evidence_status") != expected_status:
+            raise _invalid_source()
     findings = inventory["findings"]
     if not isinstance(findings, list) or any(
         not isinstance(row, dict)

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from uuid import UUID
 
@@ -22,6 +22,7 @@ from tin_lite.organic_audit import (
     V5_AUDIT_POLICY,
     V6_AUDIT_POLICY,
     V7_AUDIT_POLICY,
+    V8_AUDIT_POLICY,
     audit_paths,
     audit_policy,
     build_documents,
@@ -48,6 +49,7 @@ from tin_lite.organic_audit_panel import prepare_panel
 from tin_lite.organic_audit_publication import publish_audit
 from tin_lite.organic_audit_scope import audit_hosts, resolve_site_identity
 from tin_lite.usage_capture import external_usage_scope
+from tin_lite.workflow_evidence import integration_inventory
 
 
 class OrganicAuditActivities:
@@ -58,11 +60,13 @@ class OrganicAuditActivities:
         storage,
         settings,
         responses=None,
+        integrations=None,
         provider=None,
         site_resolver=resolve_site_identity,
     ) -> None:
         self.db, self.storage, self.settings = database, storage, settings
         self.responses = responses
+        self.integrations = integrations
         self.site_resolver = site_resolver
         login, password = (
             getattr(settings, "dataforseo_login", None),
@@ -266,6 +270,7 @@ class OrganicAuditActivities:
                 V5_AUDIT_POLICY,
                 V6_AUDIT_POLICY,
                 V7_AUDIT_POLICY,
+                V8_AUDIT_POLICY,
                 AUDIT_POLICY,
             )
             or definition.get("audit_instructions") != ai_contract(pinned_policy["version"])
@@ -285,9 +290,9 @@ class OrganicAuditActivities:
         from tin_lite.organic_audit_completion import KIND, prepare_completion
 
         if (getattr(run, "prerequisite_evidence", None) or {}).get("kind") == KIND:
-            if pinned_policy != AUDIT_POLICY:
+            if pinned_policy not in (V8_AUDIT_POLICY, AUDIT_POLICY):
                 raise ValueError("Audit completion requires the current compatible policy")
-            await prepare_completion(self, run)
+            await prepare_completion(self, run, target_policy=pinned_policy)
             return
         url, host = await self.provider.validate_target(inputs["site_url"])
         identity = (
@@ -312,14 +317,86 @@ class OrganicAuditActivities:
                 "max_cost_usd": str(maximum),
                 "policy_version": pinned_policy["version"],
                 **identity,
+                **(
+                    {"integrations": await integration_inventory(self.db, run.project_id)}
+                    if pinned_policy.get("check_applicability")
+                    else {}
+                ),
             },
         )
         await self.db.mark_run_running(UUID(run_id))
 
+    async def _search_console_evidence(self, run_id, scope):
+        from tin_lite.integrations import GSC_PROVIDER
+        from tin_lite.keyword_plan import gsc_property_matches
+
+        if await self._result(run_id, "search_console"):
+            return
+        if self.integrations is None:
+            await self._save(
+                run_id, "search_console", {"status": "unavailable", "reason": "adapter_unavailable"}
+            )
+            return
+        run = await self._active(run_id)
+        connection = await self.db.get_integration_connection(
+            project_id=run.project_id, provider_key=GSC_PROVIDER
+        )
+        site = connection.configuration.get("selected_site_url", "") if connection else ""
+        if (
+            not connection
+            or connection.status != "connected"
+            or not gsc_property_matches(site, scope["host"])
+        ):
+            await self._save(
+                run_id,
+                "search_console",
+                {"status": "not_available", "reason": "matching_property_not_connected"},
+            )
+            return
+        end = run.created_at.date() - timedelta(days=3)
+        request = {
+            "property": site,
+            "start_date": (end - timedelta(days=27)).isoformat(),
+            "end_date": end.isoformat(),
+        }
+
+        async def read():
+            raw = await self.integrations.search_console_analytics(
+                project_id=run.project_id,
+                start_date=request["start_date"],
+                end_date=request["end_date"],
+                dimensions=("page",),
+                row_limit=100,
+                expected_site_url=site,
+                execution_key=self.key(run_id, "search_console:read"),
+                run_id=run.id,
+            )
+            from tin_lite.organic_audit import search_console_pages
+
+            return {
+                **request,
+                **search_console_pages(raw, scope["host"], aliases=audit_hosts(scope)),
+            }
+
+        await self._paid(run_id, "search_console", request, "0", read)
+
     @activity.defn
     async def organic_start_crawl(self, run_id: str) -> None:
         scope = await self._result(run_id, "scope")
-        request = self.provider.crawl_request(host=scope["host"], tag=f"tin-organic-{run_id}")
+        if audit_policy(scope.get("policy_version", LEGACY_AUDIT_POLICY["version"])).get(
+            "check_applicability"
+        ):
+            await self._search_console_evidence(run_id, scope)
+        options = (
+            {"respect_sitemap": True}
+            if audit_policy(scope.get("policy_version", LEGACY_AUDIT_POLICY["version"])).get(
+                "respect_sitemap"
+            )
+            else {}
+        )
+        request = self.provider.crawl_request(
+            host=scope["host"], tag=f"tin-organic-{run_id}", **options
+        )
 
         async def recover(saved):
             found = await self.provider.recover(request=request, submitted_at=saved["attempted_at"])
@@ -378,8 +455,20 @@ class OrganicAuditActivities:
                 },
             )
             return True
-        raw_pages = await self.provider.pages(task_id)
-        pages = normalize_pages(raw_pages, scope["host"], aliases=hosts)
+        options = (
+            {"include_broken": True}
+            if audit_policy(scope.get("policy_version", LEGACY_AUDIT_POLICY["version"])).get(
+                "check_applicability"
+            )
+            else {}
+        )
+        raw_pages = await self.provider.pages(task_id, **options)
+        pages = normalize_pages(
+            raw_pages,
+            scope["host"],
+            aliases=hosts,
+            policy_version=scope.get("policy_version", LEGACY_AUDIT_POLICY["version"]),
+        )
         status = (
             "completed"
             if pages and summary.get("extended_crawl_status") in {None, "no_errors"}
@@ -397,9 +486,9 @@ class OrganicAuditActivities:
                 **(
                     {
                         "collection": {
-                            "provider_html_pages": len(raw_pages),
-                            "retained_html_pages": len(pages),
-                            "excluded_html_pages": len(raw_pages) - len(pages),
+                            **self._collection_counts(
+                                raw_pages, pages, include_broken=bool(options)
+                            ),
                         }
                     }
                     if audit_policy(
@@ -410,6 +499,25 @@ class OrganicAuditActivities:
             },
         )
         return True
+
+    @staticmethod
+    def _collection_counts(raw_pages, pages, *, include_broken):
+        if not include_broken:
+            return {
+                "provider_html_pages": len(raw_pages),
+                "retained_html_pages": len(pages),
+                "excluded_html_pages": len(raw_pages) - len(pages),
+            }
+        html_urls = {p.get("url") for p in raw_pages if p.get("resource_type") == "html"}
+        retained_html = len(html_urls & {p["url"] for p in pages})
+        provider_html = sum(p.get("resource_type") == "html" for p in raw_pages)
+        return {
+            "provider_html_pages": provider_html,
+            "retained_html_pages": retained_html,
+            "excluded_html_pages": provider_html - retained_html,
+            "provider_resources": len(raw_pages),
+            "retained_resources": len(pages),
+        }
 
     @activity.defn
     async def organic_end_crawl(self, run_id: str) -> None:
@@ -427,9 +535,19 @@ class OrganicAuditActivities:
             scope = await self._result(run_id, "scope")
             try:
                 pages = normalize_pages(
-                    await self.provider.pages(submission["value"]["task_id"]),
+                    await self.provider.pages(
+                        submission["value"]["task_id"],
+                        **(
+                            {"include_broken": True}
+                            if audit_policy(
+                                scope.get("policy_version", LEGACY_AUDIT_POLICY["version"])
+                            ).get("check_applicability")
+                            else {}
+                        ),
+                    ),
                     scope["host"],
                     aliases=audit_hosts(scope),
+                    policy_version=scope.get("policy_version", LEGACY_AUDIT_POLICY["version"]),
                 )
             except (DataForSEOError, ValueError):
                 pass
@@ -697,6 +815,7 @@ class OrganicAuditActivities:
                         "note": "Reservations retained; not a final provider invoice.",
                     },
                     policy_version=policy_version,
+                    search_console=await self._result(run_id, "search_console"),
                 )
                 artifacts = await self._save(
                     run_id,
@@ -709,10 +828,12 @@ class OrganicAuditActivities:
                 evidence = json.loads(artifacts[audit_paths(run_id)["evidence.json"]])
                 crawl, ai = evidence["crawl"], evidence["ai_visibility"]
                 partial = crawl["status"] != "completed" or ai["status"] != "completed"
+                inventory = json.loads(artifacts[audit_paths(run_id)["findings.json"]])
+                partial = partial or inventory.get("evidence_status") == "partial"
                 summary = (
                     "Organic visibility audit is ready"
                     + (" with partial evidence." if partial else ".")
-                    + f" Inspected {len(crawl.get('pages', []))} HTML pages; "
+                    + f" Inspected {len(crawl.get('pages', []))} pages; "
                     + (
                         f"scored {ai['completed']}/{ai['planned']} AI observations."
                         if ai["planned"]

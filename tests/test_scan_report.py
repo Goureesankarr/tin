@@ -124,16 +124,20 @@ class FakeReporter:
     async def report(self, *, project_name: str, sources: list[ScanSource]) -> bytes:
         self.calls += 1
         assert project_name == "Test"
-        assert [source.artifact_ref for source in sources] == [
+        assert [source.artifact_ref for source in sources[:2]] == [
             self.storage.system_ref,
             self.storage.memory_ref,
         ]
+        assert len(sources) == 3
+        assert sources[2].artifact_ref.endswith("/integrations")
+        assert json.loads(sources[2].content)["status"] == "unavailable"
         return (
             "# Test scan\n\n"
             "## Observed\n\n- Durable project fact.\n\n"
             "## Sources\n\n"
             f"- {self.storage.system_ref}\n"
             f"- {self.storage.memory_ref}\n"
+            f"- {sources[2].artifact_ref}\n"
         ).encode()
 
 

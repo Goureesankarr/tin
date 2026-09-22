@@ -48,7 +48,7 @@ Tin ships 30 built-in workflows. Every workflow also takes a `project_id`; requi
 
 | Workflow | What it does | Inputs | Output |
 |---|---|---|---|
-| Design a brand character (human review)<br>`creative.character` | Design a cute, on-brand vector mascot for the product as an animatable SVG character in project Files (three mouth shapes, a blink, and a payoff expression), ready to narrate demo videos and appear in marketing. Tin reads the product page and project memory itself and asks one model for the drawing; about two minutes, no sandbox. | **`slug`**, `brief`, `product_url`, `notes` | — |
+| Design a brand character (human review)<br>`creative.character` | Use when the founder has an explicit brand-design need. Design a vector mascot as an animatable SVG character in project Files (three mouth shapes, a blink, and a payoff expression), ready to narrate demo videos and appear in marketing. Tin reads the product page and project memory itself and asks one model for the drawing; about two minutes, no sandbox. | **`slug`**, `brief`, `product_url`, `notes` | — |
 | Make a product demo video (human review)<br>`creative.product_demo` | Capture the founder's live product at phone size and render a smooth 9:16 short-form demo video (TikTok, Reels, Shorts) with a pain hook, voiceover, word-synced captions, tap and scroll motion, and an optional narrating character from project Files. | **`slug`**, **`product_url`**, `angle`, `character`, `voice`, `backdrop`, `language`, `notes` | `demos/{slug}.mp4` |
 
 ## Paid ads system

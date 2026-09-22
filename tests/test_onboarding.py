@@ -312,3 +312,11 @@ async def test_onboarding_guidance_is_free_even_in_an_enrolled_workspace(billed,
     )
     result = structured(await server.call_tool("get_started", {"project_id": str(f.project.id)}))
     assert result["first_workflow"]["available"] is True
+
+
+def test_public_article_is_hidden_from_new_recommendations_but_retains_its_contract():
+    workflow = next(w for w in WORKFLOWS if w.key == "content.public_article")
+    assert workflow.definition["procedure"]
+    state = tin_state(settings=_Settings(), workflows=WORKFLOWS, connections=[])
+    assert workflow.key not in _rows(state)
+    assert next(w for w in BUILTIN_WORKFLOWS if w.id == workflow.id).executor == workflow.executor

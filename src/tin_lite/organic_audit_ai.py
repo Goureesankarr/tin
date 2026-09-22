@@ -18,6 +18,7 @@ from tin_lite.organic_audit import (
     V5_AUDIT_POLICY,
     V6_AUDIT_POLICY,
     V7_AUDIT_POLICY,
+    V8_AUDIT_POLICY,
     audit_policy,
     canonical_json,
     digest,
@@ -411,7 +412,14 @@ def read_response(
         accepted_statuses = {"completed", "failed"}
         if (
             policy
-            in (V4_AUDIT_POLICY, V5_AUDIT_POLICY, V6_AUDIT_POLICY, V7_AUDIT_POLICY, AUDIT_POLICY)
+            in (
+                V4_AUDIT_POLICY,
+                V5_AUDIT_POLICY,
+                V6_AUDIT_POLICY,
+                V7_AUDIT_POLICY,
+                V8_AUDIT_POLICY,
+                AUDIT_POLICY,
+            )
             and len(completed) == policy["max_tool_calls"]
         ):
             # A completed response can leave an ignored over-budget attempt in

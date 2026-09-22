@@ -41,11 +41,12 @@ def source_fixture(
                 "resource_type": "html",
                 "status_code": 200,
                 "meta": {"title": ""},
-                "checks": {"no_title": True} if checks is None else checks,
+                "checks": {"canonical": True, "no_title": True} if checks is None else checks,
             }
             for index in range(count)
         ],
         "example.com",
+        policy_version=policy,
     )
     docs = build_documents(
         run_id=str(run.id),

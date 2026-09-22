@@ -9,8 +9,11 @@ from tin_lite.organic_audit import AUDIT_POLICY, audit_paths, audit_policy, dige
 KIND = "organic_audit_completion_v1"
 
 
-def completion_seed(*, source_id, project_id, revision, definition_sha, stages, requested_at):
+def completion_seed(
+    *, source_id, project_id, revision, definition_sha, stages, requested_at, target_policy=None
+):
     """Reuse only a proven publication; preserve every successfully measured answer."""
+    target_policy = target_policy or AUDIT_POLICY
     publication, artifacts = stages["publish"], stages["artifacts"]
     if (
         publication["canonical_commit_sha"] != revision
@@ -26,8 +29,18 @@ def completion_seed(*, source_id, project_id, revision, definition_sha, stages, 
         or evidence["project_id"] != project_id
         or evidence["definition_commit_sha"] != definition_sha
         or evidence["policy"] != policy
-        or {k: v for k, v in policy.items() if k not in {"version", "answer_timeout_seconds"}}
-        != {k: v for k, v in AUDIT_POLICY.items() if k not in {"version", "answer_timeout_seconds"}}
+        or {
+            k: v
+            for k, v in policy.items()
+            if k
+            not in {"version", "answer_timeout_seconds", "check_applicability", "respect_sitemap"}
+        }
+        != {
+            k: v
+            for k, v in target_policy.items()
+            if k
+            not in {"version", "answer_timeout_seconds", "check_applicability", "respect_sitemap"}
+        }
         or scope.get("completion")
         or crawl["status"] != "completed"
         or ai["status"] != "partial"
@@ -90,11 +103,11 @@ def completion_seed(*, source_id, project_id, revision, definition_sha, stages, 
         "note": "One explicitly authorized replacement request. "
         "Original attempt and costs remain unchanged.",
     }
-    copied["scope"].update(policy_version=AUDIT_POLICY["version"], completion=provenance)
+    copied["scope"].update(policy_version=target_policy["version"], completion=provenance)
     return copied
 
 
-async def prepare_completion(activities, run):
+async def prepare_completion(activities, run, *, target_policy=None):
     command = run.prerequisite_evidence
     source_id = str(UUID(command["source_run_id"]))
     source = await activities.db.get_run(UUID(source_id))
@@ -125,6 +138,7 @@ async def prepare_completion(activities, run):
         definition_sha=source.definition_commit_sha,
         stages=stages,
         requested_at=run.created_at.isoformat(),
+        target_policy=target_policy,
     )
     key = activities.key(str(run.id), "completion")
     async with activities.db.effect_lock(key, KIND) as (conn, existing), conn.transaction():

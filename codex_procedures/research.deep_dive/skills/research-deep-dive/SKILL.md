@@ -70,3 +70,17 @@ Use this structure when applicable:
 Keep evidence and inference visibly separate. Use calibrated language: a source can support a
 claim; it does not automatically prove the project's thesis. The report is complete only when a
 founder can see what is known, what is not, and what decision follows.
+
+
+## Save evidence as you go
+
+Create a useful initial report at the declared output path after framing the decision. Update
+it after each evidence layer with the current answer, supported claims, source URLs, unresolved
+questions and the next discriminating check. This is a recoverable partial report, not a claim
+that work is complete. Keep unfinished sections labeled. Do not wait until the final turn to
+save all findings. Use focused file reads and short source extracts; avoid repeatedly loading
+large inventories or full prior reports into context. Reuse sources that still answer the question.
+Stop when the evidence supports the decision and further searches are unlikely to change it,
+or when the remaining uncertainty requires unavailable evidence. State that uncertainty calmly.
+Do not pursue extra background solely to fill depth or spend the budget. Saving early does not
+permit raising the run's cost ceiling or retrying an uncertain paid request.

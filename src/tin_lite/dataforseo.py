@@ -89,8 +89,10 @@ class DataForSEO:
         return url, host
 
     @staticmethod
-    def crawl_request(*, host: str, tag: str) -> dict:
+    def crawl_request(*, host: str, tag: str, respect_sitemap: bool = False) -> dict:
         public_site(f"https://{host}/")
+        if type(respect_sitemap) is not bool:
+            raise ValueError("respect_sitemap must be boolean")
         return {
             "target": host,
             "start_url": f"https://{host}/",
@@ -98,7 +100,7 @@ class DataForSEO:
             "max_crawl_pages": AUDIT_POLICY["max_pages"],
             "allow_subdomains": False,
             "enable_www_redirect_check": False,
-            "respect_sitemap": False,
+            "respect_sitemap": respect_sitemap,
             "load_resources": False,
             "enable_javascript": False,
             "enable_browser_rendering": False,
@@ -108,7 +110,11 @@ class DataForSEO:
         }
 
     async def submit(self, request: dict) -> dict:
-        expected = self.crawl_request(host=request["target"], tag=request["tag"])
+        expected = self.crawl_request(
+            host=request["target"],
+            tag=request["tag"],
+            respect_sitemap=request.get("respect_sitemap", False),
+        )
         if request != expected:
             raise ValueError("Crawl request differs from the supported bounded contract.")
         task = await self._request("POST", "task_post", [request])
@@ -179,7 +185,7 @@ class DataForSEO:
             "reported_cost_usd": str(task.get("cost", 0)),
         }
 
-    async def pages(self, task_id: str) -> list[dict[str, Any]]:
+    async def pages(self, task_id: str, *, include_broken: bool = False) -> list[dict[str, Any]]:
         task = await self._request(
             "POST",
             "pages",
@@ -187,7 +193,9 @@ class DataForSEO:
                 {
                     "id": str(UUID(task_id)),
                     "limit": AUDIT_POLICY["max_pages"],
-                    "filters": [["resource_type", "=", "html"]],
+                    "filters": [["resource_type", "in", ["html", "broken"]]]
+                    if include_broken
+                    else [["resource_type", "=", "html"]],
                     "order_by": ["url,asc"],
                 }
             ],

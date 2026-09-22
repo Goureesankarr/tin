@@ -231,6 +231,7 @@ class FakeDrafter:
     async def draft(self, **values) -> dict:
         self.calls += 1
         assert [source.label for source in values["sources"]] == [
+            "current integration availability",
             "project memory",
             "latest AI visibility audit",
         ]
@@ -420,3 +421,24 @@ async def test_report_run_cannot_receive_content_approval() -> None:
     assert project.id == visibility_run.project_id
     assert response.status_code == 409
     assert response.json()["detail"] == "run does not require human review"
+
+
+def test_argument_plan_is_saved_separately_from_reader_copy():
+    from tin_lite.answer_page import AnswerPageProtocolError, extract_argument_plan
+
+    plan = dict(
+        buyer_decision="Choose a provider",
+        positioning="Managed setup",
+        answer="Use the API",
+        proof="Official setup docs, observed 2026-09-22",
+        objection="Usage costs",
+        next_step="Read setup",
+    )
+    import json
+
+    metadata, article = extract_argument_plan(
+        "<!-- tin-answer-plan-v1 " + json.dumps(plan) + " -->\n# A useful answer\n"
+    )
+    assert metadata == plan and article.startswith("# A useful answer")
+    with pytest.raises(AnswerPageProtocolError):
+        extract_argument_plan("# Unsupported comparison")

@@ -63,7 +63,13 @@ V7_AUDIT_POLICY = {
     "blind_question_interpretation": True,
     "question_interpretation_concurrency": 4,
 }
-AUDIT_POLICY = {**V7_AUDIT_POLICY, "version": "organic-audit-v8", "answer_timeout_seconds": 180}
+V8_AUDIT_POLICY = {**V7_AUDIT_POLICY, "version": "organic-audit-v8", "answer_timeout_seconds": 180}
+AUDIT_POLICY = {
+    **V8_AUDIT_POLICY,
+    "version": "organic-audit-v9",
+    "check_applicability": True,
+    "respect_sitemap": True,
+}
 
 
 def audit_policy(version: str = AUDIT_POLICY["version"]) -> dict:
@@ -75,6 +81,7 @@ def audit_policy(version: str = AUDIT_POLICY["version"]) -> dict:
         V5_AUDIT_POLICY,
         V6_AUDIT_POLICY,
         V7_AUDIT_POLICY,
+        V8_AUDIT_POLICY,
         AUDIT_POLICY,
     ):
         if version == policy["version"]:
@@ -89,6 +96,7 @@ def grounded_preparation(policy_version: str) -> bool:
         V5_AUDIT_POLICY,
         V6_AUDIT_POLICY,
         V7_AUDIT_POLICY,
+        V8_AUDIT_POLICY,
         AUDIT_POLICY,
     )
 
@@ -344,7 +352,14 @@ CHECKS = (
 )
 
 
-def normalize_pages(items: list[dict], host: str, *, aliases: tuple[str, ...] = ()) -> list[dict]:
+def normalize_pages(
+    items: list[dict],
+    host: str,
+    *,
+    aliases: tuple[str, ...] = (),
+    policy_version: str = LEGACY_AUDIT_POLICY["version"],
+) -> list[dict]:
+    applicability = audit_policy(policy_version).get("check_applicability", False)
     if len(items) > AUDIT_POLICY["max_pages"]:
         raise ValueError("Provider page collection exceeded its pinned limit.")
     pages = []
@@ -354,12 +369,15 @@ def normalize_pages(items: list[dict], host: str, *, aliases: tuple[str, ...] = 
         if (
             not in_scope_url(url, host, aliases=aliases)
             or url in seen
-            or item.get("resource_type") != "html"
+            or item.get("resource_type") not in ({"html", "broken"} if applicability else {"html"})
         ):
             continue
         seen.add(url)
         meta = item.get("meta") or {}
         checks = dict(item.get("checks") or {})
+        if applicability and type(item.get("status_code")) is int:
+            checks["is_4xx_code"] = 400 <= item["status_code"] < 500
+            checks["is_5xx_code"] = 500 <= item["status_code"] < 600
         for flag in ("duplicate_title", "duplicate_description", "broken_links"):
             if type(item.get(flag)) is bool:
                 checks[flag] = item[flag]
@@ -368,6 +386,20 @@ def normalize_pages(items: list[dict], host: str, *, aliases: tuple[str, ...] = 
                 "url": url,
                 "status_code": item.get("status_code"),
                 "title": str(meta.get("title") or "")[:200],
+                **(
+                    {
+                        "provider_context": {
+                            "canonical": checks.get("canonical")
+                            if type(checks.get("canonical")) is bool
+                            else None,
+                            "respect_sitemap": bool(
+                                audit_policy(policy_version).get("respect_sitemap")
+                            ),
+                        }
+                    }
+                    if applicability
+                    else {}
+                ),
                 "checks": {
                     flag: checks[flag] for flag, *_ in CHECKS if type(checks.get(flag)) is bool
                 },
@@ -379,16 +411,60 @@ def normalize_pages(items: list[dict], host: str, *, aliases: tuple[str, ...] = 
     return pages
 
 
-def technical_findings(pages: list[dict], host: str) -> tuple[list[dict], list[dict]]:
+def check_outcome(page: dict, flag: str) -> str:
+    """Interpret provider preconditions before flags, including historical missing context."""
+    context = page.get("provider_context", {})
+    if flag in {"no_title", "no_description"}:
+        canonical = context.get("canonical")
+        if canonical is False:
+            return "not_applicable"
+        if canonical is not True:
+            return "unknown"
+    if flag == "is_orphan_page" and context.get("respect_sitemap") is not True:
+        return "unknown"
+    value = page.get("checks", {}).get(flag)
+    return "problem" if value is True else "pass" if value is False else "unknown"
+
+
+def technical_findings(
+    pages: list[dict],
+    host: str,
+    *,
+    policy_version: str = LEGACY_AUDIT_POLICY["version"],
+) -> tuple[list[dict], list[dict]]:
     findings, coverage = [], []
+    applicability = audit_policy(policy_version).get("check_applicability", False)
     for flag, check_id, status, severity, observation, remedy in CHECKS:
-        observed = [p for p in pages if flag in p["checks"]]
-        affected = [p["url"] for p in observed if p["checks"][flag]]
+        if applicability:
+            outcomes = [check_outcome(p, flag) for p in pages]
+            counts = {
+                name: outcomes.count(name)
+                for name in ("problem", "pass", "not_applicable", "unknown")
+            }
+            observed = [
+                p
+                for p, outcome in zip(pages, outcomes, strict=True)
+                if outcome in {"problem", "pass"}
+            ]
+            affected = [
+                p["url"] for p, outcome in zip(pages, outcomes, strict=True) if outcome == "problem"
+            ]
+        else:
+            counts = {}
+            observed = [p for p in pages if flag in p["checks"]]
+            affected = [p["url"] for p in observed if p["checks"][flag]]
         coverage.append(
             {
                 "check_id": check_id,
                 "observed_pages": len(observed),
-                "status": "observed" if observed else "unknown",
+                "status": (
+                    "partial"
+                    if counts.get("unknown") and observed
+                    else "observed"
+                    if observed
+                    else "unknown"
+                ),
+                **({"outcomes": counts} if applicability else {}),
             }
         )
         if not affected:
@@ -576,6 +652,43 @@ def ai_report_details(ai: dict) -> list[str]:
     return lines
 
 
+def search_console_pages(raw: dict, host: str, *, aliases=()) -> dict:
+    """Bounded appearance evidence, never an indexing verdict for absent URLs."""
+    import math
+
+    rows = raw.get("rows", [])
+    if not isinstance(rows, list) or len(rows) > 100:
+        raise ValueError("Search Console exceeded its row contract")
+    result = []
+    for row in rows:
+        if (
+            not isinstance(row, dict)
+            or not isinstance(row.get("keys"), list)
+            or len(row["keys"]) != 1
+        ):
+            raise ValueError("Invalid Search Console page row")
+        url = row["keys"][0]
+        if not in_scope_url(url, host, aliases=aliases):
+            continue
+        counts = {}
+        for key in ("clicks", "impressions"):
+            value = row.get(key)
+            if type(value) not in (float, int) or not math.isfinite(value) or value < 0:
+                raise ValueError("Invalid Search Console metric")
+            counts[key] = value
+        if counts["clicks"] > counts["impressions"]:
+            raise ValueError("Search Console clicks exceed impressions")
+        result.append({"url": url, **counts})
+    return {
+        "pages": result,
+        "returned_rows": len(rows),
+        "note": (
+            "Top page rows for the selected property and dates; "
+            "omitted pages are not proven unindexed. Results are not market-filtered."
+        ),
+    }
+
+
 def build_documents(
     *,
     run_id: str,
@@ -586,12 +699,13 @@ def build_documents(
     ai: dict,
     spending: dict,
     policy_version: str = AUDIT_POLICY["version"],
+    search_console: dict | None = None,
 ) -> dict[str, bytes]:
     policy = audit_policy(policy_version)
     modern = policy != LEGACY_AUDIT_POLICY
     hosts = audit_hosts(scope)
     pages = crawl.get("pages", [])
-    findings, coverage = technical_findings(pages, scope["host"])
+    findings, coverage = technical_findings(pages, scope["host"], policy_version=policy_version)
     findings.extend(
         content_review_findings(ai, scope["host"], policy_version=policy_version, aliases=hosts)
     )
@@ -606,6 +720,8 @@ def build_documents(
         "ai_visibility": ai,
         "spending": spending,
     }
+    if policy.get("check_applicability"):
+        evidence["search_console"] = search_console or {"status": "not_available"}
     inventory = {
         "schema_version": 1,
         "run_id": run_id,
@@ -615,7 +731,17 @@ def build_documents(
         "check_coverage": coverage,
         "downstream_authority": "recommendations_only",
     }
+    if policy.get("check_applicability"):
+        inventory["schema_version"] = 2
+        inventory["evidence_status"] = (
+            "partial"
+            if not pages or any(c["outcomes"]["unknown"] for c in coverage)
+            else "complete"
+        )
+    page_unit = "pages" if policy.get("check_applicability") else "HTML pages"
     complete = crawl.get("status") == "completed" and ai.get("status") == "completed"
+    if policy.get("check_applicability"):
+        complete = complete and inventory["evidence_status"] == "complete"
     lines = [
         "# Organic visibility audit",
         "",
@@ -626,7 +752,7 @@ def build_documents(
         "",
         "This is a read-only, sampled audit. Nothing on your website changed.",
         f"Result: {'completed within the stated scope' if complete else 'partial evidence'}. "
-        f"Inspected {len(pages)} HTML pages (limit {AUDIT_POLICY['max_pages']}).",
+        f"Inspected {len(pages)} {page_unit} (limit {AUDIT_POLICY['max_pages']}).",
         "",
         "## What to tackle first",
         "",
@@ -676,11 +802,11 @@ def build_documents(
             [
                 "## Technical SEO",
                 "",
-                f"{len(pages)} HTML pages inspected across {len(CHECKS)} supported checks.",
+                f"{len(pages)} {page_unit} inspected across {len(CHECKS)} supported checks.",
                 "",
             ]
         )
-        if pages:
+        if pages and not policy.get("check_applicability"):
             lines.extend(["| Check | Pages checked | Pages flagged |", "| --- | ---: | ---: |"])
             for flag, check_id, _, _, label, _ in CHECKS:
                 checked = next(
@@ -696,6 +822,32 @@ def build_documents(
                     "",
                 ]
             )
+        if pages and policy.get("check_applicability"):
+            lines.extend(
+                [
+                    "| Check | Problem | No problem | Not applicable | Unknown |",
+                    "| --- | ---: | ---: | ---: | ---: |",
+                ]
+            )
+            for row in coverage:
+                counts = row["outcomes"]
+                lines.append(
+                    f"| {row['check_id']} | "
+                    + " | ".join(
+                        str(counts[key]) for key in ("problem", "pass", "not_applicable", "unknown")
+                    )
+                    + " |"
+                )
+            lines.extend(
+                [
+                    "",
+                    "Counts describe provider checks that applied to these pages. "
+                    "Unknown results need evidence; a noncanonical page is not a metadata defect. "
+                    "Orphan checks require recorded sitemap discovery; "
+                    "missing historical context remains unknown.",
+                    "",
+                ]
+            )
         collection = crawl.get("collection")
         if collection and collection["excluded_html_pages"]:
             lines.extend(
@@ -703,6 +855,34 @@ def build_documents(
                     f"The provider returned {collection['provider_html_pages']} HTML pages; "
                     f"{collection['excluded_html_pages']} were excluded as outside the verified "
                     "scope, duplicates, or unsupported records.",
+                    "",
+                ]
+            )
+    if policy.get("check_applicability"):
+        gsc = evidence["search_console"]
+        lines.extend(["## Search appearance", ""])
+        if gsc.get("status") == "completed":
+            value = gsc["value"]
+            lines.extend(
+                [
+                    f"Search Console: {value['start_date']} through {value['end_date']}. "
+                    + value["note"],
+                    "",
+                    "| Page | Clicks | Impressions |",
+                    "| --- | ---: | ---: |",
+                ]
+            )
+            for page in value["pages"][:20]:
+                lines.append(
+                    f"| {page['url'].replace('|', '%7C')} | "
+                    f"{page['clicks']} | {page['impressions']} |"
+                )
+            lines.append("")
+        else:
+            lines.extend(
+                [
+                    "No matching Search Console evidence was collected. "
+                    "Crawl observations alone do not establish search appearance.",
                     "",
                 ]
             )
@@ -724,8 +904,14 @@ def build_documents(
             "Unobserved checks are unknown, not passes. "
             "Lab diagnostics are not field Core Web Vitals.",
             "",
-            "This version does not measure field performance, private analytics, Search Console "
-            "data, backlinks, or other AI engines. It does not claim a whole-site certificate.",
+            (
+                "This version does not measure field performance, private product analytics, "
+                "JavaScript-rendered pages, backlinks, or other AI engines."
+                if policy.get("check_applicability")
+                else "This version does not measure field performance, private analytics, "
+                "Search Console "
+                "data, backlinks, or other AI engines. It does not claim a whole-site certificate."
+            ),
             "",
             "## For the next workflow",
             "",

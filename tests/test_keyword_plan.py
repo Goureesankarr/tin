@@ -17,7 +17,7 @@ from test_procedure_publication import HistoryStorage
 from tin_lite import keyword_plan as v1
 from tin_lite import keyword_plan_v2 as v2
 from tin_lite import keyword_plan_v3 as v3
-from tin_lite import keyword_plan_v4 as v4
+from tin_lite import keyword_plan_v5 as v5
 from tin_lite.catalog import BUILTIN_WORKFLOWS
 from tin_lite.dataforseo import DataForSEOError
 from tin_lite.domain import EffectReceipt, RunStatus
@@ -203,6 +203,15 @@ async def fixture(*, prepare=True, inputs=None, budget=10, modern=False):
             "keyword_instructions": v3.INSTRUCTIONS,
             "keyword_schemas": v3.SCHEMAS,
         }
+    elif modern == "v4":
+        from tin_lite import keyword_plan_v4 as v4
+
+        definition = {
+            **definition,
+            "keyword_policy": v4.POLICY,
+            "keyword_instructions": v4.INSTRUCTIONS,
+            "keyword_schemas": v4.SCHEMAS,
+        }
     storage.read_canonical_artifact = AsyncMock(return_value=canonical_json(definition))
     provider, model = providers()
     activities = KeywordPlanActivities(
@@ -229,14 +238,14 @@ async def finish(activities, run_id):
 def test_catalog_pins_native_contract_and_supported_form():
     assert len({item.id for item in BUILTIN_WORKFLOWS}) == len(BUILTIN_WORKFLOWS)
     assert SPEC.executor == KEY and SPEC.review_policy is None
-    assert SPEC.definition["keyword_policy"] == v4.POLICY
+    assert SPEC.definition["keyword_policy"] == v5.POLICY
     assert SPEC.definition["system"] == "organic-traffic"
     assert registered_workflow_implementations()[KEY] is KeywordPlanWorkflow
     normalized = normalize_workflow_inputs(
         schema=SPEC.input_schema, inputs=INPUTS, project_id="00000000-0000-4000-8000-000000000001"
     )
     check_inputs(normalized)
-    assert normalized["use_search_console"] is False and normalized["audit_run_id"] == ""
+    assert normalized["use_search_console"] is True and normalized["audit_run_id"] == ""
 
 
 def test_normalization_preserves_distinctions_unknowns_and_provenance():

@@ -11,7 +11,11 @@ Codex chooses defensible semantics and explains findings; the resources own quer
 ## Settings and access
 
 Tin validates and binds project_id before execution; context.inputs omits it. Call settings()
-with those client inputs, freeze its UTC boundaries once and reuse them for every request.
+with the effective client inputs, freeze its UTC boundaries once and reuse them for every request.
+Before settings(), resolve an omitted website_hosts only when existing project context establishes
+one unambiguous website. Use its documented host aliases, record that source and the effective
+hosts in evidence, and bind them through settings(). Do not edit the saved configuration or ask
+an onboarding question for a known website. If scope is ambiguous, retain project-wide scope.
 Default: the last seven complete UTC days compared with the preceding seven; historical
 inventory/trends look back at most 90 days. An explicit end date is exclusive and stays fixed
 on scheduled runs. To roll forward automatically, leave the end date blank.
@@ -156,3 +160,17 @@ Slack, publication, instrumentation changes, workflow starts or recommendations.
 verified usage is charged through Tin's existing ceiling and ledger. Connected-provider cost
 is separate and unknown here. Authoring/evaluation are separate authorized runs, never actions
 this report initiates itself.
+
+## Website scope and decisions
+
+Use website_hosts when the connected project includes multiple websites. Resolve hosts from
+trusted saved inputs or the project's established website before asking another onboarding
+question. The fixed builder scopes $pageview consistently across inventory, coverage, traffic
+and trends using $host. Missing/other-host pageviews are excluded. Other events remain
+project-wide and must be labeled that way; do not claim they belong to the selected site.
+The website scope is part of the comparison binding. Never reuse an unscoped mapping silently.
+If website_hosts is empty, describe traffic as provider-project traffic, not a named website.
+Lead the brief with the goal, strongest supported observation and a practical next check.
+Keep exhaustive daily tables and query details in the evidence section. Avoid repeating the
+same scope disclaimer in every paragraph. A complete query set may still leave business
+questions unanswered; distinguish measurement completion from supported interpretation.

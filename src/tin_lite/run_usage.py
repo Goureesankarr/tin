@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from decimal import Decimal
 
 from tin_lite.usage_capture import count, dollars, object_value
@@ -81,6 +82,7 @@ async def read_run_usage(*, database, run):
                 "own": own,
                 "children": children,
                 "inclusive_totals": totals(observations),
+                "stages": stage_totals(observations),
                 "coverage": "partial",
                 "warnings": [
                     "This is observed usage, not an invoice, charge, or spending guarantee.",
@@ -296,6 +298,7 @@ def observation(row, facts, *, legacy=False):
         "model": model[:150] if isinstance(model, str) else None,
         "outcome": outcome,
         "source": "legacy_effect" if legacy else "trusted_observation",
+        "stage": usage_stage(facts, kind),
         **({"api_list_price": api_price} if kind == "codex_openai_api" else {}),
         **(
             {"billed_by": "connected_provider", "tin_credit_deduction": False}
@@ -308,6 +311,26 @@ def observation(row, facts, *, legacy=False):
         "reference_estimate_usd": estimate,
         "estimate_basis": "e2b-public-2026-09-10:observed-wall-time" if estimate else None,
     }
+
+
+def usage_stage(facts, kind):
+    # Only trusted receipt metadata defines a stage. Never infer it from article text.
+    endpoint = facts.get("endpoint")
+    if endpoint in {"/v1/responses/compact", "/responses/compact", "responses/compact", "compact"}:
+        return "context_compaction"
+    step = facts.get("step")
+    if isinstance(step, str) and re.fullmatch(r"[a-zA-Z0-9_.:-]{1,80}", step):
+        return step
+    return {"compute": "compute", "connected_api": "connected_api", "tool": "provider_tool"}.get(
+        kind, "model_unspecified"
+    )
+
+
+def stage_totals(observations):
+    groups = {}
+    for item in observations:
+        groups.setdefault(item.get("stage", "unspecified"), []).append(item)
+    return [{"stage": stage, **totals(items)} for stage, items in sorted(groups.items())]
 
 
 def _sum_known(values):

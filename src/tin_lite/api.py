@@ -1767,6 +1767,7 @@ async def list_workflows(
         for item in workflows
         # Agent-only workflows (start here) run through the MCP; the catalog does not list them.
         if not (item.definition or {}).get("agent_only")
+        and (item.definition or {}).get("public_discovery", True)
         and (
             item.project_id is None
             or private_execution_ready(request.app.state.settings, item.project_id)

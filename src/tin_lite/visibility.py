@@ -94,7 +94,9 @@ class VisibilityAuditor:
                         "type": "json_schema",
                         "name": "visibility_panel",
                         "strict": True,
-                        "schema": _panel_schema(),
+                        "schema": _panel_schema(
+                            candidate_bank="CANDIDATE_BANK_V1" in self._skill_suite
+                        ),
                     },
                     "verbosity": "low",
                 },
@@ -107,6 +109,8 @@ class VisibilityAuditor:
         if isinstance(panel.get("target"), dict):
             panel["target"]["domain"] = _canonical_domain(panel["target"].get("domain"))
         _validate_panel(panel, target_request=target_request)
+        if "CANDIDATE_BANK_V1" in self._skill_suite:
+            _validate_candidate_bank(panel)
         panel["panel_hash"] = _panel_hash(panel)
         return panel
 
@@ -319,8 +323,8 @@ def validate_visibility_publication(value: Any, *, run: WorkflowRun, canonical_s
             raise ValueError("visibility publication has invalid artifact facts")
 
 
-def _panel_schema() -> dict[str, Any]:
-    return {
+def _panel_schema(*, candidate_bank: bool = False) -> dict[str, Any]:
+    schema = {
         "type": "object",
         "additionalProperties": False,
         "properties": {
@@ -362,6 +366,66 @@ def _panel_schema() -> dict[str, Any]:
         },
         "required": ["target", "questions"],
     }
+
+    if candidate_bank:
+        schema["properties"]["candidate_intents"] = {
+            "type": "array",
+            "minItems": 5,
+            "maxItems": 8,
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "properties": {
+                    "intent": {"type": "string", "maxLength": 120},
+                    "questions": {
+                        "type": "array",
+                        "minItems": 3,
+                        "maxItems": 5,
+                        "items": {"type": "string", "minLength": 15, "maxLength": 500},
+                    },
+                },
+                "required": ["intent", "questions"],
+            },
+        }
+        schema["required"].append("candidate_intents")
+    return schema
+
+
+def _validate_candidate_bank(panel):
+    intents = panel.get("candidate_intents")
+    if not isinstance(intents, list) or not 5 <= len(intents) <= 8:
+        raise VisibilityProtocolError("panel requires five to eight candidate intents")
+    candidates, labels = set(), set()
+    target = panel["target"]
+    markers = [target["name"], target["domain"], *target["aliases"]]
+    for intent in intents:
+        if not isinstance(intent, dict) or not isinstance(intent.get("intent"), str):
+            raise VisibilityProtocolError("invalid candidate intent")
+        label = intent["intent"].strip().casefold()
+        questions = intent.get("questions")
+        if (
+            not label
+            or len(label) > 120
+            or label in labels
+            or not isinstance(questions, list)
+            or not 3 <= len(questions) <= 5
+        ):
+            raise VisibilityProtocolError(
+                "candidate intent needs a distinct label and three to five questions"
+            )
+        labels.add(label)
+        for question in questions:
+            if (
+                not isinstance(question, str)
+                or not 15 <= len(question) <= 500
+                or _contains_target(question, markers)
+            ):
+                raise VisibilityProtocolError("invalid or branded candidate question")
+            if question.casefold() in candidates:
+                raise VisibilityProtocolError("candidate question is duplicated")
+            candidates.add(question.casefold())
+    if any(q["text"].casefold() not in candidates for q in panel["questions"]):
+        raise VisibilityProtocolError("measured questions must come from the frozen candidate bank")
 
 
 def _adjudication_schema() -> dict[str, Any]:
@@ -693,7 +757,7 @@ def _render_report(
         "",
         "## Buyer questions",
         "",
-        "| Question | Fit | Web result | Model-only |",
+        "| Question | Fit | With web search | Without web search |",
         "| --- | --- | --- | --- |",
     ]
     for question in panel["questions"]:
@@ -971,6 +1035,8 @@ def _response_id(response: dict[str, Any]) -> str:
 
 def _panel_hash(panel: dict[str, Any]) -> str:
     stable = {"target": panel["target"], "questions": panel["questions"]}
+    if "candidate_intents" in panel:
+        stable["candidate_intents"] = panel["candidate_intents"]
     encoded = json.dumps(stable, separators=(",", ":"), sort_keys=True).encode()
     return hashlib.sha256(encoded).hexdigest()
 
