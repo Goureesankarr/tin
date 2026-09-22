@@ -4597,13 +4597,7 @@ class TinActivities:
                 raise
 
     async def _answer_page_sources(self, *, run_id: UUID, project) -> list[AnswerPageSource]:
-        sources: list[AnswerPageSource] = [
-            AnswerPageSource(
-                label="current integration availability",
-                artifact_ref=f"tin.project://{project.id}/integrations",
-                content=await self._integration_evidence(project),
-            )
-        ]
+        sources: list[AnswerPageSource] = []
         if project.memory_commit_sha is not None and project.memory_index_path is not None:
             content = await self._storage.read_canonical_artifact(
                 repo_id=project.state_repo_id,
@@ -4632,6 +4626,15 @@ class TinActivities:
         ]
         selected_runs = (
             visibility_runs[-1:] if visibility_runs else ([] if sources else source_runs[-5:])
+        )
+        # Availability is useful context, but cannot replace durable project evidence.
+        sources.insert(
+            0,
+            AnswerPageSource(
+                label="current integration availability",
+                artifact_ref=f"tin.project://{project.id}/integrations",
+                content=await self._integration_evidence(project),
+            ),
         )
         for source_run in selected_runs:
             if (

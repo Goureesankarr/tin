@@ -1,25 +1,11 @@
 """Prioritize measured demand and broaden discovery across supported buyer jobs."""
 
-from pydantic import Field
-
-from tin_lite import keyword_plan as v1
 from tin_lite import keyword_plan_v3 as v3
 from tin_lite import keyword_plan_v4 as v4
 
-
-class Seeds(v3.Seeds):
-    specific: list[str] = Field(min_length=1, max_length=6)
-
-
 POLICY = {**v4.POLICY, "version": "keyword-plan-v5", "seed_strategy": "buyer-jobs.v1"}
-SCHEMAS = {**v4.SCHEMAS, "seeds": Seeds.model_json_schema()}
-
-
-def seed_values(value):
-    parsed = Seeds.model_validate(value)
-    if len(v1.phrases(parsed.core)) < 3:
-        raise ValueError("At least three distinct core lookup phrases are required")
-    return v1.phrases([*parsed.core, *parsed.specific])
+SCHEMAS = v4.SCHEMAS
+seed_values = v3.seed_values
 
 
 INSTRUCTIONS = dict(v4.INSTRUCTIONS)
@@ -41,7 +27,7 @@ Group synonyms by intent without adding overlapping keyword volumes as unique tr
 
 INSTRUCTIONS["seeds"] = INSTRUCTIONS["seeds"].replace(
     "specific: one to four narrower problem or integration phrases",
-    "specific: one to six narrower buyer-job or integration phrases",
+    "specific: one to four narrower buyer-job or integration phrases",
 )
 INSTRUCTIONS["seeds"] += """
 Use distinct supported jobs across the specific seeds instead of spending them all on one

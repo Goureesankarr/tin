@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from dataclasses import replace
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import httpx
@@ -79,6 +80,61 @@ class FakeResponses:
             ],
             "usage": {"total_tokens": 20},
         }
+
+
+@pytest.mark.parametrize("has_memory", [False, True])
+@pytest.mark.parametrize("has_visibility", [False, True])
+async def test_integration_availability_preserves_answer_page_evidence_fallback(
+    has_memory, has_visibility
+):
+    project = SimpleNamespace(
+        id=uuid4(),
+        state_repo_id="projects/synthetic",
+        memory_commit_sha="m" * 40 if has_memory else None,
+        memory_index_path="wiki/INDEX.md" if has_memory else None,
+    )
+    research = [
+        SimpleNamespace(
+            executor="codex.procedure",
+            canonical_commit_sha=str(index) * 40,
+            artifact_path=f"reports/research-{index}.md",
+            artifact_ref=(
+                f"code.storage://projects/synthetic@{str(index) * 40}/reports/research-{index}.md"
+            ),
+        )
+        for index in range(6)
+    ]
+    visibility = (
+        [
+            SimpleNamespace(
+                executor="visibility.audit",
+                canonical_commit_sha=str(index) * 40,
+                artifact_path="reports/AI_VISIBILITY.md",
+                artifact_ref=(
+                    f"code.storage://projects/synthetic@{str(index) * 40}/reports/AI_VISIBILITY.md"
+                ),
+            )
+            for index in (6, 7)
+        ]
+        if has_visibility
+        else []
+    )
+    activities = object.__new__(TinActivities)
+    activities._db = SimpleNamespace(
+        list_memory_source_runs=AsyncMock(return_value=research + visibility)
+    )
+    activities._storage = SimpleNamespace(
+        read_canonical_artifact=AsyncMock(return_value=b"# Verified product facts")
+    )
+    sources = await activities._answer_page_sources(run_id=uuid4(), project=project)
+    expected = [f"tin.project://{project.id}/integrations"]
+    if has_memory:
+        expected.append(f"code.storage://projects/synthetic@{'m' * 40}/wiki/INDEX.md")
+    selected = visibility[-1:] if has_visibility else ([] if has_memory else research[-5:])
+    expected.extend(source.artifact_ref for source in selected)
+    assert [source.artifact_ref for source in sources] == expected
+    assert all(source.content == "# Verified product facts" for source in sources[1:])
+    assert activities._storage.read_canonical_artifact.await_count == len(expected) - 1
 
 
 @pytest.mark.asyncio

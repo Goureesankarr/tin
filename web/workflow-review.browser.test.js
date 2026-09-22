@@ -7,9 +7,10 @@ import test from "node:test";
 import { chromium } from "playwright";
 
 const assets = path.resolve("src/tin_lite/static");
-for (const theme of ["light", "dark"]) test(`article feedback: ${theme}, clean reader, inline card, replay and comparison`, async () => {
+for (const hidden of [false, true]) for (const theme of ["light", "dark"]) test(`article feedback: ${theme}, ${hidden ? "hidden public article with GitHub" : "discovered content draft"}, clean reader, inline card, replay and comparison`, async () => {
   const project = {id: "project", name: "ClawMessenger", workspace_id: "workspace", workspace_name: "ClawMessenger", timezone: "Europe/Berlin", member_count: 1};
-  const workflow = {id: "article", key: "content.generate", title: "Draft planned content", executor: "codex.procedure", status: "active", definition: {human_review: {eligible: true}, input_schema: {type: "object", properties: {}}}};
+  const workflow = {id: "article", key: hidden ? "content.public_article" : "content.generate", title: "Draft planned content", executor: "codex.procedure", status: "active", definition: {public_discovery: !hidden, human_review: {eligible: true}, input_schema: {type: "object", properties: {}}}};
+  const approvalLabel = hidden ? "Publish now" : "Approve draft";
   const first = {id: "first", project_id: "project", workflow_id: "article", workflow_name: "codex.procedure", status: "needs_input", review_required: true, review_version: 1, artifact_path: "content/drafts/first.md", canonical_commit_sha: "a".repeat(40), created_at: "2026-09-14T12:00:00Z"};
   const second = {...first, id: "second", review_source_run_id: "first", review_root_run_id: "first", review_version: 2, artifact_path: "content/drafts/second.md", canonical_commit_sha: "b".repeat(40)};
   let current = first, runs = [first], failSubmission = true, lagRunProjection = false;
@@ -52,9 +53,11 @@ for (const theme of ["light", "dark"]) test(`article feedback: ${theme}, clean r
       return send({});
     }
     if (url.pathname === "/api/projects") return send([project]);
-    if (url.pathname === "/api/workflows") return send([workflow]);
+    if (url.pathname === "/api/workflows") return send(hidden ? [] : [workflow]);
+    if (url.pathname === "/api/workflows/article") return send(workflow);
+    if (url.pathname.endsWith("/integrations")) return send(hidden ? [{key: "infra.github", connection_id: "github", status: "connected", configuration: {selected_repository: "example/site"}}] : []);
     if (url.pathname === "/api/projects/project/runs") return send(runs.map(projected));
-    if (url.pathname.endsWith("/decisions")) return send(current.status === "needs_input" ? [{id: "first", run_id: current.id, project_id: "project", workflow_key: "content.generate", workflow_title: workflow.title, kind: "review", title: "Review the draft", explanation: "The article is ready for review.", feedback_supported: true, items: [{file: current.artifact_path, revision: current.canonical_commit_sha, title: "An article with a purpose"}], created_at: first.created_at}] : []);
+    if (url.pathname.endsWith("/decisions")) return send(current.status === "needs_input" ? [{id: "first", run_id: current.id, project_id: "project", workflow_key: workflow.key, workflow_title: workflow.title, kind: "review", title: "Review the draft", explanation: "The article is ready for review.", feedback_supported: true, items: [{file: current.artifact_path, revision: current.canonical_commit_sha, title: "An article with a purpose"}], created_at: first.created_at}] : []);
     if (url.pathname.endsWith("/system")) return send({workflow_count: 0, running_count: current.status === "pending" ? 1 : 0, waiting_count: current.status === "needs_input" ? 1 : 0, runs_this_month: runs.length});
     if (url.pathname.endsWith("/files")) {fileReads.push(url.pathname); return send({revision: "c".repeat(40), files: [{path: "notes/product.md"}]});}
     const id = url.pathname.split("/")[4], run = id === "second" ? second : first;
@@ -80,6 +83,8 @@ for (const theme of ["light", "dark"]) test(`article feedback: ${theme}, clean r
     const page = await context.newPage(); page.on("pageerror", error => errors.push(error.message));
     await page.goto(`${base}/?project=project#decisions`);
     await page.getByRole("button", {name: "Request changes", exact: true}).waitFor();
+    assert.equal(await page.evaluate(() => state.workflows.some(item => item.id === "article")), !hidden);
+    if (hidden) await page.getByRole("button", {name: "Open a pull request", exact: true}).waitFor();
     for (const width of [1440, 390]) {
       await page.setViewportSize({width, height: 1000});
       const spacing = await page.locator(".decision-detail-card").evaluate(card => ({
@@ -98,7 +103,7 @@ for (const theme of ["light", "dark"]) test(`article feedback: ${theme}, clean r
     await page.setViewportSize({width: 1440, height: 1000});
     await page.goto(`${base}/?project=project#document/first?return=decisions`);
     await page.getByRole("button", {name: "Request changes", exact: true}).waitFor();
-    const readerApproval = page.getByRole("button", {name: "Approve draft", exact: true});
+    const readerApproval = page.getByRole("button", {name: approvalLabel, exact: true});
     const approvalStyle = await buttonStyle(readerApproval);
     await readerApproval.hover();
     await page.waitForTimeout(150);
@@ -108,9 +113,9 @@ for (const theme of ["light", "dark"]) test(`article feedback: ${theme}, clean r
     assert.equal(await page.locator(".review-composer").count(), 0);
     await page.getByRole("button", {name: "Request changes", exact: true}).click();
     await page.getByLabel("What should change?", {exact: true}).fill(feedback);
-    assert.equal(await page.getByRole("button", {name: "Approve draft", exact: true}).isVisible(), false);
+    assert.equal(await page.getByRole("button", {name: approvalLabel, exact: true}).isVisible(), false);
     await page.getByRole("button", {name: "Close feedback", exact: true}).click();
-    assert.equal(await page.getByRole("button", {name: "Approve draft", exact: true}).isVisible(), true);
+    assert.equal(await page.getByRole("button", {name: approvalLabel, exact: true}).isVisible(), true);
     await page.getByRole("button", {name: "Request changes", exact: true}).click();
     assert.equal(await page.getByLabel("What should change?", {exact: true}).inputValue(), feedback);
     for (const width of [1440, 390]) {
@@ -135,7 +140,7 @@ for (const theme of ["light", "dark"]) test(`article feedback: ${theme}, clean r
     lagRunProjection = true; // The exact review is ready before the initial run-list response.
     await page.setViewportSize({width: 1440, height: 1000});
     await page.goto(`${base}/?project=project#decisions`);
-    const cardApproval = page.locator("[data-apply-decision]");
+    const cardApproval = page.locator(".decision-approval[data-apply-decision]");
     await cardApproval.waitFor();
     assert.deepEqual(await buttonStyle(cardApproval), approvalStyle);
     await cardApproval.hover();
@@ -155,9 +160,11 @@ for (const theme of ["light", "dark"]) test(`article feedback: ${theme}, clean r
     await page.getByText("Previous version → Revised version", {exact: true}).waitFor();
     assert.doesNotMatch(await page.locator(".review-comparison").innerText(), /Keep current|Use saved result|would be removed/);
     await page.getByRole("button", {name: "Close comparison", exact: true}).click();
-    await page.getByRole("button", {name: "Approve draft", exact: true}).click();
+    if (process.env.TIN_REVIEW_SCREENSHOTS && hidden) await page.screenshot({path: `${process.env.TIN_REVIEW_SCREENSHOTS}/hidden-article-${theme}.png`, fullPage: true});
+    await page.getByRole("button", {name: hidden ? "Open a pull request" : approvalLabel, exact: true}).click();
     await page.waitForTimeout(100);
     assert.equal(writes.find(w => w.path.endsWith("/approve"))?.body.review_token, "2".repeat(64));
+    if (hidden) assert.equal(writes.find(w => w.path.endsWith("/approve"))?.body.delivery, "github_pr");
     assert.deepEqual(errors, []);
   } finally {await browser.close(); await new Promise(resolve => server.close(resolve));}
 });
