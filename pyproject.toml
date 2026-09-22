@@ -68,3 +68,6 @@ ignore = ["S101"]
 "src/tin_lite/growth_plan.py" = ["E501"]
 # The paid-ads assessment carries its prompts and schema builders verbatim for the same reason.
 "src/tin_lite/paid_ads.py" = ["E501"]
+"src/tin_lite/paid_ads_launch.py" = ["E501"]
+"src/tin_lite/paid_ads_monitor.py" = ["E501"]
+"tests/test_paid_ads_monitor.py" = ["E501"]

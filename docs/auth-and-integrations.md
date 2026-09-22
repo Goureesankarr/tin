@@ -45,8 +45,11 @@ below. Their secure setup accepts selected secrets without putting values in MCP
 or project Files. Bounded code workflows call the trusted gateway, which resolves credentials;
 this does not expose arbitrary SDK credentials to author-controlled sandbox code.
 
-Google Search Console and GitHub now use one project-owned connection boundary. Do not port
-LinkedIn or another provider as a special workflow:
+Google Search Console, GitHub, Google Workspace and Google Ads use one project-owned connection
+boundary. Google Ads is the identifier-entry case: the founder enters a customer id, Tin's manager
+account sends an invitation the founder accepts inside Google Ads, and no customer credential is
+stored; the manager refresh token is a deployment credential. Do not port LinkedIn or another
+provider as a special workflow:
 
 1. `integration_connections` records the project, provider, external account identity, connection
    health, selected property or repository, and encrypted credential material where the provider

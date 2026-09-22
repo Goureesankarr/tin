@@ -4342,6 +4342,561 @@ class Database:
         )
         await self.project_failure(run_id=run_id, error_message=error_code)
 
+    # ------------------------------------------------------------ Google Ads campaigns
+
+    async def stop_paid_ads_monitor(
+        self, *, run_id: UUID, project_id: UUID, actor: str
+    ) -> WorkflowRun:
+        return await self._stop_paid_report(
+            run_id=run_id,
+            project_id=project_id,
+            actor=actor,
+            workflow_key="growth.paid_ads_monitor",
+        )
+
+    async def create_paid_ads_campaign(
+        self,
+        *,
+        run_id: UUID,
+        project_id: UUID,
+        connection_id: UUID | None,
+        customer_id: str,
+        mode: str,
+        source_run_id: UUID,
+        source_commit_sha: str,
+        plan_path: str,
+        plan_commit_sha: str,
+        daily_budget_micros: int | None,
+        cpc_ceiling_micros: int | None,
+    ) -> dict[str, Any]:
+        """Record the exact plan a launch run put up for approval; a replay must match it."""
+        async with self.pool.acquire() as conn, conn.transaction():
+            await conn.execute(
+                "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))",
+                f"paid-ads-campaign:{run_id}",
+            )
+            existing = await conn.fetchrow(
+                "SELECT * FROM paid_ads_campaigns WHERE run_id = $1 FOR UPDATE", run_id
+            )
+            if existing is not None:
+                if (
+                    existing["project_id"] != project_id
+                    or existing["customer_id"] != customer_id
+                    or existing["mode"] != mode
+                    or existing["source_run_id"] != source_run_id
+                    or existing["plan_path"] != plan_path
+                    or existing["plan_commit_sha"] != plan_commit_sha
+                ):
+                    raise SideEffectConflictError("paid ads campaign snapshot conflicts")
+                return dict(existing)
+            row = await conn.fetchrow(
+                """
+                INSERT INTO paid_ads_campaigns (
+                    run_id, project_id, integration_connection_id, customer_id, mode,
+                    source_run_id, source_commit_sha, plan_path, plan_commit_sha,
+                    daily_budget_micros, cpc_ceiling_micros
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+                RETURNING *
+                """,
+                run_id,
+                project_id,
+                connection_id,
+                customer_id,
+                mode,
+                source_run_id,
+                source_commit_sha,
+                plan_path,
+                plan_commit_sha,
+                daily_budget_micros,
+                cpc_ceiling_micros,
+            )
+        assert row is not None
+        return dict(row)
+
+    async def get_paid_ads_campaign(self, run_id: UUID) -> dict[str, Any] | None:
+        row = await self.pool.fetchrow("SELECT * FROM paid_ads_campaigns WHERE run_id = $1", run_id)
+        return dict(row) if row is not None else None
+
+    async def list_paid_ads_campaigns(self, project_id: UUID) -> list[dict[str, Any]]:
+        rows = await self.pool.fetch(
+            """
+            SELECT * FROM paid_ads_campaigns WHERE project_id = $1
+            ORDER BY created_at DESC LIMIT 50
+            """,
+            project_id,
+        )
+        return [dict(row) for row in rows]
+
+    async def approve_paid_ads_campaign(self, *, run_id: UUID) -> None:
+        updated = await self.pool.fetchval(
+            """
+            UPDATE paid_ads_campaigns
+            SET status = CASE WHEN status = 'draft' THEN 'approved' ELSE status END,
+                approved_at = COALESCE(approved_at, now()), updated_at = now()
+            WHERE run_id = $1 AND status IN ('draft', 'approved', 'creating', 'live')
+            RETURNING true
+            """,
+            run_id,
+        )
+        if updated is None:
+            raise RuntimeError("paid ads campaign is not awaiting approval")
+
+    async def update_paid_ads_campaign(self, *, run_id: UUID, **fields: Any) -> None:
+        allowed = {
+            "status",
+            "external_campaign_id",
+            "external_budget_id",
+            "external_shared_set_id",
+            "enabled_at",
+            "completed_at",
+        }
+        unknown = set(fields) - allowed
+        if unknown or not fields:
+            raise ValueError("unsupported paid ads campaign fields")
+        await self.pool.execute(
+            """
+            UPDATE paid_ads_campaigns
+            SET status = COALESCE($2, status),
+                external_campaign_id = COALESCE($3, external_campaign_id),
+                external_budget_id = COALESCE($4, external_budget_id),
+                external_shared_set_id = COALESCE($5, external_shared_set_id),
+                enabled_at = COALESCE($6, enabled_at),
+                completed_at = COALESCE($7, completed_at),
+                updated_at = now()
+            WHERE run_id = $1
+            """,
+            run_id,
+            fields.get("status"),
+            fields.get("external_campaign_id"),
+            fields.get("external_budget_id"),
+            fields.get("external_shared_set_id"),
+            fields.get("enabled_at"),
+            fields.get("completed_at"),
+        )
+
+    async def complete_paid_ads_launch(
+        self,
+        conn: asyncpg.Connection,
+        *,
+        execution_key: str,
+        run_id: UUID,
+        campaign_status: str,
+        canonical_commit_sha: str,
+        artifact_path: str,
+        artifact_ref: str,
+        summary: str,
+        event_type: str,
+    ) -> None:
+        """A review-pinned run finishes only after its approval; the campaign row follows."""
+        if campaign_status not in {"live", "tracking", "setup"}:
+            raise ValueError("unsupported paid ads campaign outcome")
+        async with conn.transaction():
+            projected = await conn.fetchval(
+                """
+                UPDATE workflow_runs
+                SET status = 'succeeded', canonical_commit_sha = $2, artifact_ref = $3,
+                    artifact_path = $4, result_summary = $5, error_message = NULL,
+                    finished_at = COALESCE(finished_at, now()), progress_percent = 100,
+                    progress_updated_at = now(), heartbeat_at = now()
+                WHERE id = $1 AND executor = 'growth.paid_ads_launch'
+                  AND (NOT review_required OR review_decision = 'approved')
+                  AND status NOT IN ('failed', 'stopped', 'superseded')
+                RETURNING id
+                """,
+                run_id,
+                canonical_commit_sha,
+                artifact_ref,
+                artifact_path,
+                summary[:1000],
+            )
+            if projected is None:
+                raise SideEffectConflictError("launch cannot complete in its current state")
+            await conn.execute(
+                """
+                UPDATE paid_ads_campaigns
+                SET status = $2, completed_at = COALESCE(completed_at, now()), updated_at = now()
+                WHERE run_id = $1 AND status NOT IN ('failed', 'stopped')
+                """,
+                run_id,
+                campaign_status,
+            )
+            await self.add_activity(
+                conn=conn,
+                run_id=run_id,
+                event_type=event_type,
+                details={"kind": "runs", "status": "succeeded", "artifact_ref": artifact_ref},
+                summary=summary,
+                audience="product",
+                dedupe_key=f"{execution_key}:{event_type}",
+            )
+            await self.complete_effect(
+                conn, execution_key=execution_key, result={"artifact_ref": artifact_ref}
+            )
+        await self._track_run(run_id, "run_succeeded", artifact_path=artifact_path)
+
+    async def fail_paid_ads_launch(
+        self,
+        *,
+        run_id: UUID,
+        message: str,
+        canonical_commit_sha: str | None = None,
+        artifact_path: str | None = None,
+        artifact_ref: str | None = None,
+    ) -> None:
+        """A launch that cannot proceed ends failed with a founder-readable reason; when a
+        setup note was published first it stays linked as the run's artifact."""
+        async with self.pool.acquire() as conn, conn.transaction():
+            row = await conn.fetchrow(
+                """
+                UPDATE workflow_runs
+                SET status = 'failed', error_message = $2,
+                    canonical_commit_sha = COALESCE($3, canonical_commit_sha),
+                    artifact_path = COALESCE($4, artifact_path),
+                    artifact_ref = COALESCE($5, artifact_ref),
+                    finished_at = COALESCE(finished_at, now()),
+                    progress_updated_at = now(), heartbeat_at = now()
+                WHERE id = $1 AND executor = 'growth.paid_ads_launch'
+                  AND status NOT IN ('succeeded', 'stopped', 'superseded', 'failed')
+                RETURNING *
+                """,
+                run_id,
+                message[:2000],
+                canonical_commit_sha,
+                artifact_path,
+                artifact_ref,
+            )
+            if row is None:
+                return
+            await conn.execute(
+                """
+                UPDATE paid_ads_campaigns SET status = 'failed', updated_at = now()
+                WHERE run_id = $1 AND status NOT IN ('live', 'tracking', 'setup', 'stopped')
+                """,
+                run_id,
+            )
+            await conn.execute(
+                """
+                UPDATE run_decisions SET status = 'dismissed'
+                WHERE run_id = $1 AND status = 'pending'
+                """,
+                run_id,
+            )
+            await self.add_activity(
+                conn=conn,
+                run_id=run_id,
+                event_type="paid_ads_launch_failed",
+                details={"kind": "runs", "status": "failed"},
+                summary=message[:1000],
+                audience="product",
+                dedupe_key=f"paid_ads_launch:{run_id}:failed",
+            )
+        await self._track_run(run_id, "run_failed", error=message[:1000])
+
+    async def stop_paid_ads_launch(
+        self, *, run_id: UUID, project_id: UUID, actor: str
+    ) -> WorkflowRun:
+        """Stop before the campaign is enabled; afterwards the founder pauses it in Google Ads."""
+        async with self.pool.acquire() as conn, self.project_state_lock(conn, project_id):
+            async with conn.transaction():
+                row = await conn.fetchrow(
+                    "SELECT * FROM workflow_runs WHERE id=$1 FOR UPDATE", run_id
+                )
+                if (
+                    row is None
+                    or row["project_id"] != project_id
+                    or row["executor"] != "growth.paid_ads_launch"
+                ):
+                    raise LookupError("run not found")
+                if row["status"] == "stopped":
+                    return _run(row)
+                if row["status"] not in {"pending", "running", "needs_input"}:
+                    raise SideEffectConflictError("This Google Ads launch has already finished.")
+                enabling = await conn.fetchval(
+                    "SELECT status FROM effect_receipts WHERE execution_key=$1",
+                    f"paid_ads_launch:{run_id}:apply:enable",
+                )
+                if enabling:
+                    raise SideEffectConflictError(
+                        "The campaign is being switched on and can no longer be stopped here. "
+                        "Pause it in Google Ads."
+                    )
+                row = await conn.fetchrow(
+                    "UPDATE workflow_runs SET status='stopped', finished_at=now() "
+                    "WHERE id=$1 RETURNING *",
+                    run_id,
+                )
+                await conn.execute(
+                    """
+                    UPDATE paid_ads_campaigns SET status = 'stopped', updated_at = now()
+                    WHERE run_id = $1 AND status NOT IN ('live', 'tracking', 'setup')
+                    """,
+                    run_id,
+                )
+                await conn.execute(
+                    "UPDATE run_decisions SET status = 'dismissed' "
+                    "WHERE run_id = $1 AND status = 'pending'",
+                    run_id,
+                )
+                await self.add_activity(
+                    conn=conn,
+                    run_id=run_id,
+                    event_type="paid_ads_launch_stopped",
+                    details={
+                        "kind": "your_edits",
+                        "status": "stopped",
+                        "actor_clerk_user_id": actor,
+                    },
+                    summary=(
+                        "You stopped the Google Ads launch. Anything already created in "
+                        "Google Ads stays paused there."
+                    ),
+                    audience="product",
+                    dedupe_key=f"paid_ads_launch:{run_id}:stopped",
+                )
+                return _run(row)
+
+    async def begin_paid_ads_proposal(
+        self,
+        *,
+        proposal_id: UUID,
+        monitor_run_id: UUID,
+        campaign_run_id: UUID,
+        project_id: UUID,
+        request_id: UUID,
+        kind: str,
+        previous: dict[str, Any],
+        proposed: dict[str, Any],
+        rationale: str,
+        review_path: str,
+    ) -> dict[str, Any]:
+        """One open proposal per campaign; the same request replays its row."""
+        async with self.pool.acquire() as conn, conn.transaction():
+            existing = await conn.fetchrow(
+                "SELECT * FROM paid_ads_proposals WHERE project_id = $1 AND request_id = $2",
+                project_id,
+                request_id,
+            )
+            if existing is not None:
+                if existing["campaign_run_id"] != campaign_run_id or existing["kind"] != kind:
+                    raise SideEffectConflictError("paid ads proposal request conflicts")
+                return _proposal(existing)
+            campaign = await conn.fetchrow(
+                "SELECT * FROM paid_ads_campaigns WHERE run_id = $1 FOR UPDATE", campaign_run_id
+            )
+            if campaign is None or campaign["project_id"] != project_id:
+                raise LookupError("paid ads campaign not found")
+            if campaign["status"] != "live":
+                raise RuntimeError("proposals need a live campaign")
+            open_row = await conn.fetchrow(
+                """
+                SELECT id FROM paid_ads_proposals
+                WHERE campaign_run_id = $1 AND status IN ('pending', 'approved')
+                """,
+                campaign_run_id,
+            )
+            if open_row is not None:
+                raise RuntimeError("the campaign already has a proposal awaiting you")
+            number = int(
+                await conn.fetchval(
+                    "SELECT COALESCE(max(proposal_number), 0) + 1 FROM paid_ads_proposals "
+                    "WHERE campaign_run_id = $1",
+                    campaign_run_id,
+                )
+            )
+            row = await conn.fetchrow(
+                """
+                INSERT INTO paid_ads_proposals (
+                    id, monitor_run_id, project_id, campaign_run_id, request_id,
+                    proposal_number, kind, previous, proposed, rationale, review_path
+                )
+                VALUES ($1, $2, $3, $4, $5, $6, $7, $8::jsonb, $9::jsonb, $10, $11)
+                RETURNING *
+                """,
+                proposal_id,
+                monitor_run_id,
+                project_id,
+                campaign_run_id,
+                request_id,
+                number,
+                kind,
+                json.dumps(previous),
+                json.dumps(proposed),
+                rationale[:4000],
+                review_path,
+            )
+        assert row is not None
+        return _proposal(row)
+
+    async def finalize_paid_ads_proposal(
+        self,
+        *,
+        proposal_id: UUID,
+        review_commit_sha: str,
+        artifact_ref: str,
+        review_path: str | None = None,
+    ) -> dict[str, Any]:
+        """The numbered document path is known only after the row took its number."""
+        async with self.pool.acquire() as conn, conn.transaction():
+            row = await conn.fetchrow(
+                """
+                UPDATE paid_ads_proposals
+                SET review_commit_sha = COALESCE(review_commit_sha, $2),
+                    review_path = COALESCE($3, review_path)
+                WHERE id = $1
+                RETURNING *
+                """,
+                proposal_id,
+                review_commit_sha,
+                review_path,
+            )
+            if row is None:
+                raise LookupError("paid ads proposal not found")
+            proposal = _proposal(row)
+            await conn.execute(
+                """
+                INSERT INTO activity_events (
+                    project_id, run_id, event_type, details, summary, audience, dedupe_key
+                )
+                VALUES ($1, $2, 'paid_ads_proposal_ready', $3::jsonb, $4, 'product', $5)
+                ON CONFLICT (dedupe_key) WHERE dedupe_key IS NOT NULL DO NOTHING
+                """,
+                proposal["project_id"],
+                proposal["monitor_run_id"],
+                json.dumps(
+                    {
+                        "kind": "needs_you",
+                        "artifact_ref": artifact_ref,
+                        "proposal_id": str(proposal_id),
+                        "proposal_kind": proposal["kind"],
+                        "external_label": "Review proposal",
+                    }
+                ),
+                _proposal_summary(proposal),
+                f"paid_ads_proposal:{proposal_id}:ready",
+            )
+        return proposal
+
+    async def get_paid_ads_proposal(self, proposal_id: UUID) -> dict[str, Any] | None:
+        row = await self.pool.fetchrow(
+            "SELECT * FROM paid_ads_proposals WHERE id = $1", proposal_id
+        )
+        return _proposal(row) if row is not None else None
+
+    async def list_paid_ads_proposals(
+        self, *, project_id: UUID, status: str | None = None
+    ) -> list[dict[str, Any]]:
+        rows = await self.pool.fetch(
+            """
+            SELECT * FROM paid_ads_proposals
+            WHERE project_id = $1 AND ($2::text IS NULL OR status = $2)
+            ORDER BY requested_at DESC LIMIT 100
+            """,
+            project_id,
+            status,
+        )
+        return [_proposal(row) for row in rows]
+
+    async def review_paid_ads_proposal(
+        self, *, proposal_id: UUID, decision: str, clerk_user_id: str
+    ) -> dict[str, Any]:
+        """pending → approved | discarded, once; replays return the row unchanged."""
+        if decision not in {"approved", "discarded"}:
+            raise ValueError("unsupported proposal decision")
+        async with self.pool.acquire() as conn, conn.transaction():
+            row = await conn.fetchrow(
+                "SELECT * FROM paid_ads_proposals WHERE id = $1 FOR UPDATE", proposal_id
+            )
+            if row is None:
+                raise LookupError("paid ads proposal not found")
+            if row["status"] == decision or (
+                decision == "approved" and row["status"] in {"applied", "unknown", "failed"}
+            ):
+                return _proposal(row)
+            if row["status"] != "pending":
+                raise RuntimeError("this proposal has already been decided")
+            row = await conn.fetchrow(
+                """
+                UPDATE paid_ads_proposals
+                SET status = $2, reviewed_by_clerk_user_id = $3, reviewed_at = now()
+                WHERE id = $1
+                RETURNING *
+                """,
+                proposal_id,
+                decision,
+                clerk_user_id,
+            )
+            assert row is not None
+            proposal = _proposal(row)
+            await conn.execute(
+                """
+                INSERT INTO activity_events (
+                    project_id, run_id, event_type, details, summary, audience, dedupe_key
+                )
+                VALUES ($1, $2, $3, $4::jsonb, $5, 'product', $6)
+                ON CONFLICT (dedupe_key) WHERE dedupe_key IS NOT NULL DO NOTHING
+                """,
+                proposal["project_id"],
+                proposal["monitor_run_id"],
+                f"paid_ads_proposal_{decision}",
+                json.dumps(
+                    {
+                        "kind": "your_edits",
+                        "proposal_id": str(proposal_id),
+                        "actor_clerk_user_id": clerk_user_id,
+                    }
+                ),
+                (
+                    "You approved the Google Ads change; Tin is applying it."
+                    if decision == "approved"
+                    else "You set the Google Ads proposal aside. Nothing changed."
+                ),
+                f"paid_ads_proposal:{proposal_id}:{decision}",
+            )
+        return proposal
+
+    async def settle_paid_ads_proposal(
+        self, *, proposal_id: UUID, status: str, error_code: str | None = None
+    ) -> dict[str, Any]:
+        if status not in {"applied", "unknown", "failed"}:
+            raise ValueError("unsupported proposal settlement")
+        async with self.pool.acquire() as conn, conn.transaction():
+            row = await conn.fetchrow(
+                """
+                UPDATE paid_ads_proposals
+                SET status = $2, error_code = $3, settled_at = COALESCE(settled_at, now())
+                WHERE id = $1 AND status IN ('approved', 'unknown')
+                RETURNING *
+                """,
+                proposal_id,
+                status,
+                error_code[:120] if error_code else None,
+            )
+            if row is None:
+                current = await conn.fetchrow(
+                    "SELECT * FROM paid_ads_proposals WHERE id = $1", proposal_id
+                )
+                if current is None:
+                    raise LookupError("paid ads proposal not found")
+                return _proposal(current)
+            proposal = _proposal(row)
+            if status == "applied":
+                await conn.execute(
+                    """
+                    INSERT INTO activity_events (
+                        project_id, run_id, event_type, details, summary, audience, dedupe_key
+                    )
+                    VALUES ($1, $2, 'paid_ads_proposal_applied', $3::jsonb, $4, 'product', $5)
+                    ON CONFLICT (dedupe_key) WHERE dedupe_key IS NOT NULL DO NOTHING
+                    """,
+                    proposal["project_id"],
+                    proposal["monitor_run_id"],
+                    json.dumps({"kind": "runs", "proposal_id": str(proposal_id)}),
+                    f"Applied in Google Ads: {_proposal_summary(proposal)}",
+                    f"paid_ads_proposal:{proposal_id}:applied",
+                )
+        return proposal
+
     async def stop_email_campaign(self, *, run_id: UUID) -> WorkflowRun:
         async with self.pool.acquire() as conn, conn.transaction():
             row = await conn.fetchrow(
@@ -4428,6 +4983,11 @@ class Database:
                 "paid_ads",
                 "paid_ads_assessment_stopped",
                 "paid ads assessment",
+            ),
+            "growth.paid_ads_monitor": (
+                "paid_ads_monitor",
+                "paid_ads_monitor_stopped",
+                "Google Ads check",
             ),
         }[workflow_key]
         async with self.pool.acquire() as conn, self.project_state_lock(conn, project_id):
@@ -5593,6 +6153,10 @@ class Database:
                 "paid_ads_assessment_ready",
                 "The paid ads assessment is ready.",
             ),
+            "growth.paid_ads_monitor": (
+                "paid_ads_monitor_ready",
+                "Today's Google Ads check is done.",
+            ),
             "organic.traffic_system": ("organic_system_ready", "Organic traffic system finished."),
             "organic.technical_fix": ("technical_fix_ready", "Technical fix inspection finished."),
         }[workflow_key]
@@ -6707,6 +7271,27 @@ def _project_workflow(row: asyncpg.Record) -> ProjectWorkflow:
             if row.get("content_revision") is not None
             else None
         ),
+    )
+
+
+def _proposal(row: asyncpg.Record) -> dict[str, Any]:
+    value = dict(row)
+    for key in ("previous", "proposed"):
+        raw = value.get(key)
+        value[key] = json.loads(raw) if isinstance(raw, str) else (raw or {})
+    return value
+
+
+def _proposal_summary(proposal: dict[str, Any]) -> str:
+    proposed = proposal.get("proposed") or {}
+    if proposal.get("kind") == "budget_change":
+        return (
+            f"Proposal {proposal.get('proposal_number')}: change the daily budget to "
+            f"${proposed.get('daily_budget_usd')}."
+        )
+    return (
+        f"Proposal {proposal.get('proposal_number')}: switch bidding to "
+        f"{str(proposed.get('strategy', '')).replace('_', ' ')}."
     )
 
 

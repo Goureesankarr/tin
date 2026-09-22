@@ -110,6 +110,7 @@ def test_tin_state_mirrors_the_start_gates_when_nothing_is_configured() -> None:
         "analytics.gsc": False,
         "infra.github": False,
         "workspace.google": False,
+        "ads.google": False,
     }
     assert state["running"] == [] and state["recent_runs"] == []
 
@@ -184,6 +185,7 @@ def test_tin_state_opens_doors_as_settings_and_connections_arrive() -> None:
         "analytics.gsc": False,
         "infra.github": True,
         "workspace.google": False,
+        "ads.google": False,
     }
 
 

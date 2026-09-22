@@ -255,9 +255,12 @@ def observation(row, facts, *, legacy=False):
     if kind == "connected_api":
         from tin_lite.project_connections import CUSTOM_KEY
 
-        if provider not in {"analytics.gsc", "infra.github", "workspace.google"} and not (
-            isinstance(provider, str) and CUSTOM_KEY.fullmatch(provider)
-        ):
+        if provider not in {
+            "analytics.gsc",
+            "infra.github",
+            "workspace.google",
+            "ads.google",
+        } and not (isinstance(provider, str) and CUSTOM_KEY.fullmatch(provider)):
             provider = "unknown"
     elif provider not in {
         "e2b",
@@ -267,6 +270,7 @@ def observation(row, facts, *, legacy=False):
         "openrouter",
         "dataforseo",
         "gak",
+        "google_ads",
     }:
         provider = "dataforseo" if kind == "tool" else "unknown"
     model = (

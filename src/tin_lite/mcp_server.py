@@ -65,6 +65,15 @@ from tin_lite.output_resolution import OutputResolutionError, OutputResolutionRe
 from tin_lite.paid_ads_control import (
     stop_paid_ads_assessment as stop_paid_ads_assessment_service,
 )
+from tin_lite.paid_ads_control import stop_paid_ads_launch as stop_paid_ads_launch_service
+from tin_lite.paid_ads_control import stop_paid_ads_monitor as stop_paid_ads_monitor_service
+from tin_lite.paid_ads_proposals import (
+    approve_paid_ads_proposal as approve_paid_ads_proposal_service,
+)
+from tin_lite.paid_ads_proposals import (
+    discard_paid_ads_proposal as discard_paid_ads_proposal_service,
+)
+from tin_lite.paid_ads_proposals import list_paid_ads_proposals as list_paid_ads_proposals_service
 from tin_lite.private_workflows import (
     PackageActivation,
     PackageSelection,
@@ -160,6 +169,22 @@ def _validate_revision(value: str) -> None:
         raise ValueError("revision must be a lowercase 40-character commit SHA")
 
 
+def _mcp_proposal_view(row: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": str(row["id"]),
+        "campaign_run_id": str(row["campaign_run_id"]),
+        "monitor_run_id": str(row["monitor_run_id"]),
+        "number": row["proposal_number"],
+        "kind": row["kind"],
+        "status": row["status"],
+        "previous": row["previous"],
+        "proposed": row["proposed"],
+        "rationale": row["rationale"],
+        "review_path": row["review_path"],
+        "error_code": row.get("error_code"),
+    }
+
+
 def _run_allowed_actions(run: Any) -> list[str]:
     if run.executor == PROJECT_TASK_WORKFLOW_NAME:
         return project_task_control.project_task_allowed_actions(run)
@@ -175,11 +200,18 @@ def _run_allowed_actions(run: Any) -> list[str]:
         "content.plan",
         "organic.traffic_system",
         "growth.paid_ads_assessment",
+        "growth.paid_ads_monitor",
     } and run.status in {
         RunStatus.PENDING,
         RunStatus.RUNNING,
     }:
         return ["cancel"]
+    if run.workflow_name == "growth.paid_ads_launch" and run.status in {
+        RunStatus.PENDING,
+        RunStatus.RUNNING,
+        RunStatus.NEEDS_INPUT,
+    }:
+        return ["approve", "cancel"] if run.status is RunStatus.NEEDS_INPUT else ["cancel"]
     if run.status is RunStatus.NEEDS_INPUT and run.review_required:
         if run.executor == GROWTH_ONBOARDING_KEY:
             return ["record_picks", "approve"]
@@ -2147,6 +2179,87 @@ def create_mcp_app(
         return {"id": str(stopped.id), "status": stopped.status.value}
 
     @server.tool()
+    async def stop_paid_ads_launch(run_id: str) -> dict[str, Any]:
+        """Stop a Google Ads launch before the campaign is switched on. Anything already
+        created stays paused in Google Ads."""
+        token = await caller()
+        parsed = _mcp_uuid(run_id, field="run_id")
+        run = await runtime().database.get_run(parsed)
+        if run is None:
+            raise ToolError("run not found")
+        await require_project(run.project_id, token, tool_name="stop_paid_ads_launch")
+        try:
+            stopped = await stop_paid_ads_launch_service(
+                runtime=runtime(), run_id=parsed, clerk_user_id=token.subject
+            )
+        except (LookupError, ValueError, SideEffectConflictError) as exc:
+            raise ToolError(str(exc)) from exc
+        return {"id": str(stopped.id), "status": stopped.status.value}
+
+    @server.tool()
+    async def stop_paid_ads_monitor(run_id: str) -> dict[str, Any]:
+        """Stop today's Google Ads check. Changes already applied stand."""
+        token = await caller()
+        parsed = _mcp_uuid(run_id, field="run_id")
+        run = await runtime().database.get_run(parsed)
+        if run is None:
+            raise ToolError("run not found")
+        await require_project(run.project_id, token, tool_name="stop_paid_ads_monitor")
+        try:
+            stopped = await stop_paid_ads_monitor_service(
+                runtime=runtime(), run_id=parsed, clerk_user_id=token.subject
+            )
+        except (LookupError, ValueError, SideEffectConflictError) as exc:
+            raise ToolError(str(exc)) from exc
+        return {"id": str(stopped.id), "status": stopped.status.value}
+
+    @server.tool()
+    async def list_paid_ads_proposals(project_id: str) -> list[dict[str, Any]]:
+        """Budget and bidding changes the Google Ads monitor proposed; pending ones await
+        the founder. Read the proposal file in Files before relaying it."""
+        token = await caller()
+        parsed = _mcp_uuid(project_id, field="project_id")
+        await require_project(parsed, token, tool_name="list_paid_ads_proposals")
+        rows = await list_paid_ads_proposals_service(
+            runtime=runtime(), project_id=parsed, clerk_user_id=token.subject
+        )
+        return [_mcp_proposal_view(row) for row in rows]
+
+    @server.tool()
+    async def approve_paid_ads_proposal(proposal_id: str) -> dict[str, Any]:
+        """Apply one proposed Google Ads change exactly as written, once the founder said yes."""
+        token = await caller()
+        parsed = _mcp_uuid(proposal_id, field="proposal_id")
+        proposal = await runtime().database.get_paid_ads_proposal(parsed)
+        if proposal is None:
+            raise ToolError("proposal not found")
+        await require_project(proposal["project_id"], token, tool_name="approve_paid_ads_proposal")
+        try:
+            row = await approve_paid_ads_proposal_service(
+                runtime=runtime(), proposal_id=parsed, clerk_user_id=token.subject
+            )
+        except (LookupError, RuntimeError, ValueError, SideEffectConflictError) as exc:
+            raise ToolError(str(exc)) from exc
+        return _mcp_proposal_view(row)
+
+    @server.tool()
+    async def discard_paid_ads_proposal(proposal_id: str) -> dict[str, Any]:
+        """Set one proposed Google Ads change aside. Nothing changes in Google Ads."""
+        token = await caller()
+        parsed = _mcp_uuid(proposal_id, field="proposal_id")
+        proposal = await runtime().database.get_paid_ads_proposal(parsed)
+        if proposal is None:
+            raise ToolError("proposal not found")
+        await require_project(proposal["project_id"], token, tool_name="discard_paid_ads_proposal")
+        try:
+            row = await discard_paid_ads_proposal_service(
+                runtime=runtime(), proposal_id=parsed, clerk_user_id=token.subject
+            )
+        except (LookupError, RuntimeError, ValueError, SideEffectConflictError) as exc:
+            raise ToolError(str(exc)) from exc
+        return _mcp_proposal_view(row)
+
+    @server.tool()
     async def stop_keyword_plan(run_id: str) -> dict[str, Any]:
         """Stop future keyword research. Accepted provider requests may still incur costs."""
         token = await caller()
@@ -3628,7 +3741,7 @@ def create_mcp_app(
         token = await caller()
         parsed_project_id = _mcp_uuid(project_id, field="project_id")
         await require_project(parsed_project_id, token, tool_name="start_integration_connections")
-        known = {"infra.github", "analytics.gsc", "workspace.google"}
+        known = {"infra.github", "analytics.gsc", "workspace.google", "ads.google"}
         chosen = [key.strip() for key in providers if key.strip()]
         unknown = [key for key in chosen if key not in known]
         if not chosen or unknown:
@@ -3645,6 +3758,7 @@ def create_mcp_app(
             "infra.github": "GitHub",
             "analytics.gsc": "Google Search Console",
             "workspace.google": "Google Workspace",
+            "ads.google": "Google Ads",
         }
         listed = ", ".join(names[key] for key in chosen)
         return {
@@ -3659,6 +3773,67 @@ def create_mcp_app(
                     + ". Tell me when it says connected."
                 )
             ),
+        }
+
+    @server.tool()
+    async def connect_google_ads(project_id: str, customer_id: str) -> dict[str, Any]:
+        """Link the founder's existing Google Ads account to Tin's manager account.
+
+        Ask the founder for the ten-digit customer id shown at the top right of Google Ads
+        (like 123-456-7890). Tin sends a manager request; the founder accepts it in Google
+        Ads under Admin, Access and security, Managers. Confirm afterwards with
+        refresh_google_ads_connection. Tell the founder the result's `relay` in your words.
+        """
+        token = await caller()
+        clerk_user_id = token.subject
+        assert clerk_user_id is not None
+        parsed_project_id = _mcp_uuid(project_id, field="project_id")
+        await require_project(parsed_project_id, token, tool_name="connect_google_ads")
+        try:
+            connection = await runtime().integrations.connect_google_ads(
+                project_id=parsed_project_id,
+                customer_id=customer_id,
+                clerk_user_id=clerk_user_id,
+            )
+        except IntegrationError as exc:
+            raise ToolError(str(exc)) from exc
+        link = connection.configuration.get("link_status")
+        return {
+            "provider_key": connection.provider_key,
+            "account": connection.external_account_label,
+            "link_status": link,
+            **_founder_words(
+                relay=(
+                    "Google Ads is linked to Tin's manager account."
+                    if link == "active"
+                    else "I sent Tin's manager request to your Google Ads account. In Google "
+                    "Ads open Admin, then Access and security, then Managers, and accept the "
+                    "request from Tin Computer. Tell me when it is accepted."
+                )
+            ),
+        }
+
+    @server.tool()
+    async def refresh_google_ads_connection(project_id: str) -> dict[str, Any]:
+        """Re-check the Google Ads manager link, then billing and conversion tracking."""
+        token = await caller()
+        parsed_project_id = _mcp_uuid(project_id, field="project_id")
+        await require_project(parsed_project_id, token, tool_name="refresh_google_ads_connection")
+        try:
+            connection = await runtime().integrations.refresh_google_ads(
+                project_id=parsed_project_id
+            )
+        except IntegrationError as exc:
+            raise ToolError(str(exc)) from exc
+        health = connection.configuration.get("health") or {}
+        return {
+            "provider_key": connection.provider_key,
+            "account": connection.external_account_label,
+            "link_status": connection.configuration.get("link_status"),
+            "account_status": health.get("account_status"),
+            "billing_approved": health.get("billing_approved"),
+            "conversion_actions_with_data": health.get("conversion_actions_with_data"),
+            "checked_at": health.get("checked_at"),
         }
 
     @server.tool()

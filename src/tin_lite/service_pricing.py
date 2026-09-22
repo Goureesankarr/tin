@@ -11,7 +11,7 @@ from decimal import Decimal, InvalidOperation
 from tin_lite.billing_contracts import NANOS_PER_DOLLAR, BillingError, digest, token_charge
 
 CARD = {
-    "id": "tin-native-supplier-2026-09-14-v1",
+    "id": "tin-native-supplier-2026-09-22-v1",
     "source": "https://developers.openai.com/api/docs/pricing",
     "provider": "openai",
     "service_tier": "default",
@@ -40,6 +40,7 @@ CARD = {
     "tools": {
         "dataforseo": "provider_reported_task_cost_usd",
         "gak": "provider_reported_task_cost_usd",
+        "google_ads": "provider_reported_task_cost_usd",
     },
 }
 
@@ -56,6 +57,8 @@ NATIVE_EXECUTORS = {
     "organic.keyword_plan",
     "growth.onboarding_plan",
     "growth.paid_ads_assessment",
+    "growth.paid_ads_launch",
+    "growth.paid_ads_monitor",
 }
 PARENT_EXECUTORS = {"organic.traffic_system", "growth.onboarding"}
 
@@ -105,6 +108,13 @@ def service_terms(definition, *, inputs=None):
     elif executor == "growth.paid_ads_assessment":
         # The founder's ceiling bounds model steps and provider research together.
         maximum = amount_nanos(inputs.get("max_cost_usd", 6))
+        kinds = ["native_model", "tool"]
+    elif executor == "growth.paid_ads_launch":
+        # Model steps only; the Google Ads API reports no cost and is receipted at zero.
+        maximum = amount_nanos(inputs.get("max_cost_usd", 4))
+        kinds = ["native_model", "tool"]
+    elif executor == "growth.paid_ads_monitor":
+        maximum = amount_nanos(inputs.get("max_cost_usd", 2))
         kinds = ["native_model", "tool"]
     if type(maximum) is not int or maximum <= 0:
         raise BillingError("invalid_budget", "The workflow spending maximum is invalid.")

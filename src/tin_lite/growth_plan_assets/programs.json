@@ -126,15 +126,19 @@
         "time_to_signal": "weeks"
       },
       "tin": {
-        "coverage": "partial",
+        "coverage": "full",
         "workflows": [
           "growth.paid_ads_assessment",
+          "growth.paid_ads_launch",
+          "growth.paid_ads_monitor",
           "organic.keyword_plan"
         ],
-        "integrations": [],
-        "founder_keeps": "campaigns, budget, bidding and tracking; the assessment says whether to start and with what shape",
-        "impact": 0.25,
-        "impact_note": "Tin assesses whether search ads fit and shapes a first campaign; campaigns, budget and bidding stay with the founder."
+        "integrations": [
+          "ads.google"
+        ],
+        "founder_keeps": "the budget, approving the exact campaign before it goes live, and any bidding or budget change Tin proposes",
+        "impact": 0.7,
+        "impact_note": "Tin assesses fit, launches one approved Google Search campaign in the founder's own account and checks it daily; the founder approves the plan and every budget or bidding change."
       }
     },
     {
@@ -588,7 +592,9 @@
     "qa.product_audit": "Audit the product feature by feature",
     "creative.character": "Design a brand character",
     "creative.product_demo": "Make a product demo video",
-    "growth.paid_ads_assessment": "Assess paid ads for this business"
+    "growth.paid_ads_assessment": "Assess paid ads for this business",
+    "growth.paid_ads_launch": "Launch a Google Ads campaign (human review)",
+    "growth.paid_ads_monitor": "Check the Google Ads campaign"
   },
   "workflow_scope": {
     "content.deliver": "Adapt an existing approved content.generate article to the connected website repository and open an unmerged PR. Requires source_run_id and expected_repository; no new drafting or implicit approval. Reuses the normal metered Codex procedure runner. Exact Markdown source preservation is checked; repository build and rendered equivalence are separate checks, never implied. CMS and WordPress publication require future connectors.",
@@ -618,6 +624,8 @@
     "qa.product_audit": "Exercise every feature in the project's Feature map as a user with a Tin-owned account and report what works, what is broken, and what to improve, with reproducible evidence.",
     "creative.character": "Design a cute, on-brand vector mascot for the product as an animatable SVG character in project Files (three mouth shapes, a blink, and a payoff expression), ready to narrate demo videos and appear in marketing. Tin reads the product page and project memory itself and asks one model for the drawing; about two minutes, no sandbox.",
     "creative.product_demo": "Capture the founder's live product at phone size and render a smooth 9:16 short-form demo video (TikTok, Reels, Shorts) with a pain hook, voiceover, word-synced captions, tap and scroll motion, and an optional narrating character from project Files.",
-    "growth.paid_ads_assessment": "Read the site, Keyword Planner, DataForSEO and Search Console when connected, then say whether Google Search ads fit: a verdict, the binding constraint, a scorecard and a rough campaign shape. Advisory; never creates or funds campaigns. On demand only."
+    "growth.paid_ads_assessment": "Read the site, Keyword Planner, DataForSEO and Search Console when connected, then say whether Google Search ads fit: a verdict, the binding constraint, a scorecard and a rough campaign shape. Advisory; never creates or funds campaigns. On demand only.",
+    "growth.paid_ads_launch": "From a successful assessment, draft one Google Search campaign (keywords, ads, negatives, budget, click ceiling) for the founder's approval, then create it in their linked Google Ads account. Blocks until a conversion is measured; on demand only.",
+    "growth.paid_ads_monitor": "Read a launched campaign, add negatives from wasted search terms, pause disapproved ads and wasteful keywords, and propose budget or bidding changes for approval. Daily or weekly once a campaign is live."
   }
 }

@@ -20,6 +20,7 @@ from tin_lite.domain import (
     Workflow,
 )
 from tin_lite.executor_gates import (
+    google_ads_gate,
     keyword_plan_gate,
     organic_audit_gate,
     organic_system_gate,
@@ -158,6 +159,8 @@ def _executor_reason(executor: str, settings: Any) -> str | None:
         return organic_system_gate(settings)
     if executor == PAID_ADS_KEY:
         return paid_ads_gate(settings)
+    if executor in {"growth.paid_ads_launch", "growth.paid_ads_monitor"}:
+        return google_ads_gate(settings)
     return None
 
 

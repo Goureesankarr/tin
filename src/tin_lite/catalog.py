@@ -15,6 +15,8 @@ from tin_lite import (
     growth_plan,
     organic_system,
     paid_ads,
+    paid_ads_launch,
+    paid_ads_monitor,
     style_capture,
     technical_fix,
 )
@@ -51,6 +53,7 @@ from tin_lite.domain import (
     WORKFLOW_NAME,
 )
 from tin_lite.integrations import (
+    ADS_PROVIDER,
     GITHUB_PROVIDER,
     GOOGLE_WORKSPACE_PROVIDER,
     GSC_PROVIDER,
@@ -143,6 +146,8 @@ ORGANIC_AUDIT_WORKFLOW_ID = UUID("00000000-0000-4000-8000-000000000020")
 CREATIVE_CHARACTER_WORKFLOW_ID = UUID("00000000-0000-4000-8000-000000000029")
 CREATIVE_PRODUCT_DEMO_WORKFLOW_ID = UUID("00000000-0000-4000-8000-000000000022")
 PAID_ADS_ASSESSMENT_WORKFLOW_ID = UUID("00000000-0000-4000-8000-000000000037")
+PAID_ADS_LAUNCH_WORKFLOW_ID = UUID("00000000-0000-4000-8000-000000000038")
+PAID_ADS_MONITOR_WORKFLOW_ID = UUID("00000000-0000-4000-8000-000000000039")
 # Numbers below were used by built-ins that later left the catalog. Their rows still exist in
 # deployed databases, and the boot-time sync refuses to bind a number to a different key, so a
 # new built-in must take a fresh number above the highest ever used, never fill a gap.
@@ -248,6 +253,16 @@ GROWTH_ONBOARDING_REVIEW_POLICY = HumanReviewPolicy(
         "The plan is ready. Say what Tin should take on, connect what it needs, then continue."
     ),
     queue_clause="Growth plan waiting for your pick",
+)
+PAID_ADS_LAUNCH_REVIEW_POLICY = HumanReviewPolicy(
+    reason="Creates or changes things in the founder's Google Ads account.",
+    review_label="Approve",
+    defer_label="Not now",
+    summary=(
+        "The Google Ads step is ready: the exact campaign or the tracking setup Tin will "
+        "carry out. Nothing happens in Google Ads until you approve it."
+    ),
+    queue_clause="Google Ads step ready for your approval",
 )
 EMAIL_CAMPAIGN_REVIEW_POLICY = HumanReviewPolicy(
     reason="Sends email to external recipients.",
@@ -388,6 +403,14 @@ class BuiltinWorkflow:
             definition["paid_ads_policy"] = dict(paid_ads.POLICY)
             definition["paid_ads_routes"] = paid_ads.route_definitions()
             definition["paid_ads_contract_sha256"] = paid_ads.contract_digest()
+        if self.key == paid_ads_launch.KEY:
+            definition["paid_ads_launch_policy"] = dict(paid_ads_launch.POLICY)
+            definition["paid_ads_launch_routes"] = paid_ads_launch.route_definitions()
+            definition["paid_ads_launch_contract_sha256"] = paid_ads_launch.contract_digest()
+        if self.key == paid_ads_monitor.KEY:
+            definition["paid_ads_monitor_policy"] = dict(paid_ads_monitor.POLICY)
+            definition["paid_ads_monitor_routes"] = paid_ads_monitor.route_definitions()
+            definition["paid_ads_monitor_contract_sha256"] = paid_ads_monitor.contract_digest()
         if self.key == content_plan.KEY:
             definition["content_policy"] = dict(content_plan_editorial.POLICY)
             definition["content_instructions"] = content_plan_editorial.INSTRUCTIONS
@@ -2201,6 +2224,69 @@ BUILTIN_WORKFLOWS = (
         integration_requirements=(
             IntegrationRequirement(GSC_PROVIDER, ("search_analytics.read",), required=False),
             IntegrationRequirement(GITHUB_PROVIDER, ("contents.read",), required=False),
+        ),
+    ),
+    BuiltinWorkflow(
+        id=PAID_ADS_LAUNCH_WORKFLOW_ID,
+        key=paid_ads_launch.KEY,
+        title="Launch a Google Ads campaign (human review)",
+        description=(
+            "Turn an assessment's campaign shape into one live Google Search campaign in your "
+            "own Ads account: exact and phrase keywords, written ads, sitelinks, a shared "
+            "negative list, presence-only targeting and a click ceiling. Blocks until a "
+            "conversion is being measured, and creates nothing until you approve the exact plan."
+        ),
+        # An LLM flow with one approval: code decides the structure, budget and bids; model
+        # steps write the ads and the founder brief; the founder approves before any write.
+        executor=paid_ads_launch.KEY,
+        version_label="0.1.0",
+        system=PAID_ADS_SYSTEM,
+        review_policy=PAID_ADS_LAUNCH_REVIEW_POLICY,
+        schedule_modes=("on_demand",),
+        input_schema=paid_ads_launch.INPUT_SCHEMA,
+        prerequisites=(
+            WorkflowPrerequisite(
+                kind="run",
+                level="required",
+                workflow=paid_ads.KEY,
+                via_input="assessment_run_id",
+                reason="The assessment's campaign shape and keywords are what gets launched.",
+            ),
+        ),
+        integration_requirements=(
+            IntegrationRequirement(ADS_PROVIDER, ("campaigns.write",), required=True),
+            IntegrationRequirement(
+                GITHUB_PROVIDER,
+                ("contents.read", "contents.write", "pull_requests.write"),
+                required=False,
+            ),
+        ),
+    ),
+    BuiltinWorkflow(
+        id=PAID_ADS_MONITOR_WORKFLOW_ID,
+        key=paid_ads_monitor.KEY,
+        title="Check the Google Ads campaign",
+        description=(
+            "Read the launched campaign, add negatives from wasted search terms, pause "
+            "disapproved ads and wasteful keywords on its own, and propose budget or bidding "
+            "changes for your approval. Quiet for the first three days; never blocks."
+        ),
+        executor=paid_ads_monitor.KEY,
+        version_label="0.1.0",
+        system=PAID_ADS_SYSTEM,
+        schedule_modes=("on_demand", "daily", "weekly"),
+        input_schema=paid_ads_monitor.INPUT_SCHEMA,
+        prerequisites=(
+            WorkflowPrerequisite(
+                kind="run",
+                level="required",
+                workflow=paid_ads_launch.KEY,
+                via_input="launch_run_id",
+                reason="The monitor looks after the campaign a launch created.",
+            ),
+        ),
+        integration_requirements=(
+            IntegrationRequirement(ADS_PROVIDER, ("campaigns.write",), required=True),
         ),
     ),
 )
