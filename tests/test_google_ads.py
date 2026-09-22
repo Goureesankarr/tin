@@ -138,7 +138,7 @@ def test_campaign_bundle_has_exact_shapes_in_order():
         "OPTED_OUT",
     ]
     assert campaign["containsEuPoliticalAdvertising"] == "DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING"
-    assert campaign["startDate"] == "2026-09-23"
+    assert "startDate" not in campaign  # v25 has no such field; a campaign starts when enabled
     assert campaign["trackingUrlTemplate"].startswith("{lpurl}")
     assert "keywordMatchType" not in campaign
     assert "maximizeClicks" not in campaign
@@ -335,7 +335,7 @@ def test_update_and_create_bodies():
     _, body = requests.bidding_body(campaign, "maximize_conversions")
     assert body["operations"][0] == {
         "update": {"resourceName": campaign, "maximizeConversions": {}},
-        "updateMask": "maximize_conversions",
+        "updateMask": "maximize_conversions.target_cpa_micros",
     }
     _, body = requests.bidding_body(campaign, "target_cpa", 40)
     assert body["operations"][0] == {

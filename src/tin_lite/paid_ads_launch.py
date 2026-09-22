@@ -46,6 +46,8 @@ POLICY = {
     "max_ad_groups": 5,
     "min_ad_groups": 1,
     "headlines_per_group": 12,
+    "min_headlines": 8,
+    "min_descriptions": 3,
     "descriptions_per_group": 4,
     "max_sitelinks": 4,
     "max_callouts": 4,
@@ -772,10 +774,16 @@ def validate_copy(copy: dict, *, plan: dict, competitors) -> list[str]:
         label = f"group {group.get('name')!r}"
         headlines = group.get("headlines") or []
         descriptions = group.get("descriptions") or []
-        if len(headlines) != POLICY["headlines_per_group"]:
-            problems.append(f"{label} needs {POLICY['headlines_per_group']} headlines")
-        if len(descriptions) != POLICY["descriptions_per_group"]:
-            problems.append(f"{label} needs {POLICY['descriptions_per_group']} descriptions")
+        if not POLICY["min_headlines"] <= len(headlines) <= 15:
+            problems.append(
+                f"{label} needs {POLICY['headlines_per_group']} headlines "
+                f"(at least {POLICY['min_headlines']})"
+            )
+        if not POLICY["min_descriptions"] <= len(descriptions) <= 4:
+            problems.append(
+                f"{label} needs {POLICY['descriptions_per_group']} descriptions "
+                f"(at least {POLICY['min_descriptions']})"
+            )
         for text in headlines:
             problems += _text_problems(
                 f"{label} headline",
@@ -831,6 +839,89 @@ def validate_copy(copy: dict, *, plan: dict, competitors) -> list[str]:
         problems += _text_problems("callout", text, LIMITS["callout"], competitors=competitors)
     problems += _duplicates("callout", callouts)
     return problems
+
+
+def _keep(values, problems_for, *, maximum: int) -> list[str]:
+    kept, seen = [], set()
+    for value in values or []:
+        if not isinstance(value, str) or problems_for(value):
+            continue
+        key = re.sub(r"\s+", " ", value.strip().lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        kept.append(value.strip())
+    return kept[:maximum]
+
+
+def prune_copy(copy: dict, *, plan: dict, competitors) -> dict:
+    """Drop the optional pieces that break a rule so one long sitelink or one shouting
+    headline does not fail the run; the counts are checked afterwards by validate_copy."""
+    if not isinstance(copy, dict) or not isinstance(copy.get("ad_groups"), list):
+        return copy
+    del plan  # the structure is fixed by the skeleton; only the words are pruned here
+    groups = []
+    for group in copy["ad_groups"]:
+        if not isinstance(group, dict):
+            continue
+        pruned = dict(group)
+        pruned["headlines"] = _keep(
+            group.get("headlines"),
+            lambda t: _text_problems(
+                "h", t, LIMITS["headline"], headline=True, competitors=competitors
+            ),
+            maximum=15,
+        )
+        pruned["descriptions"] = _keep(
+            group.get("descriptions"),
+            lambda t: _text_problems("d", t, LIMITS["description"], competitors=competitors),
+            maximum=4,
+        )
+        for key in ("path1", "path2"):
+            value = pruned.get(key)
+            if value and (
+                not isinstance(value, str)
+                or len(value) > LIMITS["path"]
+                or not re.fullmatch(r"[A-Za-z0-9-]+", value)
+            ):
+                pruned[key] = ""
+        if pruned.get("path2") and not pruned.get("path1"):
+            pruned["path2"] = ""
+        groups.append(pruned)
+    sitelinks, seen = [], set()
+    for link in copy.get("sitelinks") or []:
+        if not isinstance(link, dict):
+            continue
+        text = link.get("text")
+        if _text_problems("s", text, LIMITS["sitelink_text"], competitors=competitors):
+            continue
+        if not https_page(link.get("url") or ""):
+            continue
+        key = re.sub(r"\s+", " ", str(text).strip().lower())
+        if key in seen:
+            continue
+        seen.add(key)
+        d1, d2 = (link.get("description1") or "").strip(), (link.get("description2") or "").strip()
+        if (
+            bool(d1) != bool(d2)
+            or (d1 and _text_problems("d", d1, LIMITS["sitelink_description"]))
+            or (d2 and _text_problems("d", d2, LIMITS["sitelink_description"]))
+        ):
+            d1 = d2 = ""
+        sitelinks.append(
+            {"text": str(text).strip(), "description1": d1, "description2": d2, "url": link["url"]}
+        )
+    callouts = _keep(
+        copy.get("callouts"),
+        lambda t: _text_problems("c", t, LIMITS["callout"], competitors=competitors),
+        maximum=POLICY["max_callouts"],
+    )
+    return {
+        **copy,
+        "ad_groups": groups,
+        "sitelinks": sitelinks[: POLICY["max_sitelinks"]],
+        "callouts": callouts,
+    }
 
 
 def merge_copy(plan: dict, copy: dict) -> dict:
@@ -1233,7 +1324,14 @@ async def build_plan(scope: dict, evidence: dict, generate) -> dict:
         MAX_OUT["copy"],
     )
     competitors = plan.get("competitors") or []
-    problems = validate_copy(copy, plan=plan, competitors=competitors)
+    # Pruning drops a stray long sitelink or shouting headline for free; the paid repair pass
+    # only runs when what is left would fall short, and it repairs the full raw copy.
+    pruned = prune_copy(copy, plan=plan, competitors=competitors)
+    problems = validate_copy(pruned, plan=plan, competitors=competitors)
+    if not problems:
+        copy = pruned
+    else:
+        problems = validate_copy(copy, plan=plan, competitors=competitors)
     if problems:
         try:
             fixes = await generate(
@@ -1251,6 +1349,7 @@ async def build_plan(scope: dict, evidence: dict, generate) -> dict:
                         copy = candidate
         except (UnusableModelResult, KeyError, TypeError, ValueError):
             pass
+        copy = prune_copy(copy, plan=plan, competitors=competitors)
         problems = validate_copy(copy, plan=plan, competitors=competitors)
         if problems:
             raise UnusableModelResult(

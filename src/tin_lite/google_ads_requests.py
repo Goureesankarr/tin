@@ -272,7 +272,6 @@ def campaign_bundle(plan: dict, *, customer_id: str) -> list[dict]:
             },
         ],
         "containsEuPoliticalAdvertising": "DOES_NOT_CONTAIN_EU_POLITICAL_ADVERTISING",
-        "startDate": start_date,
     }
     if template:
         campaign["trackingUrlTemplate"] = template
@@ -554,7 +553,9 @@ def bidding_body(campaign_resource: str, strategy: str, target_cpa_usd=None) -> 
     if strategy == "maximize_conversions":
         if target_cpa_usd is not None:
             raise ValueError("Maximise conversions takes no target.")
-        update, mask = {"maximizeConversions": {}}, "maximize_conversions"
+        # A bare "maximize_conversions" mask is refused (FIELD_HAS_SUBFIELDS); naming the
+        # target subfield with an empty message switches the strategy without a target.
+        update, mask = {"maximizeConversions": {}}, "maximize_conversions.target_cpa_micros"
     elif strategy == "target_cpa":
         amount = _amount(target_cpa_usd, minimum=BOUNDS["min_ceiling_usd"], label="Target CPA")
         update = {"maximizeConversions": {"targetCpaMicros": amount}}

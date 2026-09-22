@@ -148,7 +148,7 @@ async def test_approving_a_bid_change_switches_to_maximize_conversions():
     assert calls[0]["request"]["segment"] == "campaigns"
     assert calls[0]["request"]["body"]["operations"][0] == {
         "update": {"resourceName": f"customers/{CID}/campaigns/22", "maximizeConversions": {}},
-        "updateMask": "maximize_conversions",
+        "updateMask": "maximize_conversions.target_cpa_micros",
     }
 
 

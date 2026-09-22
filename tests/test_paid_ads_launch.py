@@ -343,8 +343,10 @@ def test_validate_copy_catches_each_problem_class():
     )
     assert any("empty" in p for p in broken(set_headline(0, "  ")))
     assert any(
-        "needs 12 headlines" in p for p in broken(lambda b: b["ad_groups"][0]["headlines"].pop())
+        "needs 12 headlines" in p
+        for p in broken(lambda b: b["ad_groups"][0]["headlines"].__delitem__(slice(7, None)))
     )
+    assert not broken(lambda b: b["ad_groups"][0]["headlines"].pop())
     assert any(
         "exceeds 90" in p
         for p in broken(lambda b: b["ad_groups"][0]["descriptions"].__setitem__(0, "d" * 91))
@@ -458,15 +460,51 @@ async def test_build_plan_retries_once_repairs_once_and_renders():
     assert isinstance(operations, list) and operations
 
 
+def test_prune_copy_drops_rule_breaking_extras_instead_of_failing():
+    plan = launch.plan_skeleton(
+        assessment=assessment(),
+        keywords_csv=keywords_csv(),
+        inputs=inputs(),
+        account={"customer": {}},
+        marker=MARKER,
+        today=TODAY,
+    )
+    fake = {
+        "ad_groups": [
+            {"name": g["name"], "keywords": [{"text": k["text"]} for k in g["keywords"]]}
+            for g in plan["ad_groups"]
+        ],
+        "landing_page": plan["landing_page"],
+    }
+    copy = good_copy(fake, [plan["landing_page"]])
+    copy["sitelinks"].append({**copy["sitelinks"][0], "text": "Docs"})
+    assert len(copy["ad_groups"][0]["headlines"]) == 12
+    copy["sitelinks"][0]["text"] = "Frequently asked questions"
+    copy["sitelinks"][1]["description1"] = "only one description"
+    copy["sitelinks"][1]["description2"] = ""
+    copy["callouts"].append("This callout is far too long to serve")
+    copy["ad_groups"][0]["headlines"][0] = "Try it now!"
+    pruned = launch.prune_copy(copy, plan=plan, competitors=plan["competitors"])
+    assert all(len(s["text"]) <= 25 for s in pruned["sitelinks"])
+    assert (
+        pruned["sitelinks"][0]["description1"] == ""
+        and pruned["sitelinks"][0]["description2"] == ""
+    )
+    assert all(len(c) <= 25 for c in pruned["callouts"])
+    assert len(pruned["ad_groups"][0]["headlines"]) == 11
+    assert not launch.validate_copy(pruned, plan=plan, competitors=plan["competitors"])
+
+
 async def test_build_plan_repairs_bad_copy_then_gives_up():
     def shout(value, user):
-        value["ad_groups"][0]["headlines"][0] = "Try it now!"
+        for index in range(5):
+            value["ad_groups"][0]["headlines"][index] = f"Try it now {index}!"
         return value
 
     model = FakeModel(overrides={"copy": shout})
     result = await launch.build_plan({"inputs": inputs(), "run_id": RUN_ID}, evidence(), model)
     assert "repair:1" in model.calls
-    assert "!" not in result["plan"]["ad_groups"][0]["headlines"][0]
+    assert all("!" not in h for h in result["plan"]["ad_groups"][0]["headlines"])
 
     def no_fix(value, user):
         return {"fixes": []}
