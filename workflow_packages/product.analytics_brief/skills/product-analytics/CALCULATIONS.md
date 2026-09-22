@@ -914,7 +914,12 @@ def median_pairs(n):
 def query_columns(step, p):
     if step == "inventory":
         return [
-            "event", "observed", "prior", "current", "first_seen", "last_seen",
+            "event",
+            "observed",
+            "prior",
+            "current",
+            "first_seen",
+            "last_seen",
             "total_event_types",
         ], 201
     if step == "coverage":
