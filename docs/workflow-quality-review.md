@@ -86,7 +86,7 @@ Research instructions save a usable early result, update it progressively and st
 - Three candidate host-scoped PostHog requests passed the package's inventory, coverage, reconciliation and traffic validators. Candidate package code was not deployed.
 - A focused live research run completed for **$1.13** under a $5 ceiling and saved an early result before updating it. Candidate research constraints were supplied as inputs to the existing deployed workflow; this is not proof of a deployed new version or a same-question savings benchmark.
 - Same-model, same-frozen-evidence prompt pairs cover two answers, content planning, weekly briefing and research synthesis. Additional PostHog variants explicitly change the evidence. Structured AI panel pairs passed the production validators; the candidate bank contained 18 questions and selected five.
-- The audit was recalculated locally against retained evidence. The keyword editorial smoke test was not valid full-inventory ranking acceptance and is not presented as such. The structured full-inventory comparison remains pending explicit permission for that payload to the existing OpenAI service after automatic approval review rejected the transfer.
+- The audit was recalculated locally against retained evidence. The keyword editorial smoke test was not valid full-inventory ranking acceptance and is not presented as such. After explicit user approval, the structured saved-inventory comparison completed through the existing OpenAI service. Both v4/v5 outputs passed production validation: the same 30 eligible candidates were reviewed and all 208 saved candidates were assigned exactly once after restoring screening exclusions. The candidate produced five groups versus nine, but still offered little demand reasoning and recommended creating pages without establishing gaps. This is schema acceptance, not proof of better ranking or broader discovery. See the comparison pack for both outputs.
 
 The comparison caught remaining weaknesses: formal AI questions, a still-narrow integration content plan, excess process detail in the brief, a mistaken event label and an omitted Photon AutoScale pricing condition. The final instructions clarify exact event names, source separation and pricing footnotes. Those final prompt refinements were not model-rerun; the original comparison outputs preserve their defects.
 
@@ -104,7 +104,7 @@ The comparison caught remaining weaknesses: formal AI questions, a still-narrow 
 
 ## Rollout and review
 
-First review the examples for accuracy, buyer relevance, argument and overlap. Run CI with the disposable database. Then deploy only after approval and activate new immutable definitions through the normal registry path. Existing saved configurations retain their pins until deliberately updated.
+CI passed on implementation commit c73035f: 2,550 tests passed, 44 skipped, plus browser, lint, import-boundary and package checks. Review the examples for accuracy, buyer relevance, argument and overlap. Deploy only after approval and activate new immutable definitions through the normal registry path. Existing saved configurations retain their pins until deliberately updated.
 
 After deployment, accept the new contracts with bounded live runs: an organic audit using sitemap and matching GSC evidence, a broadened keyword discovery/ranking run, a structured content-plan run and a brief consuming the saved host-scoped analytics report. Do not treat a single prompt pair as a statistical quality result.
 
