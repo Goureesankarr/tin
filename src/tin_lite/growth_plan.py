@@ -23,12 +23,22 @@ PROGRAMS = json.loads((ASSETS / "programs.json").read_text(encoding="utf-8"))
 RUBRIC = json.loads((ASSETS / "rubric.json").read_text(encoding="utf-8"))
 DESCRIBE = scorer.describe()
 SYSTEM_IDS = [p["id"] for p in PROGRAMS["programs"]]
-HOUSEKEEPING = {"project.memory", "scan.report", "project.weekly_brief", "content.design_md"}
+HOUSEKEEPING = {
+    "project.memory",
+    "scan.report",
+    "project.weekly_brief",
+    "content.design_md",
+    # The paid ads assessment is a founder decision aid, never a scheduled system.
+    "growth.paid_ads_assessment",
+}
 HARD_NO_SYSTEMS = {
     "no_paid_ads": ["paid-search", "paid-social"],
     "no_cold_email": ["cold-outbound"],
 }
-HARD_NO_WORKFLOWS = {"no_cold_email": ["outreach.email_shortlist", "outreach.email_campaign"]}
+HARD_NO_WORKFLOWS = {
+    "no_cold_email": ["outreach.email_shortlist", "outreach.email_campaign"],
+    "no_paid_ads": ["growth.paid_ads_assessment"],
+}
 HARD_NO_WORDS = {
     "no_paid_ads": "no paid ads",
     "no_cold_email": "no cold email",

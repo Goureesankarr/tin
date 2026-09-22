@@ -164,6 +164,31 @@ def test_supplier_rates_caching_search_and_unknowns():
     assert old["service_pricing"] == CARD  # Quotes do not mutate the shared card.
 
 
+def test_gak_tool_receipt_prices_at_zero_on_the_provider_reported_basis():
+    terms = service_terms(SPECS["organic.keyword_plan"].definition)
+    record = {
+        "provider": "gak",
+        "category": "tool",
+        "endpoint": "api/v1/keywords/ideas",
+        "outcome": "response_received",
+        "reported_cost_usd": "0",
+        "usage": {"requests": 1},
+    }
+    assert receipt_charge(terms, "tool", record) == (
+        0,
+        {
+            "provider": "gak",
+            "endpoint": "api/v1/keywords/ideas",
+            "basis": "provider_reported_cost",
+            "reported_cost_usd": "0",
+        },
+    )
+    # Missing usage is not free, and an unlisted tool provider has no pinned price.
+    assert receipt_charge(terms, "tool", {**record, "reported_cost_usd": None}) is None
+    assert receipt_charge(terms, "tool", {**record, "outcome": "unconfirmed"}) is None
+    assert receipt_charge(terms, "tool", {**record, "provider": "unknown"}) is None
+
+
 @pytest.mark.parametrize("lost_write", [False, True])
 async def test_search_response_and_dataforseo_settle_once(billed, monkeypatch, lost_write):
     f = billed

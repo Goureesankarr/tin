@@ -35,6 +35,22 @@ def keyword_plan_gate(settings: Any) -> str | None:
     return None
 
 
+def paid_ads_gate(settings: Any) -> str | None:
+    if (
+        not getattr(settings, "dataforseo_login", None)
+        or not getattr(settings, "dataforseo_password", None)
+        or not getattr(settings, "luna_api_key", None)
+        or not getattr(settings, "gak_url", None)
+        or not getattr(settings, "gak_token", None)
+        or getattr(settings, "paid_ads_max_cost_usd", 0) < 3
+    ):
+        return (
+            "Paid ads assessment requires DataForSEO, the Keyword Planner service, the native "
+            "model and an enabled ceiling of at least $3."
+        )
+    return None
+
+
 def organic_system_gate(settings: Any, *, keyword_max_cost_usd: float = 9) -> str | None:
     if (
         not getattr(settings, "dataforseo_login", None)

@@ -89,6 +89,11 @@ class Settings(BaseSettings):
     )
     dataforseo_login: SecretStr | None = Field(default=None, alias="DATAFORSEO_LOGIN")
     dataforseo_password: SecretStr | None = Field(default=None, alias="DATAFORSEO_PASSWORD")
+    # Operator-run Google Ads Keyword Planner service (gak). An HTTPS origin, or plain HTTP on
+    # loopback only when the private-address flag is set explicitly.
+    gak_url: str | None = Field(default=None, alias="TIN_LITE_GAK_URL")
+    gak_token: SecretStr | None = Field(default=None, alias="TIN_LITE_GAK_TOKEN")
+    gak_allow_private: bool = Field(default=False, alias="TIN_LITE_GAK_ALLOW_PRIVATE")
     organic_audit_max_cost_usd: float = Field(
         default=0, ge=0, le=25, allow_inf_nan=False, alias="TIN_LITE_ORGANIC_AUDIT_MAX_COST_USD"
     )
@@ -97,6 +102,9 @@ class Settings(BaseSettings):
     )
     content_plan_max_cost_usd: float = Field(
         default=0, ge=0, le=5, allow_inf_nan=False, alias="TIN_LITE_CONTENT_PLAN_MAX_COST_USD"
+    )
+    paid_ads_max_cost_usd: float = Field(
+        default=0, ge=0, le=25, allow_inf_nan=False, alias="TIN_LITE_PAID_ADS_MAX_COST_USD"
     )
 
     integration_credential_key: SecretStr | None = Field(
@@ -181,6 +189,13 @@ class Settings(BaseSettings):
         from tin_lite.product_urls import validate_origin
 
         return validate_origin(value) if value is not None else None
+
+    @field_validator("gak_url")
+    @classmethod
+    def validate_gak_url(cls, value: str | None) -> str | None:
+        from tin_lite.gak import validate_base_url
+
+        return validate_base_url(value) if value is not None else None
 
     @field_validator("private_fonts_stylesheet_url")
     @classmethod
@@ -279,6 +294,18 @@ class Settings(BaseSettings):
         if self.integration_credential_key is None and self.google_oauth_client_id is not None:
             raise ValueError(
                 "TIN_LITE_INTEGRATION_CREDENTIAL_KEY is required when Google OAuth is configured"
+            )
+        if (self.gak_url is None) != (self.gak_token is None):
+            raise ValueError("TIN_LITE_GAK_URL and TIN_LITE_GAK_TOKEN must be configured together")
+        if self.gak_token is not None and len(self.gak_token.get_secret_value()) < 32:
+            raise ValueError("TIN_LITE_GAK_TOKEN must be at least 32 characters")
+        if (
+            self.gak_url is not None
+            and self.gak_url.startswith("http://")
+            and not self.gak_allow_private
+        ):
+            raise ValueError(
+                "TIN_LITE_GAK_URL over plain HTTP requires TIN_LITE_GAK_ALLOW_PRIVATE=true"
             )
         return self
 

@@ -23,7 +23,17 @@ ENDPOINTS = {
     "related": "dataforseo_labs/google/related_keywords/live",
     "overview": "dataforseo_labs/google/keyword_overview/live",
     "serp": "serp/google/organic/live/advanced",
+    # Paid-ads assessment kinds: batch metrics, a Google Ads traffic forecast, Ads Transparency
+    # Center lookups and a competitor's paid keyword footprint.
+    "overview_batch": "dataforseo_labs/google/keyword_overview/live",
+    "ad_traffic": "keywords_data/google_ads/ad_traffic_by_keywords/live",
+    "ads_search": "serp/google/ads_search/live/advanced",
+    "ads_advertisers": "serp/google/ads_advertisers/live/advanced",
+    "ranked_paid": "dataforseo_labs/google/ranked_keywords/live",
 }
+PAID_BOUNDS = {"batch": 40, "ads_depth": 20, "ranked_paid_rows": 50}
+# The traffic forecast answers with one aggregate row per request rather than an items list.
+ROW_RESULT_KINDS = frozenset({"ad_traffic"})
 
 
 def request_for(kind: str, *, market: str, value, tag: str) -> dict:
@@ -58,6 +68,34 @@ def request_for(kind: str, *, market: str, value, tag: str) -> dict:
         request.update(keywords=[phrase(item) for item in value])
     elif kind == "serp":
         request.update(keyword=phrase(value), depth=10, device="desktop", os="windows")
+    elif kind == "overview_batch":
+        if not isinstance(value, list) or not 1 <= len(value) <= PAID_BOUNDS["batch"]:
+            raise ValueError("Batch metric lookup exceeds its bound.")
+        request.update(keywords=[phrase(item) for item in value])
+    elif kind == "ad_traffic":
+        keywords, bid = value["keywords"], value["bid"]
+        if not isinstance(keywords, list) or not 1 <= len(keywords) <= PAID_BOUNDS["batch"]:
+            raise ValueError("Traffic forecast exceeds its keyword bound.")
+        if isinstance(bid, bool) or not isinstance(bid, (int, float)) or not 0.01 <= bid <= 500:
+            raise ValueError("Traffic forecast requires a bid between $0.01 and $500.")
+        request.update(
+            keywords=[phrase(item) for item in keywords],
+            bid=float(bid),
+            match="phrase",
+            date_interval="next_month",
+        )
+    elif kind == "ads_search":
+        request.pop("language_code")
+        request.update(target=host(value).removeprefix("www."), depth=PAID_BOUNDS["ads_depth"])
+    elif kind == "ads_advertisers":
+        request.pop("language_code")
+        request.update(keyword=phrase(value), depth=PAID_BOUNDS["ads_depth"])
+    elif kind == "ranked_paid":
+        request.update(
+            target=host(value).removeprefix("www."),
+            item_types=["paid"],
+            limit=PAID_BOUNDS["ranked_paid_rows"],
+        )
     else:
         raise ValueError("Unknown keyword research endpoint.")
     return request
@@ -114,6 +152,18 @@ class KeywordData:
             results = task.get("result")
             if results is None and task.get("result_count") == 0:
                 results = []
+            if kind in ROW_RESULT_KINDS:
+                if not isinstance(results, list) or len(results) > len(request["keywords"]):
+                    raise DataForSEOError("Keyword response has an invalid result envelope.")
+                if any(not isinstance(row, dict) for row in results):
+                    raise DataForSEOError("Keyword result contains invalid rows.")
+                return {
+                    "items": results,
+                    "items_count": len(results),
+                    "total_count": None,
+                    "reported_cost_usd": str(cost),
+                    "provider_task_id": str(task.get("id") or "")[:100],
+                }
             if not isinstance(results, list) or len(results) > 1:
                 raise DataForSEOError("Keyword response has an invalid result envelope.")
             items, total = [], 0
@@ -122,6 +172,7 @@ class KeywordData:
                 if not isinstance(result, dict) or any(
                     result.get(key, request[key]) != request[key]
                     for key in ("location_code", "language_code")
+                    if key in request
                 ):
                     raise DataForSEOError("Keyword result has a different market or language.")
                 items = result.get("items")
@@ -132,7 +183,14 @@ class KeywordData:
                 total = result.get("total_count")
             # A SERP includes non-organic features; only the consumer's bounded organic
             # projection is retained. Other endpoints may not exceed requested row counts.
-            bound = 100 if kind == "serp" else request.get("limit", POLICY["max_seeds"])
+            if kind == "serp":
+                bound = 100
+            elif kind == "overview_batch":
+                bound = len(request["keywords"])
+            elif kind in {"ads_search", "ads_advertisers"}:
+                bound = request["depth"]
+            else:
+                bound = request.get("limit", POLICY["max_seeds"])
             if len(items) > bound:
                 raise DataForSEOError("Keyword provider exceeded the requested row bound.")
             return {

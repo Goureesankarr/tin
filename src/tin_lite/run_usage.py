@@ -259,7 +259,15 @@ def observation(row, facts, *, legacy=False):
             isinstance(provider, str) and CUSTOM_KEY.fullmatch(provider)
         ):
             provider = "unknown"
-    elif provider not in {"e2b", "openai", "anthropic", "gemini", "openrouter", "dataforseo"}:
+    elif provider not in {
+        "e2b",
+        "openai",
+        "anthropic",
+        "gemini",
+        "openrouter",
+        "dataforseo",
+        "gak",
+    }:
         provider = "dataforseo" if kind == "tool" else "unknown"
     model = (
         object_value(facts.get("usage")).get("model")

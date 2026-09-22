@@ -62,6 +62,9 @@ from tin_lite.onboarding_experience import (
 )
 from tin_lite.organic_audit_control import stop_organic_audit as stop_organic_audit_service
 from tin_lite.output_resolution import OutputResolutionError, OutputResolutionRequest
+from tin_lite.paid_ads_control import (
+    stop_paid_ads_assessment as stop_paid_ads_assessment_service,
+)
 from tin_lite.private_workflows import (
     PackageActivation,
     PackageSelection,
@@ -171,6 +174,7 @@ def _run_allowed_actions(run: Any) -> list[str]:
         "organic.keyword_plan",
         "content.plan",
         "organic.traffic_system",
+        "growth.paid_ads_assessment",
     } and run.status in {
         RunStatus.PENDING,
         RunStatus.RUNNING,
@@ -2113,6 +2117,23 @@ def create_mcp_app(
         await require_project(run.project_id, token, tool_name="stop_organic_audit")
         try:
             stopped = await stop_organic_audit_service(
+                runtime=runtime(), run_id=parsed, clerk_user_id=token.subject
+            )
+        except (LookupError, ValueError, SideEffectConflictError) as exc:
+            raise ToolError(str(exc)) from exc
+        return {"id": str(stopped.id), "status": stopped.status.value}
+
+    @server.tool()
+    async def stop_paid_ads_assessment(run_id: str) -> dict[str, Any]:
+        """Stop future paid-ads research. Accepted provider requests may still incur costs."""
+        token = await caller()
+        parsed = _mcp_uuid(run_id, field="run_id")
+        run = await runtime().database.get_run(parsed)
+        if run is None:
+            raise ToolError("run not found")
+        await require_project(run.project_id, token, tool_name="stop_paid_ads_assessment")
+        try:
+            stopped = await stop_paid_ads_assessment_service(
                 runtime=runtime(), run_id=parsed, clerk_user_id=token.subject
             )
         except (LookupError, ValueError, SideEffectConflictError) as exc:

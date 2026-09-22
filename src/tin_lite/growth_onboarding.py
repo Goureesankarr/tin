@@ -484,6 +484,11 @@ WORKFLOW_EXPECTATIONS: dict[str, dict[str, str]] = {
         "lands": "Files, the keyword inventory",
         "watch": "the content plan uses it within days",
     },
+    "growth.paid_ads_assessment": {
+        "first": "about fifteen minutes",
+        "lands": "Files, reports/paid-ads/<run>/ASSESSMENT.md",
+        "watch": "the verdict and the fix-before-spend list; nothing is spent on ads",
+    },
     "content.plan": {
         "first": "the first weekly batch on its scheduled day",
         "lands": "My system, as an editable program",

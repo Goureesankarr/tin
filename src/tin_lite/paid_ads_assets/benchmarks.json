@@ -1,0 +1,77 @@
+{
+  "version": "2026-09-22-v1",
+  "sources": [
+    "growth-wiki/wiki/reference/benchmarks.md (CAC payback median 6.8 mo, B2C 4.2 / B2B 8.6; trial-to-paid 5-15%; opt-out trial with card 48.8% vs opt-in 18.2%; LP SaaS median 3.8%)",
+    "growth-wiki/wiki/playbook/02-strategy-selection.md (payback under 12 months for subscriptions, first purchase for transactional, LTV:CAC 3:1)",
+    "public 2026 Google Ads benchmark reports (search CVR technology 2.0-2.9%, e-commerce 2.8%, all-industry CPC $2.96-5.42)",
+    "calibrated 2026-09-22 against four real projects; see docs/paid-ads-assessment-implementation.md"
+  ],
+  "industries": {
+    "b2b_saas": {"search_cvr": 0.025, "search_cpc": 5.0, "lifetime_months": 14, "fallback_allowable_cpa": 400},
+    "b2b_saas_smb": {"search_cvr": 0.03, "search_cpc": 4.5, "lifetime_months": 8, "fallback_allowable_cpa": 80},
+    "dev_tools": {"search_cvr": 0.03, "search_cpc": 4.0, "lifetime_months": 10, "fallback_allowable_cpa": 60},
+    "consumer_software": {"search_cvr": 0.03, "search_cpc": 1.5, "lifetime_months": 4, "fallback_allowable_cpa": 10},
+    "ecommerce": {"search_cvr": 0.028, "search_cpc": 1.2, "lifetime_months": 1, "fallback_allowable_cpa": 30},
+    "local_services": {"search_cvr": 0.07, "search_cpc": 6.0, "lifetime_months": 1, "fallback_allowable_cpa": 100}
+  },
+  "conversion_event": {
+    "_note": "multiplier on the industry search_cvr (a lead or trial style event) and the rate at which that event becomes a paying customer",
+    "purchase_no_trial": {"cvr_multiplier": 0.2, "close_rate": 1.0},
+    "purchase_low_friction": {"cvr_multiplier": 0.7, "close_rate": 1.0},
+    "trial_card_required": {"cvr_multiplier": 0.6, "close_rate": 0.45},
+    "trial_no_card": {"cvr_multiplier": 1.0, "close_rate": 0.15},
+    "free_signup": {"cvr_multiplier": 3.0, "close_rate": 0.03},
+    "lead_form": {"cvr_multiplier": 1.0, "close_rate": 0.10},
+    "demo_booking": {"cvr_multiplier": 0.6, "close_rate": 0.20},
+    "app_install": {"cvr_multiplier": 4.0, "close_rate": 0.03}
+  },
+  "intent_cvr_multiplier": {
+    "bofu": 1.0,
+    "captive": 6.0,
+    "mofu": 0.5,
+    "tofu": 0.15,
+    "brand_competitor": 0.6,
+    "brand_own": 3.0
+  },
+  "buyer_intents": ["bofu", "captive", "brand_competitor"],
+  "landing_page": {
+    "no_pricing_shown": 0.85,
+    "mobile_broken": 0.6,
+    "free_step_before_paywall": 1.1
+  },
+  "gross_margin": {
+    "software_high": 0.7,
+    "marketplace_mid": 0.3,
+    "physical_low": 0.35,
+    "unknown": 0.5
+  },
+  "budget_usd_month": {
+    "none": 0,
+    "under_500": 250,
+    "500_to_2000": 1000,
+    "more": 2500,
+    "unknown": null
+  },
+  "readiness": {
+    "tracking": {"full": 8, "partial": 5, "none": 0},
+    "pricing_shown": 3,
+    "mobile_ok": 4,
+    "event": {
+      "purchase_low_friction": 5,
+      "trial_card_required": 4,
+      "trial_no_card": 5,
+      "free_signup": 4,
+      "lead_form": 4,
+      "demo_booking": 3,
+      "purchase_no_trial": 1,
+      "app_install": 4
+    }
+  },
+  "demand_floor_ctr": 0.05,
+  "minimum_test": {
+    "google_search_floor_usd_month": 500,
+    "conversions_for_a_read": 10,
+    "test_weeks": 4,
+    "cheap_test_min_budget_usd": 100
+  }
+}

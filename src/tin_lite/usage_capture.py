@@ -229,7 +229,7 @@ async def recover_tool_observation(db, conn, *, run_id, step, endpoint, cost):
         if existing is None:
             return
         record = existing.result or {}
-        if record.get("provider") != "dataforseo" or record.get("category") != "tool":
+        if record.get("provider") not in {"dataforseo", "gak"} or record.get("category") != "tool":
             return
         if existing.status == "completed":
             await _bill_observation(db, locked, key, record, "tool")

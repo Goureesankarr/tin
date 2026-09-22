@@ -66,3 +66,5 @@ ignore = ["S101"]
 # The Start here plan's prompts and their code-side wording rules were validated verbatim against
 # historical runs; rewrapping them by hand risks changing what was tested.
 "src/tin_lite/growth_plan.py" = ["E501"]
+# The paid-ads assessment carries its prompts and schema builders verbatim for the same reason.
+"src/tin_lite/paid_ads.py" = ["E501"]

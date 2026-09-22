@@ -7,7 +7,12 @@ from temporalio.exceptions import WorkflowAlreadyStartedError
 
 from tin_lite import content_draft, content_plan, organic_system, technical_fix
 from tin_lite.domain import RunStatus, Workflow, WorkflowRun
-from tin_lite.executor_gates import keyword_plan_gate, organic_audit_gate, organic_system_gate
+from tin_lite.executor_gates import (
+    keyword_plan_gate,
+    organic_audit_gate,
+    organic_system_gate,
+    paid_ads_gate,
+)
 from tin_lite.integrations import (
     IntegrationError,
     load_pinned_integration_requirements,
@@ -15,6 +20,8 @@ from tin_lite.integrations import (
 from tin_lite.keyword_plan import KEY as KEYWORD_KEY
 from tin_lite.keyword_plan import check_inputs as check_keyword_inputs
 from tin_lite.organic_audit import AUDIT_KEY, public_site
+from tin_lite.paid_ads import KEY as PAID_ADS_KEY
+from tin_lite.paid_ads import check_inputs as check_paid_ads_inputs
 from tin_lite.runtime import RuntimeServices
 from tin_lite.settings import Settings
 from tin_lite.workflow_definitions import resolve_execution_contract
@@ -225,6 +232,14 @@ async def start_workflow_run(
         keyword_reason = keyword_plan_gate(settings)
         if keyword_reason is not None:
             raise WorkflowExecutorUnavailableError(keyword_reason)
+    if workflow.executor == PAID_ADS_KEY:
+        try:
+            check_paid_ads_inputs(normalized_inputs)
+        except (ValueError, TypeError, KeyError) as exc:
+            raise WorkflowInputError(str(exc) or "Invalid paid ads inputs.") from exc
+        paid_ads_reason = paid_ads_gate(settings)
+        if paid_ads_reason is not None:
+            raise WorkflowExecutorUnavailableError(paid_ads_reason)
     if workflow.executor == content_plan.KEY:
         try:
             content_plan.check_inputs(normalized_inputs)

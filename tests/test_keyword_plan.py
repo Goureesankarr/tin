@@ -305,12 +305,16 @@ def test_review_rejects_invented_or_missing_assignments(mutation):
 @pytest.mark.asyncio
 @pytest.mark.parametrize("kind", list(ENDPOINTS))
 async def test_live_adapter_uses_fixed_scope_and_bounds_without_retries(kind):
-    value = (
-        {"host": "example.com", "seeds": ["scheduling"]}
-        if kind == "ranked_relevant"
-        else ["scheduling"]
-        if kind == "overview"
-        else ("example.com" if kind in {"ranked", "competitors"} else "scheduling")
+    value = {
+        "ranked_relevant": {"host": "example.com", "seeds": ["scheduling"]},
+        "overview": ["scheduling"],
+        "overview_batch": ["scheduling"],
+        "ad_traffic": {"keywords": ["scheduling"], "bid": 2.5},
+    }.get(
+        kind,
+        "example.com"
+        if kind in {"ranked", "competitors", "ads_search", "ranked_paid"}
+        else "scheduling",
     )
     expected = request_for(kind, market="US", value=value, tag="fixture")
     calls = []
@@ -319,6 +323,20 @@ async def test_live_adapter_uses_fixed_scope_and_bounds_without_retries(kind):
         calls.append(request)
         assert str(request.url) == f"https://api.dataforseo.com/v3/{ENDPOINTS[kind]}"
         assert json.loads(request.content) == [expected]
+        # The traffic forecast answers with aggregate rows, not an items envelope.
+        result = (
+            []
+            if kind == "ad_traffic"
+            else [
+                {
+                    "items": [],
+                    "items_count": 0,
+                    "total_count": 0,
+                    "location_code": 2840,
+                    "language_code": "en",
+                }
+            ]
+        )
         return httpx.Response(
             200,
             json={
@@ -329,15 +347,7 @@ async def test_live_adapter_uses_fixed_scope_and_bounds_without_retries(kind):
                         "status_code": 20000,
                         "cost": 0.01,
                         "data": expected,
-                        "result": [
-                            {
-                                "items": [],
-                                "items_count": 0,
-                                "total_count": 0,
-                                "location_code": 2840,
-                                "language_code": "en",
-                            }
-                        ],
+                        "result": result,
                     }
                 ],
             },
@@ -346,6 +356,57 @@ async def test_live_adapter_uses_fixed_scope_and_bounds_without_retries(kind):
     provider = KeywordData("fixture", "not-a-credential", transport=httpx.MockTransport(handler))
     result = await provider.query(kind, market="US", value=value, tag="fixture")
     assert result["items"] == [] and len(calls) == 1
+
+
+def test_request_for_paid_kinds_are_bounded():
+    with pytest.raises(ValueError):
+        request_for("overview_batch", market="US", value=["k"] * 41, tag="t")
+    with pytest.raises(ValueError):
+        request_for("ad_traffic", market="US", value={"keywords": ["k"] * 41, "bid": 2}, tag="t")
+    with pytest.raises(ValueError):
+        request_for("ad_traffic", market="US", value={"keywords": ["k"], "bid": 0}, tag="t")
+    with pytest.raises(ValueError):
+        request_for("ad_traffic", market="US", value={"keywords": ["k"], "bid": True}, tag="t")
+    forecast = request_for("ad_traffic", market="US", value={"keywords": ["k"], "bid": 3}, tag="t")
+    assert forecast["match"] == "phrase" and forecast["bid"] == 3.0
+    assert "language_code" not in request_for("ads_search", market="US", value="a.example", tag="t")
+    assert request_for("ranked_paid", market="US", value="a.example", tag="t")["item_types"] == [
+        "paid"
+    ]
+
+
+@pytest.mark.asyncio
+async def test_ad_traffic_accepts_one_aggregate_row_and_rejects_more_than_requested():
+    value = {"keywords": ["scheduling"], "bid": 2.5}
+    expected = request_for("ad_traffic", market="US", value=value, tag="fixture")
+    row = {"keyword": None, "bid": 2.5, "match": "phrase", "clicks": 12.5, "cost": 31.2}
+
+    def respond(rows):
+        def handler(request):
+            return httpx.Response(
+                200,
+                json={
+                    "status_code": 20000,
+                    "tasks": [
+                        {
+                            "id": "test",
+                            "status_code": 20000,
+                            "cost": 0.09,
+                            "data": expected,
+                            "result": rows,
+                        }
+                    ],
+                },
+            )
+
+        return KeywordData("fixture", "x", transport=httpx.MockTransport(handler))
+
+    result = await respond([row]).query("ad_traffic", market="US", value=value, tag="fixture")
+    assert result["items"] == [row] and result["reported_cost_usd"] == "0.09"
+    with pytest.raises(DataForSEOError):
+        await respond([row, row]).query("ad_traffic", market="US", value=value, tag="fixture")
+    with pytest.raises(DataForSEOError):
+        await respond(["row"]).query("ad_traffic", market="US", value=value, tag="fixture")
 
 
 @pytest.mark.asyncio

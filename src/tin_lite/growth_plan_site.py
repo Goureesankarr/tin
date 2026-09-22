@@ -199,8 +199,11 @@ async def sitemap_summary(client, base, resolver):
         return None
 
 
-async def read_site(url, *, client=None, resolver=None):
-    """Pages plus a verdict: ok | thin (a JavaScript shell) | blocked | unreachable | none."""
+async def read_site(url, *, client=None, resolver=None, html_scan=None):
+    """Pages plus a verdict: ok | thin (a JavaScript shell) | blocked | unreachable | none.
+
+    `html_scan(html) -> dict` lets a caller keep bounded signals from the raw page (tracking
+    tags, for example) before the HTML is dropped; the default keeps none."""
     if not url:
         return {"verdict": "none", "pages": [], "seconds": 0}
     started = time.monotonic()
@@ -263,6 +266,8 @@ async def read_site(url, *, client=None, resolver=None):
         page["linked"] = kind in found
         pages.append(page)
     for page in pages:
+        if html_scan is not None:
+            page["signals"] = html_scan(page.get("html") or "")
         page.pop("html", None)
         page["chars"] = len(page.get("text", ""))
         page["text"] = page.get("text", "")[:PAGE_CHARS]
