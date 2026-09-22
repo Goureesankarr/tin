@@ -909,6 +909,94 @@ def _md(value) -> str:
     return re.sub(r"[\r\n]+", " ", str(value)).strip()
 
 
+_TAGS = re.compile(r"\s*[\[(]\s*E-[A-Za-z0-9_.:-]+(?:\s*,\s*E-[A-Za-z0-9_.:-]+)*\s*[\])]")
+
+
+def _plain(value) -> str:
+    """Model prose without evidence tags; the tags stay in the machine-readable files."""
+    text = _TAGS.sub("", _md(value))
+    text = re.sub(r"\s+([.,;:])", r"\1", text)
+    return re.sub(r"  +", " ", text).strip()
+
+
+def _money(value, *, cents=False) -> str:
+    if value is None:
+        return "unknown"
+    return f"${value:,.2f}" if cents else f"${value:,.0f}"
+
+
+DECISION_WORDS = {
+    "go": "Yes, start Google Search ads",
+    "test": "Run a small test first",
+    "not_now": "Not now",
+    "continue": "Keep the current ads running",
+    "restructure": "Keep ads on, but change the setup",
+    "restart": "Start again, with changes",
+    "do_not_restart": "Do not start again",
+}
+CONFIDENCE_WORDS = {
+    "high": "Confidence is high: this rests on real campaign results or a well-supported forecast.",
+    "medium": "Confidence is medium: this rests on a forecast and benchmarks, not on your own results.",
+    "low": "Confidence is low: a key number, such as your price, was unknown.",
+}
+DIMENSION_WORDS = {
+    "economics": "Can you afford a customer at the price a click costs?",
+    "demand": "Are enough people searching for what you sell?",
+    "readiness": "Can the site turn a click into a customer, and can that be measured?",
+    "fit": "Do the searches look like buyers rather than browsers?",
+    "auction": "Are other advertisers already competing on these terms?",
+}
+GLOSSARY = [
+    ("Cost per click", "what Google charges each time someone clicks your ad, set by auction."),
+    (
+        "Conversion",
+        "the action you count as success after a click: a purchase, sign-up or lead. Google only sees it if the site reports it.",
+    ),
+    (
+        "Cost per customer",
+        "clicks needed times cost per click; what one paying customer costs you.",
+    ),
+    (
+        "Allowable cost per customer",
+        "the most you can pay for a customer and still make money, from your price and margin.",
+    ),
+    (
+        "Exact and phrase match",
+        "exact shows your ad only on that phrase; phrase allows words around it; broad lets Google guess and wastes the most.",
+    ),
+    ("Negative keyword", 'a word such as "free" or "jobs" that stops your ad from showing.'),
+]
+
+
+def _intro_lines(inputs, today, scorecard=None) -> list[str]:
+    market = inputs.get("market", "US")
+    return [
+        "# Should this business run paid ads?",
+        "",
+        f"Assessed on {today} for Google Search in the {market} market. Advisory only: nothing was created or spent on ads.",
+        "",
+        "Paid search means paying Google for clicks on the searches you choose. It is worth doing only when a paying customer is worth more to you than the clicks it takes to win one. This report makes that comparison from your site, your answers, Google's own keyword data and a search-data provider; code does the arithmetic, a model explains it.",
+        "",
+    ]
+
+
+def _method_lines(scorecard, profile) -> list[str]:
+    rule = scorecard["allowable_note"].get("rule", "")
+    if "first-purchase" in rule:
+        worth = "Customers pay once, so a customer is worth the profit on that first order plus a small allowance for repeat buyers."
+    elif "fallback" in rule:
+        worth = "Your price was unknown, so Tin used a typical figure for this kind of business."
+    else:
+        months = scorecard["allowable_note"].get("lifetime_months_assumed", 12)
+        worth = f"For a subscription, a customer is worth up to twelve months of profit, or a third of what they pay over an assumed {months}-month life, whichever is lower."
+    return [
+        "## How Tin decided",
+        "",
+        f"{worth} That is the allowable cost per customer. Google's Keyword Planner then says how many people search for the phrases that matter and what a click costs; a typical conversion rate for this kind of business turns clicks into customers, which gives the estimated cost per customer. If the estimate is below the allowable, ads can pay for themselves and the question is how big a test to run. If it is above, more traffic only loses money faster. Real results from your own campaigns, when you have them, replace the estimate.",
+        "",
+    ]
+
+
 def render(
     *,
     run_id,
@@ -928,83 +1016,101 @@ def render(
 ) -> dict[str, bytes]:
     est = scorecard.get("estimate") or {}
     scores = scorecard["scores"]
-    lines = [
-        "# Paid ads assessment",
+    decision = verdict["decision"]
+    platform_words = (
+        "Google Search" if verdict["platform"] == "google_search" else "no platform for now"
+    )
+    lines = _intro_lines(inputs, today, scorecard)
+    lines += [
+        "## The verdict",
         "",
-        f"Market: {inputs.get('market', 'US')} · Google Search · Assessed: {today} · Benchmarks {scorecard['benchmarks_version']}",
+        f"**{DECISION_WORDS.get(decision, decision)}** ({platform_words}).",
         "",
-        "## Verdict",
+        _plain(verdict["founder_words"]),
         "",
-        f"**{verdict['decision'].replace('_', ' ').title()}** on **{verdict['platform'].replace('_', ' ')}** (confidence {verdict['confidence']}).",
+        CONFIDENCE_WORDS.get(verdict["confidence"], ""),
         "",
-        _md(verdict["founder_words"]),
+        "## What decides it",
         "",
-        "## What binds the decision",
+        _plain(verdict["binding_constraint"]),
         "",
-        _md(verdict["binding_constraint"]),
+        *(f"- {_plain(r['text'])}" for r in verdict["reasons"]),
         "",
-        *(
-            f"- {_md(r['text'])} ({', '.join(r['evidence']) or 'no evidence id'})"
-            for r in verdict["reasons"]
+    ]
+    lines += _method_lines(scorecard, profile)
+    lines += [
+        "## The numbers",
+        "",
+        f"- **What a customer is worth to you:** {_money(scorecard['allowable_cpa_customer'])}.",
+    ]
+    total_volume = sum(scorecard["volume_buckets"].values())
+    lines.append(
+        f"- **How many people search:** about {scorecard['buyer_volume']:,} buyer-like searches a month, out of {total_volume:,} across every phrase researched."
+    )
+    if est:
+        floored = (
+            " Google had no price history for some phrases, so Tin assumed a plain share of buyer searches would click."
+            if est.get("floored")
+            else ""
+        )
+        lines.append(
+            f"- **What a customer would cost:** roughly {est['clicks_month']:,} clicks a month at {_money(est['cpc'], cents=True)} each ({_money(est['cost_month'])} a month), about {est['customers_month']} paying customers, so about {_money(est['cpa_customer'])} per customer.{floored}"
+        )
+    else:
+        lines.append(
+            "- **What a customer would cost:** no forecast was available for these phrases."
+        )
+    headroom = scorecard["headroom"]
+    lines += [
+        f"- **The comparison:** {_money(scorecard['allowable_cpa_customer'])} allowable against {_money(est['cpa_customer']) if est.get('cpa_customer') else 'an unknown cost'} estimated. "
+        + (
+            f"Headroom of {headroom:.2f} means a customer would cost about {1 / headroom:.0f} times what they are worth."
+            if 0 < headroom < 1
+            else f"Headroom of {headroom:.2f} means you could pay {headroom:.1f} times the estimate and still break even."
+            if headroom >= 1
+            else "No affordable bid was found."
         ),
+        f"- **A meaningful test:** about {_money(scorecard['min_test_usd_month'])} a month; below that too few people convert to learn anything.",
+        f"- **The auction:** competition on your buyer phrases scores {scorecard['auction']['competition_index']} of 100, with {sum(scorecard['auction']['paid_slots'])} sponsored results seen across {len(scorecard['auction']['paid_slots'])} sample searches.",
         "",
-        "## Scorecard",
+        "## The scorecard",
         "",
-        "| Dimension | Points | Of |",
+        "| Question | Points | Of |",
         "|---|---|---|",
         *(
-            f"| {name.title()} | {scores[name]} | {RUBRIC['score_weights'][name]} |"
+            f"| {DIMENSION_WORDS[name]} | {scores[name]} | {RUBRIC['score_weights'][name]} |"
             for name in RUBRIC["score_weights"]
         ),
         f"| **Total** | **{scores['total']}** | 100 |",
         "",
-        "## Demand and cost",
-        "",
-        f"- Allowable cost per customer: ${scorecard['allowable_cpa_customer']:.0f} ({scorecard['allowable_note']['rule']}).",
-        f"- Buyer-intent search volume a month: {scorecard['buyer_volume']:,} of {sum(scorecard['volume_buckets'].values()):,} researched ({scorecard['buyer_share']:.0%} buyer share).",
-        (
-            f"- Forecast at a ${est['bid']:.2f} bid: about {est['clicks_month']:,} clicks a month at ${est['cpc']:.2f} each, roughly ${est['cost_month']:,} a month, an estimated {est['customers_month']} customers, so about ${est['cpa_customer']:,} per customer."
-            + (
-                " The planner had no bid history for these terms; demand was floored at a plain click share of buyer volume."
-                if est.get("floored")
-                else ""
-            )
-            if est
-            else "- No forecast was available for these terms."
-        ),
-        f"- Headroom (allowable ÷ estimated): {scorecard['headroom']}. Minimum test: ${scorecard['min_test_usd_month']:,} a month.",
-        f"- Auction: planner competition index {scorecard['auction']['competition_index']} on buyer terms; paid slots seen in sampled results: {scorecard['auction']['paid_slots']}.",
-        "",
     ]
     if history:
-        lines += ["## History", ""]
+        lines += ["## What your earlier ads say", ""]
         obs = scorecard.get("observed")
         if obs:
             lines.append(
-                f"- Observed: ${obs['cpa_customer']:.0f} per customer at ${obs['cpc']:.2f} a click and {obs['cvr']:.1%} click-to-customer; headroom {obs['headroom']:.2f}."
+                f"From the numbers you gave, your ads so far won a customer for about {_money(obs['cpa_customer'])}, at {_money(obs['cpc'], cents=True)} a click with {obs['cvr']:.1%} of clicks becoming customers. Against the allowable {_money(scorecard['allowable_cpa_customer'])}, that is real evidence and it outweighs the forecast."
             )
         implied = scorecard.get("implied_from_soft_conversions")
         if implied:
             lines.append(
-                f"- Only a softer event was tracked: ${implied['cost_per_soft_event']:.2f} per event. Break-even needs {implied['soft_to_purchase_needed_for_breakeven']:.0%} of those to become customers (${implied['cpa_at_10pct']:.0f} per customer at 10%, ${implied['cpa_at_25pct']:.0f} at 25%)."
+                f"Your ad account only counted a softer step, not purchases. Each of those cost about {_money(implied['cost_per_soft_event'], cents=True)}. For the ads to break even, {implied['soft_to_purchase_needed_for_breakeven']:.0%} of those would have to become paying customers; at 10% a customer would cost {_money(implied['cpa_at_10pct'])}, at 25% {_money(implied['cpa_at_25pct'])}."
             )
         if history.get("transparency"):
-            lines.append(f"- Ads Transparency Center: {_md(history['transparency'])}")
+            lines.append(f"Google's public ad archive shows: {_plain(history['transparency'])}")
         if diagnosis:
-            lines += ["", _md(diagnosis["summary"]), ""]
-            lines += [
-                f"- {r['rule']}: {_md(r['reason'])} ({', '.join(r['evidence']) or 'no evidence id'})"
-                for r in diagnosis["likely_reasons"]
-            ]
+            lines += ["", _plain(diagnosis["summary"]), ""]
+            lines += [f"- {_plain(r['reason'])}" for r in diagnosis["likely_reasons"]]
         lines.append("")
     campaign = verdict.get("campaign")
     if campaign:
         by_id = {row["id"]: row for row in keywords}
         lines += [
-            "## Campaign shape",
+            "## A first campaign, if you go ahead",
             "",
-            f"- Geography: {_md(campaign['geo'])}. Landing page: {campaign['landing_page']}.",
-            f"- Daily budget: ${campaign['daily_budget_usd']['min']:.0f}–${campaign['daily_budget_usd']['max']:.0f}. Target cost per acquisition: ${campaign['target_cpa_usd']:.0f}.",
+            f"Show ads in {_plain(campaign['geo'])}, send clicks to {campaign['landing_page']}, spend {_money(campaign['daily_budget_usd']['min'])} to {_money(campaign['daily_budget_usd']['max'])} a day, and aim for at most {_money(campaign['target_cpa_usd'])} per customer. Judge it after about thirty customers.",
+            "",
+            "Keyword groups (square brackets are exact match, quotes are phrase match):",
             "",
         ]
         for group in campaign["ad_groups"]:
@@ -1015,29 +1121,35 @@ def render(
                 for k in group["keyword_ids"]
                 if k in by_id
             )
-            lines.append(f"- **{_md(group['name'])}** ({group['match_type']}): {terms}")
+            lines.append(f"- **{_plain(group['name'])}**: {terms}")
         if campaign.get("negatives"):
-            lines.append(f"- Negatives: {', '.join(_md(n) for n in campaign['negatives'])}")
+            lines.append(
+                f"- **Words that should never trigger your ad:** {', '.join(_plain(n) for n in campaign['negatives'])}"
+            )
         lines.append("")
     lines += ["## Fix before you spend", ""]
-    lines += [f"{i + 1}. {_md(item)}" for i, item in enumerate(verdict["fix_before_spend"])] or [
-        "Nothing blocks a first test."
-    ]
-    lines += ["", "## Evidence", ""]
-    lines += [f"- {eid}: {_md(entry.get('summary', ''))}" for eid, entry in evidence.items()]
+    fixes = [f"{i + 1}. {_plain(item)}" for i, item in enumerate(verdict["fix_before_spend"])]
+    lines += fixes or ["Nothing blocks a first test."]
+    lines += ["", "## What Tin looked at", ""]
+    lines += [f"- {_plain(entry.get('summary', ''))}" for entry in evidence.values()]
+    lines += ["", "## Words used here", ""]
+    lines += [f"- **{term}:** {meaning}" for term, meaning in GLOSSARY]
     if notes:
-        lines += ["", f"Code corrections applied to the model's draft: {'; '.join(notes)}."]
+        lines += [
+            "",
+            f"Code corrected the model's draft where it left its bounds: {'; '.join(notes)}.",
+        ]
     block = {
         "schema_version": POLICY["version"],
         "run_id": str(UUID(run_id)),
-        "decision": verdict["decision"],
+        "decision": decision,
         "platform": verdict["platform"],
         "confidence": verdict["confidence"],
-        "binding_constraint": verdict["binding_constraint"],
+        "binding_constraint": _plain(verdict["binding_constraint"]),
         "allowable_cpa_usd": scorecard["allowable_cpa_customer"],
         "ranges": scorecard["ranges"],
         "campaign": campaign,
-        "fix_before_spend": verdict["fix_before_spend"],
+        "fix_before_spend": [_plain(item) for item in verdict["fix_before_spend"]],
         "prerequisites": [
             "connect Google Ads",
             *(["import the purchase conversion"] if profile.get("tracking") != "full" else []),
@@ -1056,6 +1168,7 @@ def render(
         "founder_words": verdict["founder_words"],
         "diagnosis": diagnosis,
         "history": history,
+        "evidence_index": evidence,
         "keywords": [
             {
                 **row,
@@ -1137,30 +1250,22 @@ def not_now_documents(
         "fix_before_spend": [],
         "prerequisites": [],
     }
-    text = "\n".join(
-        [
-            "# Paid ads assessment",
-            "",
-            f"Assessed: {today}",
-            "",
-            "## Verdict",
-            "",
-            "**Not now** on **neither** platform.",
-            "",
-            reason["text"],
-            "",
-            "## What binds the decision",
-            "",
-            reason["text"],
-            "",
-            "No provider research was bought; nothing was spent.",
-            "",
-            "```tin-ads",
-            json.dumps(block, indent=1),
-            "```",
-            "",
-        ]
-    )
+    lines = _intro_lines(inputs, today) + [
+        "## The verdict",
+        "",
+        "**Not now** (no platform for now).",
+        "",
+        reason["text"],
+        "",
+        "## What decides it",
+        "",
+        "Tin stopped before buying any research because the answer was already clear from your answers and the site. Nothing was spent.",
+        "",
+        "```tin-ads",
+        json.dumps(block, indent=1),
+        "```",
+        "",
+    ]
     assessment = {
         **block,
         "project_id": str(UUID(project_id)),
@@ -1171,7 +1276,7 @@ def not_now_documents(
         "interpretation": "Advisory; gated before research.",
     }
     return {
-        "ASSESSMENT.md": text.encode(),
+        "ASSESSMENT.md": "\n".join(lines).encode(),
         "assessment.json": json.dumps(assessment, indent=1, default=str).encode(),
         "keywords.csv": b"id,keyword,intent,relevance,volume,cpc,low_bid,high_bid,competition_index,cluster,gsc_clicks,gsc_position\n",
         "evidence.json": json.dumps(
@@ -1184,85 +1289,116 @@ def not_now_documents(
 
 
 def evidence_index(gathered: dict, research: dict) -> dict:
-    """Short, id-keyed summaries of every receipted observation; the models cite these ids."""
+    """Short, id-keyed summaries of every receipted observation; the models cite the ids and
+    the report shows the sentences."""
     index = {}
 
     def add(eid, receipt, summary):
         status = (receipt or {}).get("status", "missing")
         index[eid] = {
             "status": status,
-            "summary": summary if status == "completed" else f"{summary}: {status}",
+            "summary": summary if status == "completed" else f"{summary} (not available)",
         }
 
+    def plural(count, noun):
+        return f"{count} {noun}{'' if count == 1 else 's'}"
+
+    tags = {
+        "aw_conversion": "a Google Ads conversion tag",
+        "gtm": "Google Tag Manager",
+        "gtag": "the Google tag",
+        "ga4": "Google Analytics",
+        "meta_pixel": "the Meta pixel",
+        "posthog": "PostHog",
+    }
     for stage, receipt in sorted(gathered.items()):
         value = (receipt or {}).get("value") or {}
         if stage == "site":
             add(
                 "E-site",
                 receipt,
-                f"site fetch verdict {value.get('verdict')}, {len(value.get('readable') or [])} readable pages",
+                f"Your site: {plural(len(value.get('readable') or []), 'readable page')} fetched, verdict {value.get('verdict')}",
             )
         elif stage == "tracking":
+            found = [tags[k] for k, v in (value.get("signals") or {}).items() if v and k in tags]
             add(
                 "E-tracking",
                 receipt,
-                f"tracking level {value.get('level')}: {value.get('signals')}",
+                "Tracking on your site: "
+                + (", ".join(found) if found else "no analytics or ads tags found"),
             )
         elif stage == "gsc":
-            add(
-                "E-gsc",
-                receipt,
-                f"Search Console {value.get('returned_rows', 0)} query rows over 90 days"
-                if value.get("rows") is not None
-                else f"Search Console {value.get('status', 'unavailable')}",
-            )
+            if value.get("rows") is not None:
+                add(
+                    "E-gsc",
+                    receipt,
+                    f"Search Console: {plural(value.get('returned_rows', 0), 'search query')} from the last 90 days",
+                )
+            else:
+                add("E-gsc", receipt, "Search Console: no matching property connected")
         elif stage == "ads_search":
             add(
                 "E-ads-own",
                 receipt,
-                f"Transparency Center: {value.get('count', 0)} ads for the own domain",
+                f"Google's ad archive: {plural(value.get('count', 0), 'ad')} under your domain",
             )
         elif stage == "upstream":
-            add("E-upstream", receipt, f"earlier reports: {sorted(value)}")
+            names = {
+                "audit": "organic audit",
+                "keyword": "keyword plan",
+                "onboarding": "Start here plan",
+            }
+            found = [names.get(k, k) for k in value]
+            add(
+                "E-upstream",
+                receipt,
+                "Earlier Tin reports: " + (", ".join(found) if found else "none"),
+            )
     for stage, receipt in sorted(research.items()):
         value = (receipt or {}).get("value") or {}
         short = stage.removeprefix("research:").replace(":", "-")
         if "ad_traffic" in stage:
             items = value.get("items") or [{}]
+            row = items[0]
             add(
                 f"E-{short}",
                 receipt,
-                f"forecast at bid ${items[0].get('bid')}: {items[0].get('clicks')} clicks, ${items[0].get('cost')} a month, cpc ${items[0].get('average_cpc')}",
+                f"Google's forecast at a ${row.get('bid') or 0:.2f} bid: about {round(row.get('clicks') or 0)} clicks a month at ${row.get('average_cpc') or 0:.2f} each",
             )
         elif "serp" in stage:
             add(
                 f"E-{short}",
                 receipt,
-                f"live results for '{value.get('keyword')}': {value.get('paid_slots')} paid slots",
+                f"Live Google results for '{value.get('keyword')}': {plural(value.get('paid_slots') or 0, 'sponsored result')}",
             )
         elif "ranked_paid" in stage:
             add(
                 f"E-{short}",
                 receipt,
-                f"{value.get('domain')}: {value.get('count', 0)} paid keywords, e.g. {value.get('sample')}",
+                f"Competitor {value.get('domain')}: {plural(value.get('count', 0), 'paid keyword')}",
             )
         elif "ads_advertisers" in stage:
             add(
                 f"E-{short}",
                 receipt,
-                f"Transparency Center advertisers matching the business name: {value.get('count', 0)}",
+                f"Google's ad archive: {plural(value.get('count', 0), 'advertiser')} matching your business name",
             )
         elif "gak" in stage:
+            what = {
+                "ideas": "phrase ideas from your seeds",
+                "ideas_url": "phrase ideas from your site",
+                "volume": "phrases with monthly search volumes",
+            }
             add(
                 f"E-{short}",
                 receipt,
-                f"Keyword Planner {stage.split(':')[2]}: {value.get('items_count', 0)} rows",
+                f"Keyword Planner: {value.get('items_count', 0)} {what.get(stage.split(':')[2], 'rows')}",
             )
         elif "overview" in stage:
             add(
                 f"E-{short}",
                 receipt,
-                f"DataForSEO metrics for {value.get('items_count', 0)} keywords",
+                f"Search-data provider: click prices and intent for {plural(value.get('items_count', 0), 'phrase')}",
             )
     return index
 
@@ -1275,13 +1411,13 @@ def history_from(inputs: dict, gathered: dict, research: dict) -> dict | None:
     own = (gathered.get("ads_search") or {}).get("value") or {}
     named = (research.get("research:dfs:ads_advertisers") or {}).get("value") or {}
     transparency = (
-        f"{own.get('count', 0)} ads under the domain"
+        f"{own.get('count', 0)} ad{'' if own.get('count', 0) == 1 else 's'} under your domain"
         + (
             f", first shown {own['first_shown'][:10]}, last shown {own['last_shown'][:10]}"
             if own.get("first_shown")
             else ""
         )
-        + f"; {named.get('count', 0)} advertiser accounts match the business name."
+        + f"; {named.get('count', 0)} advertiser account{'' if named.get('count', 0) == 1 else 's'} matching your business name."
     )
     return {
         "ads_history": inputs.get("ads_history"),
@@ -1346,10 +1482,10 @@ async def build_assessment(scope: dict, gathered: dict, research: dict, generate
     numeric = scorer_profile(inputs, profile, tracking, site)
     scorecard = scorer.assess(numeric, volumes, effective, curve, paid_slots)
     index = evidence_index(gathered, research["receipts"])
-    index["E-form"] = {"status": "completed", "summary": "the founder's answers on the form"}
+    index["E-form"] = {"status": "completed", "summary": "Your answers on the form"}
     index["E-scorecard"] = {
         "status": "completed",
-        "summary": f"code-computed economics: allowable ${scorecard['allowable_cpa_customer']}, headroom {scorecard['headroom']}, verdict {scorecard['verdict']}",
+        "summary": f"Tin's own arithmetic: allowable ${scorecard['allowable_cpa_customer']:.0f} per customer, headroom {scorecard['headroom']}, verdict {scorecard['verdict'].replace('_', ' ')}",
     }
     history = history_from(inputs, gathered, research["receipts"])
     diagnosis = None
