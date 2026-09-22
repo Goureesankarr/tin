@@ -9,6 +9,7 @@ from tin_lite.domain import RunStatus
 from tin_lite.integrations import GitHubRepositoryBinding, IntegrationAuthorizationError
 from tin_lite.organic_audit import (
     ARTIFACT_LIMITS,
+    CHECKS,
     audit_paths,
     build_documents,
     canonical_json,
@@ -18,7 +19,9 @@ from tin_lite.organic_audit import (
 from tin_lite.technical_fix_sources import TechnicalFixError, TechnicalFixSources
 
 
-def source_fixture(*, count=1, checks=None, crawl_status="completed", policy="organic-audit-v2"):
+def source_fixture(
+    *, count=1, checks=None, crawl_status="completed", policy="organic-audit-v2", ai=None
+):
     import json
 
     project = SimpleNamespace(id=uuid4(), state_repo_id="project/test")
@@ -56,7 +59,7 @@ def source_fixture(*, count=1, checks=None, crawl_status="completed", policy="or
             "started_at": "2026-09-09T00:00:00Z",
         },
         crawl={"status": crawl_status, "pages": pages},
-        ai={"status": "partial", "summary": "Not measured."},
+        ai=ai if ai is not None else {"status": "partial", "summary": "Not measured."},
         spending={},
         policy_version=policy,
     )
@@ -116,6 +119,75 @@ def source_fixture(*, count=1, checks=None, crawl_status="completed", policy="or
 
 async def inspect(f):
     return await f.service.inspect(project_id=f.project.id, audit_run_id=f.run.id)
+
+
+def content_source_fixture(*, checks=None, policy="organic-audit-v2"):
+    from test_organic_audit_results import frozen_panel, scored
+
+    from tin_lite.organic_audit_ai import summarize
+
+    panel = frozen_panel()
+    panel["questions"][-1]["job"] = "Compare support options"
+    ai = summarize(
+        panel,
+        [scored(index) for index in range(len(panel["questions"]) * 2)],
+        policy_version=policy,
+    )
+    return source_fixture(checks=checks if checks is not None else {}, ai=ai, policy=policy)
+
+
+@pytest.mark.parametrize("policy", ["organic-audit-v1", "organic-audit-v2", "organic-audit-v8"])
+async def test_content_findings_are_recognized_without_authorizing_technical_repair(policy):
+    f = content_source_fixture(policy=policy)
+    view = await inspect(f)
+    assert view["findings"] == []
+    assert view["repair_availability"] == {"available": False, "reason": "no_technical_findings"}
+    assert len(view["excluded_findings"]) == 2
+    assert {row["finding"]["id"] for row in view["excluded_findings"]} == {
+        row["id"] for row in f.inventory["findings"]
+    }
+    for row in view["excluded_findings"]:
+        assert row["finding"]["category"] == "content"
+        assert row["source_eligible"] is False
+        assert row["ineligible_reason"] == "content_finding"
+        assert row["next_action"] == "content.plan"
+        assert "does not establish a technical defect" in row["message"]
+        f.selection["finding_id"] = row["finding"]["id"]
+        with pytest.raises(TechnicalFixError) as error:
+            await f.service.preflight(**f.selection)
+        assert error.value.code == "content_finding"
+        assert error.value.status_code == 409
+        assert str(error.value) == row["message"]
+    f.integrations.github_repository_binding.assert_not_awaited()
+
+
+async def test_mixed_inventory_keeps_supported_technical_finding_selectable():
+    f = content_source_fixture(checks={"no_title": True, "broken_links": True})
+    view = await inspect(f)
+    assert len(view["excluded_findings"]) == 2
+    assert len(view["findings"]) == 2
+    assert view["repair_availability"] == {"available": True, "reason": None}
+    result = await f.service.preflight(**f.selection)
+    assert result["selection"]["finding"]["check_id"] == "metadata.title_missing"
+    f.integrations.github_repository_binding.assert_awaited_once()
+
+
+@pytest.mark.parametrize("change", ["id", "duplicate", "technical_collision", "check"])
+async def test_excluded_findings_require_valid_unambiguous_identifiers(change):
+    f = content_source_fixture(checks={"no_title": True})
+    content = next(row for row in f.inventory["findings"] if row["category"] == "content")
+    if change == "id":
+        content["id"] = None
+    elif change == "duplicate":
+        f.inventory["findings"].append(deepcopy(content))
+    elif change == "technical_collision":
+        content["id"] = f.selection["finding_id"]
+    else:
+        content["check_id"] = {"unexpected": "shape"}
+    f.seal()
+    with pytest.raises(TechnicalFixError, match="failed source verification"):
+        await inspect(f)
+    f.integrations.github_repository_binding.assert_not_awaited()
 
 
 async def test_description_is_eligible_only_for_new_policy():
@@ -336,6 +408,8 @@ async def test_unknown_checks_and_empty_findings_do_not_invent_a_repair():
     f = source_fixture(checks={})
     view = await inspect(f)
     assert view["findings"] == []
+    assert view["excluded_findings"] == []
+    assert view["repair_availability"]["reason"] == "no_technical_findings"
     assert all(row["status"] == "unknown" for row in view["check_coverage"])
     with pytest.raises(TechnicalFixError) as error:
         await f.service.preflight(**f.selection)
@@ -346,7 +420,9 @@ async def test_unknown_checks_and_empty_findings_do_not_invent_a_repair():
 @pytest.mark.parametrize("crawl_status", ["partial", "unavailable"])
 async def test_incomplete_crawl_keeps_evidence_but_does_not_enable_initial_repair(crawl_status):
     f = source_fixture(crawl_status=crawl_status)
-    assert (await inspect(f))["findings"][0]["ineligible_reason"] == "crawl_incomplete"
+    view = await inspect(f)
+    assert view["findings"][0]["ineligible_reason"] == "crawl_incomplete"
+    assert view["repair_availability"] == {"available": False, "reason": "no_eligible_findings"}
 
 
 async def test_other_technical_findings_are_visible_but_not_supported():
@@ -361,6 +437,26 @@ async def test_other_technical_findings_are_visible_but_not_supported():
     assert "does not support" in str(error.value)
     assert "links.broken" in str(error.value)
     f.integrations.github_repository_binding.assert_not_awaited()
+
+
+@pytest.mark.parametrize("flag,check", [(row[0], row[1]) for row in CHECKS])
+async def test_every_audited_technical_check_is_found_and_classified(flag, check):
+    from tin_lite.technical_metadata_rules import SUPPORTED_CHECKS
+
+    f = source_fixture(checks={flag: True})
+    view = await inspect(f)
+    (row,) = view["findings"]
+    assert row["finding"]["check_id"] == check
+    f.selection["finding_id"] = row["finding"]["id"]
+    if check in SUPPORTED_CHECKS:
+        assert view["repair_availability"]["available"] is True
+        assert (await f.service.preflight(**f.selection))["selection"] == row
+    else:
+        assert view["repair_availability"]["reason"] == "no_eligible_findings"
+        with pytest.raises(TechnicalFixError) as error:
+            await f.service.preflight(**f.selection)
+        assert error.value.code == "check_not_supported"
+        f.integrations.github_repository_binding.assert_not_awaited()
 
 
 @pytest.mark.parametrize(

@@ -4,6 +4,8 @@ This document records the original September 9 recipe and its historical accepta
 The current v2 continuation adds a reviewed article and optional repository-adapted PR;
 see [Organic content continuation](organic-content-continuation.md). The original
 acceptance limitations below are historical, not claims about the new recipe.
+For current metadata repair profiles and finding eligibility, see
+[Technical repair](technical-fix.md).
 
 ## ELI5
 
