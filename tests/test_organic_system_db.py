@@ -10,7 +10,7 @@ from uuid import UUID, uuid4
 import pytest
 from test_procedure_publication import activity_fixture
 from test_procedure_publication import publication_db as publication_db
-from test_technical_fix_sources import source_fixture
+from test_technical_fix_sources import content_source_fixture, source_fixture
 from test_technical_title_repair import AFTER, BEFORE, archive, manifest, spec
 
 from tin_lite import organic_system
@@ -24,9 +24,15 @@ from tin_lite.technical_fix_execution import TechnicalFixExecution, prepared_res
 from tin_lite.workflow_inputs import normalize_workflow_inputs
 
 
-async def technical_fixture(db, monkeypatch, *, html=BEFORE, source_html=BEFORE, overlap=False):
+async def technical_fixture(
+    db, monkeypatch, *, html=BEFORE, source_html=BEFORE, overlap=False, source=None
+):
     activities, storage, original, _ = await activity_fixture(db)
-    source = source_fixture()
+    source = source or source_fixture()
+    source.project.id = source.run.project_id = original.project_id
+    source.selection["project_id"] = original.project_id
+    source.evidence["project_id"] = str(original.project_id)
+    source.seal()
     selection = await source.service.preflight(**source.selection)
     inputs = {
         key: str(value) if key.endswith("run_id") else value
@@ -443,11 +449,23 @@ async def test_stopped_repair_cannot_reacquire_sandbox_lease(publication_db, mon
 
 
 @pytest.mark.parametrize("no_change", [False, True])
+@pytest.mark.parametrize("flag", ["no_title", "no_description"])
 async def test_technical_commit_uses_immutable_verified_output_and_one_receipt(
-    publication_db, monkeypatch, no_change
+    publication_db, monkeypatch, no_change, flag
 ):
-    f = await technical_fixture(publication_db, monkeypatch)
-    await f.execution.prepare(f.run)
+    from test_technical_metadata_repair import AFTER as DESCRIPTION_AFTER
+
+    source = content_source_fixture(checks={flag: True})
+    selected = next(row for row in source.inventory["findings"] if row["category"] == "technical")
+    source.selection["finding_id"] = selected["id"]
+    real_preflight = source.service.preflight
+    f = await technical_fixture(publication_db, monkeypatch, source=source)
+    # Exercise the actual immutable audit reader and selection inside execution,
+    # including unrelated content recommendations in the same inventory.
+    f.preview.side_effect = real_preflight
+    await f.execution.prepare(f.run, policy=technical_contract.POLICY)
+    await f.execution.prepare(f.run, policy=technical_contract.POLICY)
+    f.preview.assert_awaited_once()
     await f.db.pool.execute("UPDATE workflow_runs SET lease_active=true WHERE id=$1", f.run.id)
     await f.db.pool.execute(
         "UPDATE effect_receipts SET result=$2::jsonb WHERE execution_key=$1",
@@ -470,7 +488,11 @@ async def test_technical_commit_uses_immutable_verified_output_and_one_receipt(
         "read_ephemeral_artifact",
         AsyncMock(side_effect=AssertionError("mutable branch")),
     )
-    immutable = AsyncMock(return_value=json.dumps(manifest(no_change=no_change)).encode())
+    proposed = manifest(no_change=no_change)
+    after = AFTER if flag == "no_title" else DESCRIPTION_AFTER
+    if not no_change:
+        proposed["files"][0]["content"] = after
+    immutable = AsyncMock(return_value=json.dumps(proposed).encode())
     monkeypatch.setattr(f.storage, "read_procedure_checkpoint", immutable)
     publisher = AsyncMock(return_value=("f" * 40, True))
     monkeypatch.setattr(f.storage, "publish_state_document", publisher)
@@ -494,7 +516,7 @@ async def test_technical_commit_uses_immutable_verified_output_and_one_receipt(
     assert create_pr.await_count == (0 if no_change else 1)
     if not no_change:
         assert create_pr.await_args.kwargs["expected_binding"].head_sha == "b" * 40
-        assert create_pr.await_args.kwargs["files"][0].content == AFTER
+        assert create_pr.await_args.kwargs["files"][0].content == after
     saved = await f.db.get_effect(f"{f.run.id}:procedure_canonical_commit")
     assert saved.status == "completed"
     assert saved.result["outcome"] == ("no_change" if no_change else "pull_request")

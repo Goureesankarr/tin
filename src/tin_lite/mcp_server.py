@@ -967,7 +967,12 @@ def create_mcp_app(
 
     @server.tool(annotations=ToolAnnotations(read_only_hint=True))
     async def get_technical_fix_source(project_id: str, audit_run_id: str) -> dict[str, Any]:
-        """Verify an exact audit publication and its technical findings. Does not start compute."""
+        """Verify an exact audit and inspect repair availability. Does not start compute.
+
+        findings contains technical findings with source_eligible and ineligible_reason.
+        excluded_findings identifies content recommendations and their suggested next action.
+        Only source_eligible technical findings may be selected for organic.technical_fix.
+        """
         parsed, preparation = await technical_fix_service(project_id, "get_technical_fix_source")
         try:
             return await preparation.inspect(
@@ -988,7 +993,8 @@ def create_mcp_app(
         """Read-only finding/repository preview. No run, paid compute, branch or PR is created.
 
         repository_serves_site records a member's assertion, not proof of route mapping.
-        Execution is not enabled; a future run must revalidate and pin its own binding.
+        A repair run must revalidate and pin its own binding. Content recommendations
+        return content_finding; finding_not_found means the ID is absent from this audit.
         """
         parsed, preparation = await technical_fix_service(project_id, "preflight_technical_fix")
         try:
