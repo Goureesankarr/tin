@@ -61,6 +61,8 @@ class AnswerPageDrafter:
             }
         )
         result = _normalize_response(response)
+        if "ANSWER_PLAN_V1" in self._skill_suite:
+            result["argument_plan"], result["markdown"] = extract_argument_plan(result["markdown"])
         result["model"] = self._responses.model
         validate_answer_page(result["markdown"].encode())
         return result
@@ -89,6 +91,11 @@ class AnswerPageDrafter:
                     "sources": draft["sources"],
                     "citations": draft["citations"],
                     "usage": draft["usage"],
+                    **(
+                        {"argument_plan": draft["argument_plan"]}
+                        if "argument_plan" in draft
+                        else {}
+                    ),
                 },
                 ensure_ascii=False,
                 separators=(",", ":"),
@@ -103,6 +110,27 @@ class AnswerPageDrafter:
             evidence_path=evidence_path,
         )
         return markdown, evidence
+
+
+def extract_argument_plan(markdown: str) -> tuple[dict, str]:
+    match = re.match(r"<!-- tin-answer-plan-v1\s*(\{.*?\})\s*-->\s*", markdown, re.S)
+    if not match or len(match.group(1).encode()) > 16000:
+        raise AnswerPageProtocolError("answer page lacks a bounded saved argument plan")
+    try:
+        plan = json.loads(match.group(1))
+    except ValueError as exc:
+        raise AnswerPageProtocolError("invalid argument plan JSON") from exc
+    fields = {"buyer_decision", "positioning", "answer", "proof", "objection", "next_step"}
+    if (
+        not isinstance(plan, dict)
+        or set(plan) != fields
+        or any(not isinstance(v, str) or not v.strip() or len(v) > 3000 for v in plan.values())
+    ):
+        raise AnswerPageProtocolError(
+            "argument plan must identify decision, positioning, answer, "
+            "proof, objection and next step"
+        )
+    return plan, markdown[match.end() :].lstrip()
 
 
 def validate_answer_page(content: bytes) -> None:

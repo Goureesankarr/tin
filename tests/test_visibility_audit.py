@@ -255,7 +255,7 @@ def test_visibility_workflow_exposes_one_editable_target_with_a_project_default(
     workflow = next(item for item in BUILTIN_WORKFLOWS if item.id == VISIBILITY_AUDIT_WORKFLOW_ID)
     schema = workflow.definition["input_schema"]
 
-    assert workflow.version_label == "1.1.0"
+    assert workflow.version_label == "1.2.0"
     assert schema["required"] == ["project_id", "target"]
     assert schema["properties"]["target"] == {
         "type": "string",
@@ -351,6 +351,8 @@ class FakeStorage:
         self.publishes = 0
 
     async def read_canonical_artifact(self, *, path: str, **values) -> bytes:
+        if path == "workflows/visibility.audit.json":
+            return b'{"key":"visibility.audit"}'
         if path == "wiki/INDEX.md":
             return b"# Project memory\n\nVirvid is at virvid.app.\n"
         return self.documents[path]

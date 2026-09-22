@@ -21,6 +21,7 @@ from tin_lite.answer_page import (
     AnswerPageSource,
     validate_answer_page_artifacts,
 )
+from tin_lite.billing_contracts import BillingError
 from tin_lite.code_storage import CodeStorage, reviewed_task_diff
 from tin_lite.db import Database
 from tin_lite.domain import (
@@ -281,6 +282,11 @@ class TinActivities:
         if configured.status == "archived":
             return {}
         if configured.status != "active" or configured.schedule is None:
+            if configured.status == "paused" and configured.last_error:
+                from tin_lite.code_schedules import pause_for_issue
+
+                await pause_for_issue(self, configured, configured.last_error)
+                return {}
             raise RuntimeError("scheduled workflow is not active")
         workflow_definition = await self._db.get_workflow(configured.workflow_id)
         if workflow_definition is None:
@@ -330,6 +336,11 @@ class TinActivities:
                     evaluation.evidence(inputs=configured.inputs) if evaluation.results else None
                 ),
             )
+        except BillingError as exc:
+            from tin_lite.code_schedules import pause_for_issue
+
+            await pause_for_issue(self, configured, str(exc))
+            return {}
         except ScheduledWorkflowSkip:
             await self._db.advance_project_workflow_schedule(
                 project_workflow_id=configured.id,
@@ -1069,6 +1080,9 @@ class TinActivities:
                 if self._memory_gardener is None:
                     raise RuntimeError("project.memory requires a configured memory gardener")
                 run = await self._require_run(run_id)
+                reporter = await self._pinned_native_reporter(
+                    run, self._memory_gardener, "project.memory"
+                )
                 project = await self._require_project(run.project_id)
                 await self._db.mark_run_running(run_id)
                 async with self._db.project_state_lock(conn, project.id):
@@ -1108,7 +1122,7 @@ class TinActivities:
                             owned_section = extract_owned_section(current_index.decode("utf-8"))
                     with external_usage_scope(self._db, conn, run_id, "memory"):
                         memory_index = await self._await_with_heartbeats(
-                            self._memory_gardener.garden(
+                            reporter.garden(
                                 project_name=project.name,
                                 sources=sources,
                                 owned_section=owned_section,
@@ -1217,6 +1231,9 @@ class TinActivities:
                 if self._scan_reporter is None:
                     raise RuntimeError("scan.report requires a configured scan reporter")
                 run = await self._require_run(run_id)
+                reporter = await self._pinned_native_reporter(
+                    run, self._scan_reporter, "scan.report"
+                )
                 project = await self._require_project(run.project_id)
                 if run.system_wiki_commit_sha is None:
                     raise RuntimeError("scan.report run has no pinned system wiki version")
@@ -1278,9 +1295,16 @@ class TinActivities:
                                     content=source_content.decode("utf-8"),
                                 )
                             )
+                    sources.append(
+                        ScanSource(
+                            label="current integration availability",
+                            artifact_ref=f"tin.project://{project.id}/integrations",
+                            content=await self._integration_evidence(project),
+                        )
+                    )
                     with external_usage_scope(self._db, conn, run_id, "scan"):
                         report = await self._await_with_heartbeats(
-                            self._scan_reporter.report(
+                            reporter.report(
                                 project_name=project.name,
                                 sources=sources,
                             ),
@@ -1648,6 +1672,9 @@ class TinActivities:
         if committed is not None and committed.status == "completed":
             return
         run = await self._require_run(run_id)
+        reporter = await self._pinned_native_reporter(
+            run, self._visibility_auditor, "visibility.audit"
+        )
         project = await self._require_project(run.project_id)
         raw_target_request = (run.input or {}).get("target", "this project")
         if not isinstance(raw_target_request, str):
@@ -1663,7 +1690,7 @@ class TinActivities:
                 run_id=run_id,
                 step_id="panel",
                 operation="visibility_panel",
-                execute=lambda checkpoint: self._visibility_auditor.prepare_panel(
+                execute=lambda checkpoint: reporter.prepare_panel(
                     project_name=project.name,
                     target_request=target_request,
                     sources=sources,
@@ -1683,7 +1710,7 @@ class TinActivities:
                     run_id=run_id,
                     step_id=f"answer:{question_id}:{mode}",
                     operation="visibility_answer",
-                    execute=lambda checkpoint: self._visibility_auditor.answer(
+                    execute=lambda checkpoint: reporter.answer(
                         question=question_text,
                         searched=searched,
                         checkpoint=checkpoint,
@@ -1726,7 +1753,7 @@ class TinActivities:
                 run_id=run_id,
                 step_id="adjudication",
                 operation="visibility_adjudication",
-                execute=lambda checkpoint: self._visibility_auditor.adjudicate(
+                execute=lambda checkpoint: reporter.adjudicate(
                     panel=panel,
                     measurements=measurements,
                     checkpoint=checkpoint,
@@ -1736,7 +1763,7 @@ class TinActivities:
         )
 
         evidence_path = visibility_evidence_path(run_id)
-        report, evidence = self._visibility_auditor.build_artifacts(
+        report, evidence = reporter.build_artifacts(
             run_id=str(run_id),
             project_name=project.name,
             target_request=target_request,
@@ -1884,13 +1911,16 @@ class TinActivities:
             raise RuntimeError("content.answer_page requires a configured answer-page drafter")
         run_id = UUID(run_id_text)
         run = await self._require_run(run_id)
+        reporter = await self._pinned_native_reporter(
+            run, self._answer_page_drafter, "content.answer_page"
+        )
         project = await self._require_project(run.project_id)
         await self._db.mark_run_running(run_id)
         sources = await self._answer_page_sources(run_id=run_id, project=project)
         draft = await self._await_with_heartbeats(
             self._answer_page_effect(
                 run_id=run_id,
-                execute=lambda: self._answer_page_drafter.draft(
+                execute=lambda: reporter.draft(
                     project_name=project.name,
                     sources=sources,
                 ),
@@ -1898,7 +1928,7 @@ class TinActivities:
             details={"stage": "answer_page_draft"},
         )
         evidence_path = answer_page_evidence_path(run_id)
-        page, evidence = self._answer_page_drafter.build_artifacts(
+        page, evidence = reporter.build_artifacts(
             run_id=str(run_id),
             source_refs=[source.artifact_ref for source in sources],
             draft=draft,
@@ -2060,6 +2090,9 @@ class TinActivities:
             raise RuntimeError("project.weekly_brief requires a configured weekly brief reporter")
         run_id = UUID(run_id_text)
         run = await self._require_run(run_id)
+        reporter = await self._pinned_native_reporter(
+            run, self._weekly_brief_reporter, "project.weekly_brief"
+        )
         project = await self._require_project(run.project_id)
         await self._db.mark_run_running(run_id)
         period_end = run.scheduled_for or run.created_at or datetime.now(UTC)
@@ -2073,7 +2106,7 @@ class TinActivities:
         result = await self._await_with_heartbeats(
             self._weekly_brief_effect(
                 run_id=run_id,
-                execute=lambda: self._weekly_brief_reporter.report(
+                execute=lambda: reporter.report(
                     project_name=project.name,
                     period_start=period_start,
                     period_end=period_end,
@@ -2085,7 +2118,7 @@ class TinActivities:
         )
         artifact_path = weekly_brief_path(period_end)
         evidence_path = weekly_brief_evidence_path(run_id)
-        report, evidence = self._weekly_brief_reporter.build_artifacts(
+        report, evidence = reporter.build_artifacts(
             run_id=str(run_id),
             artifact_path=artifact_path,
             evidence_path=evidence_path,
@@ -4382,6 +4415,39 @@ class TinActivities:
                 )
                 raise
 
+    async def _pinned_native_reporter(self, run, reporter, key):
+        # Test doubles and separately supplied implementations retain their own contracts.
+        if not isinstance(
+            reporter,
+            (
+                AnswerPageDrafter,
+                VisibilityAuditor,
+                WeeklyBriefReporter,
+                MemoryGardener,
+                ScanReporter,
+            ),
+        ):
+            return reporter
+        from tin_lite.native_skill_pins import pinned_suite, suite_for_workflow
+
+        if run.definition_commit_sha:
+            definition = json.loads(
+                await self._storage.read_canonical_artifact(
+                    repo_id="registry/workflows",
+                    commit_sha=run.definition_commit_sha,
+                    path=f"workflows/{key}.json",
+                )
+            )
+            suite = pinned_suite(definition, key)
+        else:
+            suite = suite_for_workflow(key, legacy=True)
+        return type(reporter)(responses=reporter._responses, skill_suite=suite)
+
+    async def _integration_evidence(self, project):
+        from tin_lite.workflow_evidence import integration_inventory
+
+        return json.dumps(await integration_inventory(self._db, project.id), sort_keys=True)
+
     async def _weekly_brief_sources(
         self,
         *,
@@ -4397,13 +4463,37 @@ class TinActivities:
             nonlocal remaining
             if remaining <= 0:
                 return
-            bounded = content[: min(40_000, remaining)]
+            bounded = content.encode()[: min(16_000, remaining)].decode("utf-8", errors="ignore")
             if not bounded.strip():
                 return
             sources.append(
                 WeeklyBriefSource(label=label, artifact_ref=artifact_ref, content=bounded)
             )
             remaining -= len(bounded.encode())
+
+        append(
+            "current integration availability",
+            f"tin.project://{project.id}/integrations",
+            await self._integration_evidence(project),
+        )
+
+        list_files = getattr(self._storage, "list_canonical_files", None)
+        if list_files is not None and getattr(project, "canonical_branch", None):
+            paths, revision = await list_files(
+                repo_id=project.state_repo_id, branch=project.canonical_branch
+            )
+            context_paths = [
+                path for path in paths if path.startswith("context/") and path.endswith(".md")
+            ][:3]
+            for path in context_paths:
+                content = await self._storage.read_canonical_artifact(
+                    repo_id=project.state_repo_id, commit_sha=revision, path=path
+                )
+                append(
+                    "founder and project context",
+                    f"code.storage://{project.state_repo_id}@{revision}/{path}",
+                    content[:8000].decode("utf-8", errors="ignore"),
+                )
 
         if project.memory_commit_sha is not None and project.memory_index_path is not None:
             content = await self._storage.read_canonical_artifact(
@@ -4425,6 +4515,10 @@ class TinActivities:
             period_start=period_start,
             period_end=period_end,
             exclude_run_id=run_id,
+        )
+        # Read decision evidence before general activity can exhaust the context budget.
+        runs = sorted(
+            runs, key=lambda r: 0 if (r.artifact_path or "").startswith("reports/analytics/") else 1
         )
         for source_run in runs:
             ref = source_run.artifact_ref or f"tin.run://{source_run.id}"
@@ -4533,6 +4627,15 @@ class TinActivities:
         selected_runs = (
             visibility_runs[-1:] if visibility_runs else ([] if sources else source_runs[-5:])
         )
+        # Availability is useful context, but cannot replace durable project evidence.
+        sources.insert(
+            0,
+            AnswerPageSource(
+                label="current integration availability",
+                artifact_ref=f"tin.project://{project.id}/integrations",
+                content=await self._integration_evidence(project),
+            ),
+        )
         for source_run in selected_runs:
             if (
                 source_run.canonical_commit_sha is None
@@ -4637,15 +4740,26 @@ class TinActivities:
             )
             return [
                 VisibilitySource(
+                    label="current integration availability",
+                    artifact_ref=f"tin.project://{project.id}/integrations",
+                    content=await self._integration_evidence(project),
+                ),
+                VisibilitySource(
                     label="project memory",
                     artifact_ref=(
                         f"code.storage://{project.state_repo_id}"
                         f"@{project.memory_commit_sha}/{project.memory_index_path}"
                     ),
                     content=content.decode("utf-8"),
-                )
+                ),
             ]
-        sources: list[VisibilitySource] = []
+        sources: list[VisibilitySource] = [
+            VisibilitySource(
+                label="current integration availability",
+                artifact_ref=f"tin.project://{project.id}/integrations",
+                content=await self._integration_evidence(project),
+            )
+        ]
         for source_run in await self._db.list_memory_source_runs(
             project_id=project.id,
             exclude_run_id=run_id,

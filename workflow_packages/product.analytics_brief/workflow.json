@@ -4,7 +4,7 @@
     "key": "product.analytics_brief",
     "title": "Product analytics brief",
     "description": "A recurring PostHog brief: ordered activation, event trends, traffic, error signals and a supported breakdown, with reproducible evidence.",
-    "version": "1.0.1",
+    "version": "1.1.0",
     "executor": "codex.procedure",
     "schedule_modes": [
       "on_demand",
@@ -49,6 +49,17 @@
           "maxLength": 2000,
           "default": "",
           "title": "Optional team or test exclusions"
+        },
+        "website_hosts": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "maxLength": 253
+          },
+          "maxItems": 5,
+          "uniqueItems": true,
+          "default": [],
+          "title": "Optional website hosts for pageview scope"
         }
       },
       "required": [

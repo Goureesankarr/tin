@@ -18,6 +18,10 @@ the next roadmap item.
 - A failed revision needs explicit retry. Feedback is not discarded by generic retry,
   and a stopped revision closes its waiting review ancestry.
 
+Hiding a template from discovery does not remove review or delivery controls from
+existing drafts. The dashboard resolves their workflow metadata by ID independently
+of the discovery list; this does not make the template discoverable again.
+
 ## Contributor invariants
 
 The `content-revision.v1` adapter pins the reviewed copy, original brief and evidence,

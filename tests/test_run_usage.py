@@ -444,3 +444,18 @@ async def test_truncation_is_explicit(publication_db, monkeypatch):
     monkeypatch.setattr("tin_lite.run_usage.MAX_OBSERVATIONS", 1)
     view = await read_run_usage(database=db, run=run)
     assert view["own"]["truncated"] and len(view["own"]["observations"]) == 1
+
+
+def test_stage_readout_keeps_compaction_and_unknown_prices_separate():
+    from tin_lite.run_usage import usage_stage
+
+    assert (
+        usage_stage({"endpoint": "/v1/responses/compact", "step": "draft"}, "codex_openai_api")
+        == "context_compaction"
+    )
+    assert usage_stage({"step": "keyword:triage"}, "native_model_service") == "keyword:triage"
+    assert (
+        usage_stage({"step": "https://secret.example/?token=hidden"}, "native_model_service")
+        == "model_unspecified"
+    )
+    assert usage_stage({}, "connected_api") == "connected_api"

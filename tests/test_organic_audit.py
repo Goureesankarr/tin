@@ -81,7 +81,7 @@ def page_fixture(**changes):
         "resource_type": "html",
         "status_code": 200,
         "meta": {"title": "Example", "description": "A product"},
-        "checks": {"no_title": True, "canonical_to_broken": False},
+        "checks": {"canonical": True, "no_title": True, "canonical_to_broken": False},
         "duplicate_title": True,
         **changes,
     }

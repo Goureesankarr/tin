@@ -1431,6 +1431,7 @@ def create_mcp_app(
             workflow
             for workflow in await services.database.list_workflows(project_id=parsed_project_id)
             if workflow.status.value == "active"
+            and (workflow.definition or {}).get("public_discovery", True)
             and (
                 workflow.project_id is None
                 or private_execution_ready(settings, workflow.project_id)

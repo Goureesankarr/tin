@@ -2,6 +2,7 @@
 
 import json
 
+import jsonschema
 import pytest
 from test_keyword_plan import finish, fixture
 
@@ -9,6 +10,38 @@ from tin_lite import keyword_plan as v1
 from tin_lite import keyword_plan_v2 as v2
 from tin_lite import keyword_plan_v3 as v3
 from tin_lite import keyword_plan_v4 as v4
+from tin_lite import keyword_plan_v5 as v5
+
+
+@pytest.mark.parametrize("core_count", [3, 4])
+@pytest.mark.parametrize("specific_count", [1, 2, 3, 4])
+def test_v5_advertised_seed_counts_fit_the_provider_limit(core_count, specific_count):
+    value = {
+        "core": ["invoice api", "billing software", "payment webhook", "receipt software"][
+            :core_count
+        ],
+        "specific": [
+            "invoice api migration",
+            "billing integration tutorial",
+            "automated payment receipts",
+            "invoice delivery debugging",
+        ][:specific_count],
+    }
+    jsonschema.validate(value, v5.SCHEMAS["seeds"])
+    assert v5.seed_values(value) == value["core"] + value["specific"]
+    assert len(v5.seed_values(value)) <= v1.POLICY["max_seeds"]
+
+
+@pytest.mark.parametrize("core_count,specific_count", [(3, 6), (4, 5), (4, 6)])
+def test_v5_schema_does_not_invite_seeds_that_exceed_the_provider_limit(core_count, specific_count):
+    value = {
+        "core": ["invoice api", "billing software", "payment webhook", "receipt software"][
+            :core_count
+        ],
+        "specific": [f"invoice integration task {index}" for index in range(specific_count)],
+    }
+    with pytest.raises(jsonschema.ValidationError):
+        jsonschema.validate(value, v5.SCHEMAS["seeds"])
 
 
 @pytest.mark.parametrize(
@@ -45,7 +78,7 @@ def test_core_and_specific_seeds_are_deduplicated_and_use_only_explicit_context(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("contract, version", [(v3, "v3"), (v4, "v4")])
+@pytest.mark.parametrize("contract, version", [(v3, "v3"), (v4, "v4"), (v5, "v5")])
 async def test_core_seed_versions_reuse_calls_and_publish_one_complete_inventory(contract, version):
     activities, db, storage, provider, model = await fixture(
         modern=version, inputs={"seed_phrases": []}

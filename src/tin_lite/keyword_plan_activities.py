@@ -15,6 +15,7 @@ from temporalio.exceptions import ApplicationError
 from tin_lite import keyword_plan_v2 as v2
 from tin_lite import keyword_plan_v3 as v3
 from tin_lite import keyword_plan_v4 as v4
+from tin_lite import keyword_plan_v5 as v5
 from tin_lite.integrations import GSC_PROVIDER
 from tin_lite.keyword_data import ENDPOINTS, KeywordData, request_for
 from tin_lite.keyword_plan import (
@@ -44,12 +45,14 @@ from tin_lite.model_usage import model_usage_scope
 from tin_lite.organic_audit import ARTIFACT_LIMITS, audit_hosts, audit_paths, canonical_json, digest
 from tin_lite.organic_audit_publication import publish_artifacts
 from tin_lite.usage_capture import external_usage_scope
+from tin_lite.workflow_evidence import integration_inventory
 
 CONTRACTS = {
     POLICY["version"]: (POLICY, INSTRUCTIONS, SCHEMAS),
     v2.POLICY["version"]: (v2.POLICY, v2.INSTRUCTIONS, v2.SCHEMAS),
     v3.POLICY["version"]: (v3.POLICY, v3.INSTRUCTIONS, v3.SCHEMAS),
     v4.POLICY["version"]: (v4.POLICY, v4.INSTRUCTIONS, v4.SCHEMAS),
+    v5.POLICY["version"]: (v5.POLICY, v5.INSTRUCTIONS, v5.SCHEMAS),
 }
 
 
@@ -58,6 +61,7 @@ def modern_scope(scope):
         v2.POLICY["version"],
         v3.POLICY["version"],
         v4.POLICY["version"],
+        v5.POLICY["version"],
     }
 
 
@@ -412,6 +416,8 @@ class KeywordPlanActivities:
             "max_cost_usd": str(maximum),
             "policy_version": policy["version"],
         }
+        if policy["version"] == v5.POLICY["version"]:
+            scope["integrations"] = await integration_inventory(self.db, run.project_id)
         if run.input.get("audit_run_id"):
             scope["audit"] = await self._audit_context(
                 run.input["audit_run_id"],
@@ -512,13 +518,19 @@ class KeywordPlanActivities:
         if run.input.get("seed_phrases"):
             seeds = phrases(run.input["seed_phrases"])
         else:
-            core_seeds = scope.get("policy_version") in {v3.POLICY["version"], v4.POLICY["version"]}
+            core_seeds = scope.get("policy_version") in {
+                v3.POLICY["version"],
+                v4.POLICY["version"],
+                v5.POLICY["version"],
+            }
             value = await self._model(
                 run_id, "seeds", v3.seed_input(scope) if core_seeds else scope
             )
             try:
                 seeds = (
-                    v3.seed_values(value)
+                    v5.seed_values(value)
+                    if scope.get("policy_version") == v5.POLICY["version"]
+                    else v3.seed_values(value)
                     if core_seeds
                     else phrases(Seeds.model_validate(value).seeds)
                 )

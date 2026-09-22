@@ -33,6 +33,7 @@ from tin_lite.model_usage import model_usage_scope
 from tin_lite.organic_audit import canonical_json, digest
 from tin_lite.organic_audit_publication import publish_artifacts
 from tin_lite.technical_fix import fetch_page
+from tin_lite.workflow_evidence import integration_inventory
 
 
 class ContentPlanActivities:
@@ -82,7 +83,9 @@ class ContentPlanActivities:
                         observation = await fetch_page(url, host=context["plan"]["host"])
                     if not editorial.clean_url(observation["url"], context["plan"]["host"]):
                         raise ValueError("Page redirect did not yield a clean destination.")
-                    page = editorial.page_evidence(observation, url)
+                    page = editorial.page_evidence(
+                        observation, url, text_limit=context.get("page_text_limit", 2200)
+                    )
                     if bind_sources and page["status"] == "inspected":
                         page["source_id"] = "page:" + digest(
                             {
@@ -419,11 +422,17 @@ class ContentPlanActivities:
                         "plan": plan,
                         "research": research,
                         "files": files,
+                        **(
+                            {"integrations": await integration_inventory(self.db, project.id)}
+                            if contract.POLICY["version"] == "content-editorial-v5"
+                            else {}
+                        ),
                         "editable": editable,
                         "instruction": amendment["instruction"]
                         if amendment
                         else "Create the initial roadmap.",
                         "capacity": run.input.get("pieces_per_batch", 2),
+                        "page_text_limit": contract.POLICY.get("expanded_page_text_bytes", 2200),
                     },
                 )
             plan = context["plan"]

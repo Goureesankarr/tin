@@ -54,12 +54,38 @@ def stable_hash(obj):
     ).hexdigest()
 
 
+def validate_hosts(hosts):
+    if (
+        type(hosts) is not list
+        or len(hosts) > 5
+        or any(
+            type(host) is not str
+            or len(host) > 253
+            or not re.fullmatch(
+                r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)+", host
+            )
+            for host in hosts
+        )
+        or len(hosts) != len(set(hosts))
+    ):
+        raise ValueError("website_hosts must contain at most five distinct lowercase hostnames")
+
+
 def settings(inputs, now=None):
-    allowed = {"posthog_project_id", "reporting_days", "as_of_utc", "event_mapping", "exclusions"}
+    allowed = {
+        "posthog_project_id",
+        "reporting_days",
+        "as_of_utc",
+        "event_mapping",
+        "exclusions",
+        "website_hosts",
+    }
     if not isinstance(inputs, dict) or set(inputs) - allowed:
         raise ValueError("unexpected client input")
     c = dict(reporting_days=7, as_of_utc="", event_mapping="", exclusions="")
     c.update(inputs)
+    hosts = c.get("website_hosts", [])
+    validate_hosts(hosts)
     if type(c.get("posthog_project_id")) is not str or not re.fullmatch(
         r"[0-9]{1,20}", c["posthog_project_id"]
     ):
@@ -85,6 +111,8 @@ def settings(inputs, now=None):
     prior = current - dt.timedelta(days=c["reporting_days"])
     # Date/window changes do not silently replace the semantic mapping.
     binding = stable_hash({k: c[k] for k in ("posthog_project_id", "event_mapping", "exclusions")})
+    if hosts:
+        binding = stable_hash({"base": binding, "website_hosts": sorted(hosts)})
     return c, (prior, current, end), binding
 
 
@@ -111,6 +139,9 @@ def validate_plan(p):
         "traffic_actor_key",
         "traffic_chain_key",
     }
+    if type(p) is dict and "_website_hosts" in p:
+        validate_hosts(p["_website_hosts"])
+        p = {k: v for k, v in p.items() if k != "_website_hosts"}
     if type(p) is not dict or set(p) != fields or p["version"] != VERSION:
         raise ValueError("unsupported plan shape/version")
     identity(p["actor_key"])
@@ -225,6 +256,13 @@ def event_list(p):
 
 def where(p, start, end, events=None):
     s = f"timestamp>={timestamp(start)} AND timestamp<{timestamp(end)} AND ({exclusions(p['exclusions'])})"
+    hosts = p.get("_website_hosts", [])
+    validate_hosts(hosts)
+    if hosts:
+        # Scope every occurrence of pageviews, including inventory/coverage, consistently.
+        # Server events have separate project-wide scope; never drop missing-host server rows.
+        host = prop("$host")
+        s += " AND (event!='$pageview' OR " + host + " IN (" + ",".join(map(literal, hosts)) + "))"
     if events is not None:
         if not events:
             raise ValueError("empty event selection")
@@ -423,7 +461,12 @@ def request(c, step, p, w):
         raise ValueError("invalid provider project ID")
     if step != "inventory":
         validate_plan(p)
-    sql = builders[step](p, w)
+    hosts = c.get("website_hosts", [])
+    validate_hosts(hosts)
+    if hosts and p.get("pageview_event", "$pageview") not in ("", "$pageview"):
+        raise ValueError("website_hosts currently scopes the standard $pageview event only")
+    scoped = {**p, "_website_hosts": hosts}
+    sql = builders[step](scoped, w)
     if step == "coverage":
         sql = sql[0]
     # Caller supplies validated data, never SQL; query text only comes from fixed builders.

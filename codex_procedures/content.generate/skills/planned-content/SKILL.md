@@ -31,3 +31,13 @@ description: Assess current coverage, then draft only useful, fact-grounded plan
    documentation-grounded examples and local checks from examples actually executed live.
    Review concerns article copy only; no-draft assessments have no approval or delivery.
    The companion notes are available as internal context.
+
+
+Before broad research, inspect the exact destination and nearest competing page. If they already
+answer the intent, save an already-covered assessment immediately; do not pay for a replacement
+article. For a genuine gap, save an argument outline in the declared generation-notes file
+before writing: buyer decision, direct answer, plan positioning, proof, objection, next step.
+Use that outline to remove tangents. Reuse verified project evidence and read focused excerpts
+before whole files. Record dated official competitor facts in the notes. Compare total costs on
+like-for-like usage and distinguish customer-owned from provider-operated hardware. Never infer
+missing capability from silence. Keep notes and process details outside customer-facing copy.

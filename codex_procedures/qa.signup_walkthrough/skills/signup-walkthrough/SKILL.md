@@ -184,3 +184,9 @@ If the card was entered and the trial is not cancelled, this sentence must say s
 `activation_reached` is `true` only when you performed the product's core action as the new
 user. Keep every line factual. Do not include the password, the card number, other people's
 data, or email bodies. Do not create any other file.
+
+Before choosing audit priorities, inspect the latest relevant project analytics report and
+connection metadata supplied in the run context, if present. Use only authorized bound
+services. Treat new access as an evidence opportunity, not proof of a defect or outcome.
+Keep valid observations when another source is unavailable, and resolve routine gaps from
+existing project context before asking the founder.

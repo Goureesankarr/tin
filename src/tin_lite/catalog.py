@@ -66,13 +66,13 @@ from tin_lite.keyword_plan import (
 from tin_lite.keyword_plan import (
     ROUTE_KEY as KEYWORD_ROUTE_KEY,
 )
-from tin_lite.keyword_plan_v4 import (
+from tin_lite.keyword_plan_v5 import (
     INSTRUCTIONS as KEYWORD_INSTRUCTIONS,
 )
-from tin_lite.keyword_plan_v4 import (
+from tin_lite.keyword_plan_v5 import (
     POLICY as KEYWORD_POLICY,
 )
-from tin_lite.keyword_plan_v4 import (
+from tin_lite.keyword_plan_v5 import (
     SCHEMAS as KEYWORD_SCHEMAS,
 )
 from tin_lite.model_providers import ModelCapability, ModelRoute, ProviderName
@@ -439,6 +439,13 @@ class BuiltinWorkflow:
                 raise ValueError(
                     "procedures that use a test identity require the Google Workspace mailbox"
                 )
+        if self.key == "content.public_article":
+            definition["public_discovery"] = False
+        from tin_lite.native_skill_pins import suite_for_workflow
+
+        suite = suite_for_workflow(self.key)
+        if suite is not None:
+            definition["native_skill_suite"] = suite
         return definition, resources
 
     def definition_with_wiki(self, system_wiki: SystemWikiRef) -> dict[str, Any]:
@@ -742,7 +749,7 @@ BUILTIN_WORKFLOWS = (
             "Save to My system to prepare weekly batches. Does not write articles or publish."
         ),
         executor=content_plan.KEY,
-        version_label="0.5.0",
+        version_label="0.6.0",
         prerequisites=(
             WorkflowPrerequisite(
                 kind="run",
@@ -779,7 +786,7 @@ BUILTIN_WORKFLOWS = (
             "No audit or GitHub required; does not create a calendar, write articles, or publish."
         ),
         executor=KEYWORD_KEY,
-        version_label="0.4.0",
+        version_label="0.5.0",
         system=ORGANIC_TRAFFIC_SYSTEM,
         schedule_modes=("on_demand",),
         model_route=ModelRoute(
@@ -852,7 +859,7 @@ BUILTIN_WORKFLOWS = (
                 },
                 "use_search_console": {
                     "type": "boolean",
-                    "default": False,
+                    "default": True,
                     "title": "Use matching Search Console data",
                     "description": (
                         "Optional enrichment from this project's connected property, "
@@ -886,7 +893,7 @@ BUILTIN_WORKFLOWS = (
             "Get a report, actionable findings, and supporting evidence. No GitHub required."
         ),
         executor=AUDIT_KEY,
-        version_label="0.4.3",
+        version_label="0.5.0",
         model_route=ModelRoute(
             key="organic.audit.visibility.v1",
             provider=ProviderName.OPENAI,
@@ -941,7 +948,7 @@ BUILTIN_WORKFLOWS = (
         title="Garden project memory",
         description="Consolidate durable project outputs into the project wiki.",
         executor=PROJECT_MEMORY_WORKFLOW_NAME,
-        version_label="1.0.0",
+        version_label="1.1.0",
     ),
     BuiltinWorkflow(
         id=SCAN_REPORT_WORKFLOW_ID,
@@ -952,7 +959,7 @@ BUILTIN_WORKFLOWS = (
             "SCAN.md."
         ),
         executor=SCAN_REPORT_WORKFLOW_NAME,
-        version_label="1.1.0",
+        version_label="1.2.0",
         prerequisites=(
             WorkflowPrerequisite(
                 kind="artifact",
@@ -1067,7 +1074,7 @@ BUILTIN_WORKFLOWS = (
             "buyer questions, then publish AI_VISIBILITY.md."
         ),
         executor=VISIBILITY_AUDIT_WORKFLOW_NAME,
-        version_label="1.1.0",
+        version_label="1.2.0",
         system=ORGANIC_TRAFFIC_SYSTEM,
         input_schema={
             "type": "object",
@@ -1099,7 +1106,7 @@ BUILTIN_WORKFLOWS = (
             "findings; not for general advice or internal business questions."
         ),
         executor=ANSWER_PAGE_WORKFLOW_NAME,
-        version_label="1.1.0",
+        version_label="1.2.0",
         prerequisites=(
             WorkflowPrerequisite(
                 kind="run",
@@ -1120,7 +1127,7 @@ BUILTIN_WORKFLOWS = (
             "from this project's durable week of activity."
         ),
         executor=WEEKLY_BRIEF_WORKFLOW_NAME,
-        version_label="1.0.0",
+        version_label="1.1.0",
         presentation=WorkflowDiagram(
             nodes=(
                 DiagramNode("collect", "step", "collect the week", "runs · files · activity"),
@@ -1205,7 +1212,7 @@ BUILTIN_WORKFLOWS = (
             "source-backed evidence."
         ),
         executor=CODEX_PROCEDURE_EXECUTOR,
-        version_label="1.0.0",
+        version_label="1.1.0",
         input_schema={
             "type": "object",
             "additionalProperties": False,
@@ -1268,7 +1275,7 @@ BUILTIN_WORKFLOWS = (
             "public article."
         ),
         executor=CODEX_PROCEDURE_EXECUTOR,
-        version_label="1.4.0",
+        version_label="1.4.1",
         system=ORGANIC_TRAFFIC_SYSTEM,
         prerequisites=(
             WorkflowPrerequisite(
@@ -1953,14 +1960,15 @@ BUILTIN_WORKFLOWS = (
         key=CREATIVE_CHARACTER_WORKFLOW_NAME,
         title="Design a brand character",
         description=(
-            "Design a cute, on-brand vector mascot for the product as an animatable SVG "
+            "Use when the founder has an explicit brand-design need. "
+            "Design a vector mascot as an animatable SVG "
             "character in project Files (three mouth shapes, a blink, and a payoff "
             "expression), ready to narrate demo videos and appear in marketing. Tin reads the "
             "product page and project memory itself and asks one model for the drawing; about "
             "two minutes, no sandbox."
         ),
         executor=CREATIVE_CHARACTER_WORKFLOW_NAME,
-        version_label="1.1.0",
+        version_label="1.2.0",
         prerequisites=(
             WorkflowPrerequisite(
                 kind="artifact",

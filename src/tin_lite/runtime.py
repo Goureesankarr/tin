@@ -221,7 +221,11 @@ async def build_runtime(settings: Settings) -> RuntimeServices:
         temporal=temporal,
     )
     organic = OrganicAuditActivities(
-        database=database, storage=storage, settings=settings, responses=responses
+        database=database,
+        storage=storage,
+        settings=settings,
+        responses=responses,
+        integrations=integrations,
     )
     keywords = KeywordPlanActivities(
         database=database,

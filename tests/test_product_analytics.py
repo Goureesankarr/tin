@@ -540,3 +540,23 @@ def test_configured_dimensions_have_the_same_safe_labels_as_discovery(value):
         a["validate_dimensions"](
             [{"kind": "categories", "value": value, "volume": 2}], plan("website")
         )
+
+
+def test_host_scope_is_bound_and_applies_to_inventory_and_traffic():
+    a = analytics()
+    c, w, binding = a["settings"](
+        {
+            "posthog_project_id": "123",
+            "as_of_utc": "2026-09-22",
+            "website_hosts": ["example.com", "www.example.com"],
+        }
+    )
+    _, _, unscoped = a["settings"]({"posthog_project_id": "123", "as_of_utc": "2026-09-22"})
+    assert binding != unscoped
+    request = a["request"](c, "inventory", {"exclusions": []}, w)
+    sql = request["body"]["query"]["query"]
+    assert "event!='$pageview' OR" in sql and "'www.example.com'" in sql
+    assert "$host" in sql
+    for bad in [["example.com/path"], ["example.com", "example.com"], ["x'); DROP TABLE events"]]:
+        with pytest.raises(ValueError):
+            a["settings"]({"posthog_project_id": "123", "website_hosts": bad})

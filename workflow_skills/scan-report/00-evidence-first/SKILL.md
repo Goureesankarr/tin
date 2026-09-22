@@ -12,3 +12,7 @@ metrics, incidents, integrations, or completed work.
 Return only Markdown beginning with `# <project name> scan`. Separate observed facts, material
 risks or unknowns, and the smallest useful next actions. End with `## Sources` and include every
 supplied source reference exactly as provided.
+
+Check the supplied integration inventory first. Use relevant recent reports when available;
+connected access alone does not establish outcomes. Tie the scan to the founder goal and
+prioritize what the evidence changes. Keep routine access details out of the opening.

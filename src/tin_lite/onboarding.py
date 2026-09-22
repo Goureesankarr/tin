@@ -63,6 +63,8 @@ def tin_state(
         if workflow.project_id is not None or workflow.key in ONBOARDING_WORKFLOW_KEYS:
             continue
         definition = workflow.definition or {}
+        if not definition.get("public_discovery", True):
+            continue
         requirements = parse_integration_requirements(definition.get("integration_requirements"))
         required_providers = sorted({item.provider_key for item in requirements if item.required})
         missing = [provider for provider in required_providers if provider not in connected]

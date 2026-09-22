@@ -112,6 +112,28 @@ An unsupported product capability still does not justify an article; narrow or e
 """
 
 
+V4_POLICY, V4_INSTRUCTIONS = POLICY, INSTRUCTIONS
+POLICY = {**V4_POLICY, "version": "content-editorial-v5", "expanded_page_text_bytes": 6000}
+INSTRUCTIONS += """
+Strategy owns product positioning. State the priority buyer, their decision, credible alternatives,
+the product advantage that matters to that buyer, the proof supporting it and the choice the
+content should help them make. Price is one possible advantage; do not assume it is always the
+right one. Tie each brief to that argument while respecting the reader's actual question.
+Use founder goals and the latest relevant analytics evidence when supplied. State the date,
+source and unit of observations. Connected integrations without results are available evidence
+sources, not proof that a trend exists. Do not turn acquisition volume into activation evidence.
+A successful empty keyword lookup suggests low/unproven traffic potential. Missing measurement
+from failed/skipped access does not. Neither licenses invented volume. Prioritize measured
+opportunities while retaining clearly justified small niches.
+Compare inspected page content before proposing work. If a short excerpt cannot establish a
+gap, put the specific deeper inspection in verification and do not claim confirmed absence.
+For each brief, include a compact argument outline: reader question, answer, supporting proof,
+main objection and useful next step. Exclude irrelevant legal/security tangents.
+If useful distinct ideas run out, return fewer items and specify which broader buyer jobs the
+existing keyword workflow should research next. Do not schedule cosmetic variations to fill slots.
+"""
+
+
 def contract(definition):
     """Never reinterpret a saved v1 program or accept an edited execution policy."""
     current = SimpleNamespace(
@@ -129,7 +151,13 @@ def contract(definition):
         MODEL_SCHEMA=MODEL_SCHEMA,
         ROUTE_KEY=ROUTE_KEY,
     )
-    for module in (legacy, v2, v3, current):
+    v4 = SimpleNamespace(
+        POLICY=V4_POLICY,
+        INSTRUCTIONS=V4_INSTRUCTIONS,
+        MODEL_SCHEMA=MODEL_SCHEMA,
+        ROUTE_KEY=ROUTE_KEY,
+    )
+    for module in (legacy, v2, v3, v4, current):
         if (
             definition.get("key") == legacy.KEY
             and definition.get("executor") == legacy.KEY
@@ -214,11 +242,13 @@ class PageText(HTMLParser):
                 self.size += len(self.parts[-1])
 
 
-def page_evidence(observation, requested_url):
+def page_evidence(observation, requested_url, *, text_limit=2200):
+    if text_limit not in {2200, 6000}:
+        raise ValueError("Unsupported page evidence bound")
     parser = PageText()
     parser.feed(observation["html"])
     full = " ".join(parser.parts)
-    text = full.encode()[: POLICY["page_text_bytes"]].decode("utf-8", errors="ignore")
+    text = full.encode()[:text_limit].decode("utf-8", errors="ignore")
     return {
         "requested_url": requested_url,
         "url": observation["url"],
@@ -274,6 +304,7 @@ def model_context(context, pages, *, readable_aliases=False):
             item["source_ids"] = [reverse[s] for s in item["source_ids"] if s in reverse]
     data = {
         "research": compact(research),
+        **({"integrations": context["integrations"]} if "integrations" in context else {}),
         "sources": compact(sources),
         "pages": {
             "pages": [
@@ -305,7 +336,8 @@ def model_context(context, pages, *, readable_aliases=False):
         ]
         return len(canonical_json(data)) <= POLICY["max_input_bytes"]
 
-    low, high = POLICY["min_page_text_bytes"], POLICY["page_text_bytes"]
+    low = POLICY["min_page_text_bytes"]
+    high = context.get("page_text_limit", POLICY["page_text_bytes"])
     if not excerpt(low):
         raise ValueError(
             "Planning sources exceed the bounded model input. Use smaller context files."

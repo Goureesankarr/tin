@@ -160,6 +160,8 @@ async def test_all_55_www_html_pages_survive_and_duplicate_poll_does_not_recolle
         "provider_html_pages": 55,
         "retained_html_pages": 55,
         "excluded_html_pages": 0,
+        "provider_resources": 55,
+        "retained_resources": 55,
     }
     assert provider.pages.await_count == 1
     assert not normalize_pages(
@@ -274,7 +276,9 @@ async def test_www_findings_remain_usable_by_technical_fix_without_cross_site_au
     fixture = source_fixture(policy=AUDIT_POLICY["version"])
     fixture.evidence["scope"].update(scope())
     fixture.evidence["crawl"]["pages"][0]["url"] = "https://www.example.com/"
-    findings, coverage = technical_findings(fixture.evidence["crawl"]["pages"], "example.com")
+    findings, coverage = technical_findings(
+        fixture.evidence["crawl"]["pages"], "example.com", policy_version=AUDIT_POLICY["version"]
+    )
     fixture.inventory.update(findings=findings, check_coverage=coverage)
     fixture.seal()
     inspected = await fixture.service.inspect(

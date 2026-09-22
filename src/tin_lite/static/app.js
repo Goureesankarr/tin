@@ -195,6 +195,7 @@ const state = {
   signedInName: null,
   signedInUserId: null,
   workflows: [],
+  runWorkflows: new Map(),
   projectWorkflows: [],
   systemSummary: null,
   runs: [],
@@ -1068,7 +1069,22 @@ function waitingLabel(value) {
 }
 
 function workflowForRun(run) {
-  return state.workflows.find((workflow) => workflow.id === run.workflow_id) || null;
+  return state.workflows.find((workflow) => workflow.id === run.workflow_id)
+    || state.runWorkflows.get(run.workflow_id) || null;
+}
+
+async function loadRunWorkflows(runs) {
+  // Discovery can hide a template without removing existing runs' identity or controls.
+  const context = currentProjectContext();
+  const ids = [...new Set(runs.filter(run => !workflowForRun(run)).map(run => run.workflow_id))];
+  const workflows = await Promise.all(ids.map(id =>
+    api(`/api/workflows/${encodeURIComponent(id)}`).catch(() => null)
+  ));
+  if (!isCurrentProjectContext(context)) return false;
+  for (const workflow of workflows) {
+    if (workflow) state.runWorkflows.set(workflow.id, workflow);
+  }
+  return workflows.some(Boolean);
 }
 
 function isMarkdownPath(path) {
@@ -5967,7 +5983,9 @@ async function pollRuns() {
       api(`/api/projects/${encodeURIComponent(projectId)}/decisions`),
     ]);
     if (generation !== state.projectGeneration || state.project?.id !== projectId) return;
-    const collectionsChanged = runsHaveChanged(state.runs, results)
+    const workflowsChanged = await loadRunWorkflows(results);
+    if (generation !== state.projectGeneration || state.project?.id !== projectId) return;
+    const collectionsChanged = workflowsChanged || runsHaveChanged(state.runs, results)
       || JSON.stringify(state.decisions) !== JSON.stringify(decisions);
     state.decisions = decisions;
     state.runs = results;
@@ -6069,6 +6087,7 @@ function resetProjectState(project) {
   state.project = project;
   state.projectAccess = "loading";
   state.workflows = [];
+  state.runWorkflows = new Map();
   state.projectWorkflows = [];
   state.systemSummary = null;
   state.runs = [];
@@ -6169,6 +6188,8 @@ async function loadProject(project, { announce = false, integrationReturn = null
     state.decisions = decisions;
     state.messages = messages.map(chatTurnFromMessage);
     state.integrations = integrations;
+    await loadRunWorkflows(runs);
+    if (generation !== state.projectGeneration || state.project?.id !== project.id) return false;
     state.activityHasMore = activity.length === 100;
     state.projectAccess = BROWSER_LOCK_ENABLED && !projectWorkflows.length ? "locked" : "ready";
     // A callback may arrive in a new tab or from the legacy origin. Let this project
