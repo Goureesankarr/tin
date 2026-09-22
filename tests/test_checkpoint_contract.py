@@ -621,6 +621,16 @@ async def test_builtin_sync_keeps_the_immutable_definition_commit(monkeypatch) -
     assert "not for general advice" in answer_page["description"]
 
 
+def test_builtin_ids_never_reuse_a_retired_number() -> None:
+    from tin_lite.catalog import RETIRED_BUILTIN_WORKFLOW_IDS
+
+    used = {item.id: item.key for item in BUILTIN_WORKFLOWS}
+    assert not set(used) & set(RETIRED_BUILTIN_WORKFLOW_IDS), (
+        "a deployed database still holds the retired row; pick a fresh number"
+    )
+    assert len(used) == len(BUILTIN_WORKFLOWS)
+
+
 def test_registry_system_assignments_are_manifest_metadata_only() -> None:
     definitions = {item.key: item.definition for item in BUILTIN_WORKFLOWS}
 

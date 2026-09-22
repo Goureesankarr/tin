@@ -142,7 +142,16 @@ GROWTH_ONBOARDING_WORKFLOW_ID = UUID("00000000-0000-4000-8000-000000000035")
 ORGANIC_AUDIT_WORKFLOW_ID = UUID("00000000-0000-4000-8000-000000000020")
 CREATIVE_CHARACTER_WORKFLOW_ID = UUID("00000000-0000-4000-8000-000000000029")
 CREATIVE_PRODUCT_DEMO_WORKFLOW_ID = UUID("00000000-0000-4000-8000-000000000022")
-PAID_ADS_ASSESSMENT_WORKFLOW_ID = UUID("00000000-0000-4000-8000-000000000018")
+PAID_ADS_ASSESSMENT_WORKFLOW_ID = UUID("00000000-0000-4000-8000-000000000037")
+# Numbers below were used by built-ins that later left the catalog. Their rows still exist in
+# deployed databases, and the boot-time sync refuses to bind a number to a different key, so a
+# new built-in must take a fresh number above the highest ever used, never fill a gap.
+RETIRED_BUILTIN_WORKFLOW_IDS = {
+    UUID("00000000-0000-4000-8000-000000000018"): "strategy.prescribe",
+    UUID("00000000-0000-4000-8000-000000000019"): "strategy.wildcards",
+    UUID("00000000-0000-4000-8000-000000000021"): "creative.character_agent",
+    UUID("00000000-0000-4000-8000-000000000026"): "creative.character_direct",
+}
 
 
 @dataclass(frozen=True)
