@@ -56,9 +56,9 @@ NATIVE_EXECUTORS = {
     "organic.audit",
     "organic.keyword_plan",
     "growth.onboarding_plan",
-    "growth.paid_ads_assessment",
-    "growth.paid_ads_launch",
-    "growth.paid_ads_monitor",
+    "ads.assessment",
+    "ads.launch",
+    "ads.monitor",
 }
 PARENT_EXECUTORS = {"organic.traffic_system", "growth.onboarding"}
 
@@ -105,15 +105,15 @@ def service_terms(definition, *, inputs=None):
     elif executor == "growth.onboarding_plan":
         # About twenty-five bounded model steps; each reserves its conservative ceiling first.
         maximum = 8 * NANOS_PER_DOLLAR
-    elif executor == "growth.paid_ads_assessment":
+    elif executor == "ads.assessment":
         # The founder's ceiling bounds model steps and provider research together.
         maximum = amount_nanos(inputs.get("max_cost_usd", 6))
         kinds = ["native_model", "tool"]
-    elif executor == "growth.paid_ads_launch":
+    elif executor == "ads.launch":
         # Model steps only; the Google Ads API reports no cost and is receipted at zero.
         maximum = amount_nanos(inputs.get("max_cost_usd", 4))
         kinds = ["native_model", "tool"]
-    elif executor == "growth.paid_ads_monitor":
+    elif executor == "ads.monitor":
         maximum = amount_nanos(inputs.get("max_cost_usd", 2))
         kinds = ["native_model", "tool"]
     if type(maximum) is not int or maximum <= 0:

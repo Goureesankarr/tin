@@ -159,7 +159,7 @@ def _executor_reason(executor: str, settings: Any) -> str | None:
         return organic_system_gate(settings)
     if executor == PAID_ADS_KEY:
         return paid_ads_gate(settings)
-    if executor in {"growth.paid_ads_launch", "growth.paid_ads_monitor"}:
+    if executor in {"ads.launch", "ads.monitor"}:
         return google_ads_gate(settings)
     return None
 
