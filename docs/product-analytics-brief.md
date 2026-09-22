@@ -15,7 +15,10 @@ The key stays in Tin's gateway, never in workflow files, inputs or the sandbox.
 
 Save the workflow with the PostHog project number, reporting window and any known
 funnel or exclusions. Leave the funnel empty to have the procedure propose one
-from available event evidence and project context. The report states what it chose
+from available event evidence and project context. Discovery reads up to 200 event types
+ranked by recent volume and discloses the total catalog size. Selected metrics query their
+complete event/window populations; events outside the discovery list are not assumed absent.
+The report states what it chose
 and why; edit the saved inputs to correct it. Missing semantics are a limitation,
 not permission to invent an activation event or treat an identifier as a human.
 
@@ -27,7 +30,9 @@ This package does not add email or Slack delivery.
 Use a separate saved brief for a separate PostHog project. Website visitors and
 product accounts are different populations; this workflow does not join them.
 A project without pageviews can still produce a useful product brief, with traffic
-explicitly unavailable.
+explicitly unavailable. When pageviews exist, the procedure checks PostHog's documented web
+properties through the same bounded queries. A missing session key on a server-side product
+event can prevent a same-session funnel without preventing independent website traffic analysis.
 
 ## What is checked
 

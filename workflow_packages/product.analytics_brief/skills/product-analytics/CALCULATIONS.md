@@ -238,10 +238,11 @@ def bucket(expr, values):
 
 
 def inventory(p, w):
-    # Historical coverage is deliberately bounded to 90 days, not lifetime reliability.
+    # Discovery is bounded; the catalog size does not limit exact selected-event queries.
     a, b, c = w
     hist = c - dt.timedelta(days=90)
-    return f"SELECT event,count() AS observed,countIf(timestamp>={timestamp(a)} AND timestamp<{timestamp(b)}) AS prior,countIf(timestamp>={timestamp(b)}) AS current,min(timestamp) AS first_seen,max(timestamp) AS last_seen FROM events WHERE {where(p, hist, c)} GROUP BY event ORDER BY event LIMIT 201"
+    grouped = f"SELECT event,count() AS observed,countIf(timestamp>={timestamp(a)} AND timestamp<{timestamp(b)}) AS prior,countIf(timestamp>={timestamp(b)}) AS current,min(timestamp) AS first_seen,max(timestamp) AS last_seen FROM events WHERE {where(p, hist, c)} GROUP BY event"
+    return f"SELECT *,count() OVER () AS total_event_types FROM ({grouped}) ORDER BY current+prior DESC,observed DESC,event LIMIT 200"
 
 
 def coverage(p, w):
@@ -738,7 +739,24 @@ def observed_time(value):
     return t.astimezone(dt.timezone.utc)
 
 
+def inventory_scope(rows):
+    if not rows:
+        return {"returned_event_types": 0, "total_event_types": 0, "complete": True}
+    totals = {count(r["total_event_types"]) for r in rows}
+    if len(totals) != 1:
+        raise ValueError("inconsistent inventory total")
+    total = totals.pop()
+    if len(rows) != min(total, 200):
+        raise ValueError("incomplete inventory response")
+    return {
+        "returned_event_types": len(rows),
+        "total_event_types": total,
+        "complete": len(rows) == total,
+    }
+
+
 def validate_inventory(rows, w):
+    inventory_scope(rows)
     a, b, c = w
     lo = c - dt.timedelta(days=90)
     seen = {}
@@ -758,11 +776,16 @@ def validate_inventory(rows, w):
 
 def reconcile_coverage(cov, inventory_rows, p, w):
     inventory_map = validate_inventory(inventory_rows, w)
+    complete = inventory_scope(inventory_rows)["complete"]
     a, b, c = w
     for period, lo, hi in (("prior", a, b), ("current", b, c)):
         for ev in event_list(p):
             r = cov.get((period, ev), {})
-            if r.get("raw", 0) != inventory_map.get(ev, {}).get(period, 0):
+            # Omission from bounded discovery is not evidence of zero events. Coverage,
+            # trends and funnel queries still scan the full selected event/window.
+            if (ev in inventory_map or complete) and r.get("raw", 0) != inventory_map.get(
+                ev, {}
+            ).get(period, 0):
                 raise ValueError("inventory/coverage mismatch")
             if r:
                 first, last = observed_time(r["first_seen"]), observed_time(r["last_seen"])
@@ -890,7 +913,15 @@ def median_pairs(n):
 
 def query_columns(step, p):
     if step == "inventory":
-        return ["event", "observed", "prior", "current", "first_seen", "last_seen"], 201
+        return [
+            "event",
+            "observed",
+            "prior",
+            "current",
+            "first_seen",
+            "last_seen",
+            "total_event_types",
+        ], 201
     if step == "coverage":
         _, keys = coverage(p, settings({"posthog_project_id": "1", "as_of_utc": "2026-01-01"})[1])
         return [

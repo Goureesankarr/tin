@@ -4,7 +4,7 @@
     "key": "product.analytics_brief",
     "title": "Product analytics brief",
     "description": "A recurring PostHog brief: ordered activation, event trends, traffic, error signals and a supported breakdown, with reproducible evidence.",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "executor": "codex.procedure",
     "schedule_modes": [
       "on_demand",

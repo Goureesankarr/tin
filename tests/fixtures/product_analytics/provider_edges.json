@@ -1,5 +1,5 @@
 {
-  "provenance": "Fabricated inline event CTEs executed through PostHog HogQL on 2026-09-21; no customer data.",
+  "provenance": "Fabricated inline event CTEs executed through PostHog HogQL on 2026-09-21 and 2026-09-22; no customer data.",
   "cases": {
     "six": {
       "plan": {
@@ -329,7 +329,7 @@
       "empty": false,
       "responses": {
         "inventory": {
-          "query_sha256": "c3b7c25937f19f3048ed9b96393da0daecdecc09110456ecf409a4658bfcb0fe",
+          "query_sha256": "d855155bb2d99cce24587c6c18206291b6a9d0b8d6044e923130c30cec3599d0",
           "data": {
             "columns": [
               "event",
@@ -337,7 +337,8 @@
               "prior",
               "current",
               "first_seen",
-              "last_seen"
+              "last_seen",
+              "total_event_types"
             ],
             "results": [
               [
@@ -346,7 +347,8 @@
                 0,
                 4,
                 "2026-01-05T00:00:01Z",
-                "2026-01-05T00:00:01Z"
+                "2026-01-05T00:00:01Z",
+                1
               ]
             ],
             "hasMore": null,

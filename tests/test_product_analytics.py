@@ -421,6 +421,76 @@ def test_provider_fixtures_reconcile_exact_generated_queries(name):
         }
 
 
+def discovery_rows(total=205):
+    return [
+        {
+            "event": f"unrelated_{i}",
+            "observed": 10,
+            "prior": 0,
+            "current": 10,
+            "first_seen": "2026-01-05T00:00:00Z",
+            "last_seen": "2026-01-05T00:00:01Z",
+            "total_event_types": total,
+        }
+        for i in range(min(total, 200))
+    ]
+
+
+def test_large_catalog_does_not_turn_undiscovered_events_into_zero_counts():
+    a, p = analytics(), plan("accounts")
+    inventory = discovery_rows()
+    a["validate_inventory"](inventory, windows())
+    assert a["inventory_scope"](inventory) == {
+        "returned_event_types": 200,
+        "total_event_types": 205,
+        "complete": False,
+    }
+    data = fixture("provider_results")["cases"]["accounts"]["coverage"]["data"]
+    rows = a["table"](data, *a["query_columns"]("coverage", p))
+    _, keys = a["coverage"](p, windows())
+    cov = a["validate_coverage"](rows, a["event_list"](p), windows(), keys)
+    assert a["reconcile_coverage"](cov, inventory, p, windows()) == cov
+    # A reported selected-event count still has to match the independent coverage query.
+    inventory[0]["event"] = p["steps"][0]
+    with pytest.raises(ValueError, match="inventory/coverage mismatch"):
+        a["reconcile_coverage"](cov, inventory, p, windows())
+    # Complete discovery can establish absence, so the same nonzero coverage is inconsistent.
+    with pytest.raises(ValueError, match="inventory/coverage mismatch"):
+        a["reconcile_coverage"](cov, discovery_rows(200), p, windows())
+
+
+@pytest.mark.parametrize(
+    "change", ["missing_row", "inconsistent_total", "boolean_total", "extra_row"]
+)
+def test_discovery_rejects_unexpected_truncation_and_invalid_catalog_counts(change):
+    a, rows = analytics(), discovery_rows()
+    if change == "missing_row":
+        rows.pop()
+    elif change == "inconsistent_total":
+        rows[0]["total_event_types"] += 1
+    elif change == "boolean_total":
+        rows[0]["total_event_types"] = True
+    else:
+        rows.append({**rows[-1], "event": "extra"})
+    with pytest.raises(ValueError):
+        a["validate_inventory"](rows, windows())
+
+
+def test_empty_discovery_is_complete_and_small_discovery_stays_exact():
+    a = analytics()
+    assert a["inventory_scope"]([]) == {
+        "returned_event_types": 0,
+        "total_event_types": 0,
+        "complete": True,
+    }
+    rows = discovery_rows(3)
+    a["validate_inventory"](rows, windows())
+    assert a["inventory_scope"](rows)["complete"] is True
+    rows.pop()
+    with pytest.raises(ValueError):
+        a["validate_inventory"](rows, windows())
+
+
 @pytest.mark.parametrize("name", ["six", "empty", "exclusions", "mixed"])
 def test_provider_boundary_fixtures(name):
     import hashlib

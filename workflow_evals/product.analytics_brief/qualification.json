@@ -2,7 +2,7 @@
   "version": 1,
   "assumptions": [
     "Fixtures and response replays are synthetic; live runs need separately authorized project connections and a named payer.",
-    "One provider project, 1..31 complete UTC days plus equal prior window and a bounded 90-day history. At most 200 event types, 2..6 ordered steps, 4 key events, 2 error events and one named dimension.",
+    "One provider project, 1..31 complete UTC days plus equal prior window and a bounded 90-day history. Discovery returns up to 200 event types with total catalog size; metrics use complete selected-event queries. At most 200 discovered event types, 2..6 ordered steps, 4 key events, 2 error events and one named dimension.",
     "Run success establishes artifact delivery. Ordinary cases also require a complete useful report and independent numerical/rubric review."
   ],
   "cost_drivers": [
@@ -43,6 +43,42 @@
           "/start",
           "Fisher",
           "Holm"
+        ],
+        "excludes": [
+          "Status: incomplete",
+          "Recommendations",
+          "qualified: true"
+        ]
+      }
+    },
+    {
+      "id": "large_catalog",
+      "description": "ordinary_web plus 201 independent one-row noise event types in the comparison window (205 total). Discovery returns 200 ranked types, while the selected website funnel remains 6/3/2/2. Report the catalog scope and exact selected-event metrics; no whole-project absence claims.",
+      "inputs": {
+        "posthog_project_id": "101",
+        "reporting_days": 7,
+        "as_of_utc": "2026-01-12",
+        "event_mapping": "Browser identities use distinct_id; sessions use $session_id. Visited the site=$pageview, Started signup=signup_started, Completed signup=signup_completed, Exported once=first_export. Website properties: $pathname, $referring_domain and $device_type. These are synthetic documented events.",
+        "exclusions": ""
+      },
+      "expected_status": "succeeded",
+      "expect": {
+        "contains": [
+          "Status: complete",
+          "## Activation funnel",
+          "## Key-event trends",
+          "## Traffic sources and landing paths",
+          "## Meaningful error signals",
+          "## Named categorical breakdown",
+          "$pageview",
+          "signup_completed",
+          "first_export",
+          "Desktop",
+          "/start",
+          "Fisher",
+          "Holm",
+          "205",
+          "inventory_scope"
         ],
         "excludes": [
           "Status: incomplete",
