@@ -145,9 +145,9 @@ GROWTH_ONBOARDING_WORKFLOW_ID = UUID("00000000-0000-4000-8000-000000000035")
 ORGANIC_AUDIT_WORKFLOW_ID = UUID("00000000-0000-4000-8000-000000000020")
 CREATIVE_CHARACTER_WORKFLOW_ID = UUID("00000000-0000-4000-8000-000000000029")
 CREATIVE_PRODUCT_DEMO_WORKFLOW_ID = UUID("00000000-0000-4000-8000-000000000022")
-PAID_ADS_ASSESSMENT_WORKFLOW_ID = UUID("00000000-0000-4000-8000-000000000037")
-PAID_ADS_LAUNCH_WORKFLOW_ID = UUID("00000000-0000-4000-8000-000000000038")
-PAID_ADS_MONITOR_WORKFLOW_ID = UUID("00000000-0000-4000-8000-000000000039")
+PAID_ADS_ASSESSMENT_WORKFLOW_ID = UUID("00000000-0000-4000-8000-000000000040")
+PAID_ADS_LAUNCH_WORKFLOW_ID = UUID("00000000-0000-4000-8000-000000000041")
+PAID_ADS_MONITOR_WORKFLOW_ID = UUID("00000000-0000-4000-8000-000000000042")
 # Numbers below were used by built-ins that later left the catalog. Their rows still exist in
 # deployed databases, and the boot-time sync refuses to bind a number to a different key, so a
 # new built-in must take a fresh number above the highest ever used, never fill a gap.
@@ -156,6 +156,11 @@ RETIRED_BUILTIN_WORKFLOW_IDS = {
     UUID("00000000-0000-4000-8000-000000000019"): "strategy.wildcards",
     UUID("00000000-0000-4000-8000-000000000021"): "creative.character_agent",
     UUID("00000000-0000-4000-8000-000000000026"): "creative.character_direct",
+    # The paid ads keys moved from growth.paid_ads_* to ads.* on 2026-09-22; the published
+    # rows keep their numbers, so the ads.* built-ins took fresh ones.
+    UUID("00000000-0000-4000-8000-000000000037"): "growth.paid_ads_assessment",
+    UUID("00000000-0000-4000-8000-000000000038"): "growth.paid_ads_launch",
+    UUID("00000000-0000-4000-8000-000000000039"): "growth.paid_ads_monitor",
 }
 
 
@@ -2229,12 +2234,10 @@ BUILTIN_WORKFLOWS = (
     BuiltinWorkflow(
         id=PAID_ADS_LAUNCH_WORKFLOW_ID,
         key=paid_ads_launch.KEY,
-        title="Launch a Google Ads campaign (human review)",
+        title="Launch a Google Ads campaign",
         description=(
             "Turn an assessment's campaign shape into one live Google Search campaign in your "
-            "own Ads account: exact and phrase keywords, written ads, sitelinks, a shared "
-            "negative list, presence-only targeting and a click ceiling. Blocks until a "
-            "conversion is being measured, and creates nothing until you approve the exact plan."
+            "own Ads account. Creates nothing until you approve the exact plan."
         ),
         # An LLM flow with one approval: code decides the structure, budget and bids; model
         # steps write the ads and the founder brief; the founder approves before any write.
@@ -2269,7 +2272,7 @@ BUILTIN_WORKFLOWS = (
         description=(
             "Read the launched campaign, add negatives from wasted search terms, pause "
             "disapproved ads and wasteful keywords on its own, and propose budget or bidding "
-            "changes for your approval. Quiet for the first three days; never blocks."
+            "changes for your approval."
         ),
         executor=paid_ads_monitor.KEY,
         version_label="0.1.0",

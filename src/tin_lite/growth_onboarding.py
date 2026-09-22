@@ -484,17 +484,17 @@ WORKFLOW_EXPECTATIONS: dict[str, dict[str, str]] = {
         "lands": "Files, the keyword inventory",
         "watch": "the content plan uses it within days",
     },
-    "growth.paid_ads_assessment": {
+    "ads.assessment": {
         "first": "about fifteen minutes",
         "lands": "Files, reports/paid-ads/<run>/ASSESSMENT.md",
         "watch": "the verdict and the fix-before-spend list; nothing is spent on ads",
     },
-    "growth.paid_ads_launch": {
+    "ads.launch": {
         "first": "about ten minutes, then your approval",
         "lands": "Files, ads/google/<run>/PLAN.md and after approval RESULT.md",
         "watch": "the plan before approving; the campaign goes live in your Ads account",
     },
-    "growth.paid_ads_monitor": {
+    "ads.monitor": {
         "first": "a few minutes on each scheduled day once a campaign is live",
         "lands": "Files, ads/google/<launch>/monitor/<run>.md",
         "watch": "proposals that need your approval; automatic changes are listed each day",

@@ -30,8 +30,8 @@ HOUSEKEEPING = {
     "content.design_md",
     # The paid ads assessment is a founder decision aid, never a scheduled system; the
     # launch is a one-off gated by approval. The monitor may be scheduled once a campaign is live.
-    "growth.paid_ads_assessment",
-    "growth.paid_ads_launch",
+    "ads.assessment",
+    "ads.launch",
 }
 HARD_NO_SYSTEMS = {
     "no_paid_ads": ["paid-search", "paid-social"],
@@ -40,9 +40,9 @@ HARD_NO_SYSTEMS = {
 HARD_NO_WORKFLOWS = {
     "no_cold_email": ["outreach.email_shortlist", "outreach.email_campaign"],
     "no_paid_ads": [
-        "growth.paid_ads_assessment",
-        "growth.paid_ads_launch",
-        "growth.paid_ads_monitor",
+        "ads.assessment",
+        "ads.launch",
+        "ads.monitor",
     ],
 }
 HARD_NO_WORDS = {

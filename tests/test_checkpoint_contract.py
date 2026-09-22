@@ -532,9 +532,9 @@ def test_workflow_registry_is_explicit_and_narrow() -> None:
         "visibility.audit": VisibilityAuditWorkflow,
         "organic.audit": OrganicAuditWorkflow,
         "organic.keyword_plan": KeywordPlanWorkflow,
-        "growth.paid_ads_assessment": PaidAdsAssessmentWorkflow,
-        "growth.paid_ads_launch": PaidAdsLaunchWorkflow,
-        "growth.paid_ads_monitor": PaidAdsMonitorWorkflow,
+        "ads.assessment": PaidAdsAssessmentWorkflow,
+        "ads.launch": PaidAdsLaunchWorkflow,
+        "ads.monitor": PaidAdsMonitorWorkflow,
         "content.answer_page": AnswerPageWorkflow,
         "creative.character": CharacterDesignWorkflow,
         CODEX_PROCEDURE_EXECUTOR: CodexProcedureWorkflow,
@@ -654,8 +654,8 @@ def test_registry_system_assignments_are_manifest_metadata_only() -> None:
     assert "system" not in definitions["research.deep_dive"]
     assert definitions["content.public_article"]["system"] == ORGANIC_TRAFFIC_SYSTEM
     assert definitions["style.capture"]["system"] == ORGANIC_TRAFFIC_SYSTEM
-    assert definitions["growth.paid_ads_assessment"]["system"] == "paid-ads"
-    assert "agent_only" not in definitions["growth.paid_ads_assessment"]
+    assert definitions["ads.assessment"]["system"] == "paid-ads"
+    assert "agent_only" not in definitions["ads.assessment"]
 
     migration = (Path(__file__).parents[1] / "migrations" / "017_workflow_systems.sql").read_text()
     assert "CREATE TABLE workflow_systems" in migration

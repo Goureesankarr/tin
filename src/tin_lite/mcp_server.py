@@ -199,14 +199,14 @@ def _run_allowed_actions(run: Any) -> list[str]:
         "organic.keyword_plan",
         "content.plan",
         "organic.traffic_system",
-        "growth.paid_ads_assessment",
-        "growth.paid_ads_monitor",
+        "ads.assessment",
+        "ads.monitor",
     } and run.status in {
         RunStatus.PENDING,
         RunStatus.RUNNING,
     }:
         return ["cancel"]
-    if run.workflow_name == "growth.paid_ads_launch" and run.status in {
+    if run.workflow_name == "ads.launch" and run.status in {
         RunStatus.PENDING,
         RunStatus.RUNNING,
         RunStatus.NEEDS_INPUT,

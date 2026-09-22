@@ -19,10 +19,10 @@ hosted-default policy does so. Neither enables live Stripe charging.
 - Native model workflows: `content.plan`, `style.capture`, `creative.character`,
   `content.answer_page`, `project.memory`, `project.weekly_brief`, `scan.report`,
   `visibility.audit`, `organic.audit`, `organic.keyword_plan` and
-  `growth.paid_ads_assessment` (its ceiling is the run's `max_cost_usd` input, default $6,
+  `ads.assessment` (its ceiling is the run's `max_cost_usd` input, default $6,
   operator-gated at $3; DataForSEO calls carry their provider-reported cost and the
-  operator-run gak Keyword Planner service reports $0), `growth.paid_ads_launch` (ceiling
-  `max_cost_usd`, default $4) and `growth.paid_ads_monitor` (default $2); both are model steps
+  operator-run gak Keyword Planner service reports $0), `ads.launch` (ceiling
+  `max_cost_usd`, default $4) and `ads.monitor` (default $2); both are model steps
   only, since the Google Ads API reports no cost and its calls are receipted at $0.
 - OpenAI Responses search and DataForSEO crawl/keyword task costs, using trusted
   supplier responses, including usage recorded before content validation fails.

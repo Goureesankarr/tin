@@ -65,7 +65,7 @@ async def test_native_paid_ads_retry_stop_and_identifier_only_history(stop):
             handle = await env.client.start_workflow(
                 PaidAdsAssessmentWorkflow.run,
                 run_id,
-                id=f"growth.paid_ads_assessment:{run_id}",
+                id=f"ads.assessment:{run_id}",
                 task_queue="paid-ads-local-test",
             )
             if stop:

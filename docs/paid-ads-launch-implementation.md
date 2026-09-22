@@ -1,7 +1,7 @@
 # Google Ads launch and monitor
 
-`growth.paid_ads_launch` turns a successful paid ads assessment into one live Google Search
-campaign in the founder's own Google Ads account, and `growth.paid_ads_monitor` keeps that
+`ads.launch` turns a successful paid ads assessment into one live Google Search
+campaign in the founder's own Google Ads account, and `ads.monitor` keeps that
 campaign healthy. Both are native LLM flows: code owns the sequence, the structure, the
 budget, the bids, every rule and every write; bounded model steps write the ads, classify
 search terms and explain the day. Nothing reaches Google Ads before the founder approves the
@@ -74,7 +74,7 @@ and `campaign.json` (what the monitor consumes) publish under `ads/google/{run}/
 
 ## The monitor
 
-`growth.paid_ads_monitor` runs on demand, daily or weekly against a launch whose campaign row is
+`ads.monitor` runs on demand, daily or weekly against a launch whose campaign row is
 `live`. It reads the campaign over seven, fourteen and thirty days, the search terms, keywords
 with quality scores, ad policy status, assets, conversion actions and recommendation
 subscriptions, each a zero-cost receipt. `paid_ads_monitor.decide()` is deterministic:

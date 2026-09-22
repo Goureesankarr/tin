@@ -84,7 +84,7 @@ async def test_launch_waits_for_approval_retries_publish_and_fences_on_stop(scen
             handle = await env.client.start_workflow(
                 PaidAdsLaunchWorkflow.run,
                 run_id,
-                id=f"growth.paid_ads_launch:{run_id}",
+                id=f"ads.launch:{run_id}",
                 task_queue="paid-ads-launch-local-test",
             )
             if scenario == "stop":

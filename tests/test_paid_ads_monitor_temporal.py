@@ -71,7 +71,7 @@ async def test_native_paid_ads_monitor_retry_stop_and_identifier_only_history(st
             handle = await env.client.start_workflow(
                 PaidAdsMonitorWorkflow.run,
                 run_id,
-                id=f"growth.paid_ads_monitor:{run_id}",
+                id=f"ads.monitor:{run_id}",
                 task_queue="paid-ads-monitor-local-test",
             )
             if stop:

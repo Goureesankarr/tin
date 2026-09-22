@@ -196,7 +196,7 @@ def test_tin_state_orders_by_system_then_key_and_skips_private_workflows() -> No
             Workflow(
                 **{
                     **item.__dict__,
-                    "system_order": {"organic-traffic": 1, "cold-outreach": 2}.get(
+                    "system_order": {"organic-traffic": 1, "cold-outreach": 2, "paid-ads": 3}.get(
                         item.definition.get("system")
                     ),
                 }
@@ -212,7 +212,7 @@ def test_tin_state_orders_by_system_then_key_and_skips_private_workflows() -> No
     assert keys[:first_unassigned] == sorted(
         keys[:first_unassigned],
         key=lambda key: (
-            {"organic-traffic": 1, "cold-outreach": 2}[_rows(state)[key]["system"]],
+            {"organic-traffic": 1, "cold-outreach": 2, "paid-ads": 3}[_rows(state)[key]["system"]],
             key,
         ),
     )

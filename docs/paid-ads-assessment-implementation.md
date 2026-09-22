@@ -1,6 +1,6 @@
 # Paid ads assessment
 
-`growth.paid_ads_assessment` tells a founder whether Google Search ads fit their business before
+`ads.assessment` tells a founder whether Google Search ads fit their business before
 any ad account is connected. It is a native LLM flow: code owns the sequence, the economics, the
 scoring, the verdict and the saved files; five bounded model steps read evidence, label keywords,
 diagnose past campaigns and shape a first campaign around the decision. It is advisory. Nothing

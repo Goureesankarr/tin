@@ -4351,7 +4351,7 @@ class Database:
             run_id=run_id,
             project_id=project_id,
             actor=actor,
-            workflow_key="growth.paid_ads_monitor",
+            workflow_key="ads.monitor",
         )
 
     async def create_paid_ads_campaign(
@@ -4499,7 +4499,7 @@ class Database:
                     artifact_path = $4, result_summary = $5, error_message = NULL,
                     finished_at = COALESCE(finished_at, now()), progress_percent = 100,
                     progress_updated_at = now(), heartbeat_at = now()
-                WHERE id = $1 AND executor = 'growth.paid_ads_launch'
+                WHERE id = $1 AND executor = 'ads.launch'
                   AND (NOT review_required OR review_decision = 'approved')
                   AND status NOT IN ('failed', 'stopped', 'superseded')
                 RETURNING id
@@ -4556,7 +4556,7 @@ class Database:
                     artifact_ref = COALESCE($5, artifact_ref),
                     finished_at = COALESCE(finished_at, now()),
                     progress_updated_at = now(), heartbeat_at = now()
-                WHERE id = $1 AND executor = 'growth.paid_ads_launch'
+                WHERE id = $1 AND executor = 'ads.launch'
                   AND status NOT IN ('succeeded', 'stopped', 'superseded', 'failed')
                 RETURNING *
                 """,
@@ -4605,7 +4605,7 @@ class Database:
                 if (
                     row is None
                     or row["project_id"] != project_id
-                    or row["executor"] != "growth.paid_ads_launch"
+                    or row["executor"] != "ads.launch"
                 ):
                     raise LookupError("run not found")
                 if row["status"] == "stopped":
@@ -4964,7 +4964,7 @@ class Database:
             run_id=run_id,
             project_id=project_id,
             actor=actor,
-            workflow_key="growth.paid_ads_assessment",
+            workflow_key="ads.assessment",
         )
 
     async def _stop_paid_report(
@@ -4979,12 +4979,12 @@ class Database:
             "content.plan": ("content", "content_plan_stopped", "content plan"),
             "organic.audit": ("organic", "organic_audit_stopped", "audit"),
             "organic.keyword_plan": ("keyword", "keyword_plan_stopped", "keyword plan"),
-            "growth.paid_ads_assessment": (
+            "ads.assessment": (
                 "paid_ads",
                 "paid_ads_assessment_stopped",
                 "paid ads assessment",
             ),
-            "growth.paid_ads_monitor": (
+            "ads.monitor": (
                 "paid_ads_monitor",
                 "paid_ads_monitor_stopped",
                 "Google Ads check",
@@ -6149,11 +6149,11 @@ class Database:
             "content.plan": ("content_plan_ready", "Content plan is ready."),
             "organic.audit": ("organic_audit_ready", "Organic visibility audit is ready."),
             "organic.keyword_plan": ("keyword_plan_ready", "Keyword opportunity plan is ready."),
-            "growth.paid_ads_assessment": (
+            "ads.assessment": (
                 "paid_ads_assessment_ready",
                 "The paid ads assessment is ready.",
             ),
-            "growth.paid_ads_monitor": (
+            "ads.monitor": (
                 "paid_ads_monitor_ready",
                 "Today's Google Ads check is done.",
             ),
