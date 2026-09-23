@@ -65,10 +65,11 @@ npm ci --ignore-scripts --no-audit --no-fund
 uv run ruff format --check .
 uv run ruff check .
 uv run lint-imports
-uv run pytest
+uv run pytest -n auto
 ```
 
-Database-backed tests need a disposable PostgreSQL 17 database configured through
+`-n auto` spreads the suite across CPU cores with pytest-xdist, as CI does; plain
+`uv run pytest` runs it serially. Database-backed tests need a disposable PostgreSQL 17 database configured through
 `TIN_LITE_TEST_DATABASE_DSN`. Use a local test database and test-only credentials, never
 a hosted customer or production database. Tests create isolated schemas; without the test
 DSN, database-dependent tests skip. Report skips rather than calling that a complete test run.
@@ -84,7 +85,8 @@ npm run test:workflow-review-browser
 Changes to generated diagram or comparison assets also need `npm run check:diagrams` or
 `npm run check:comparison`. Commit the corresponding generated assets when their sources
 change. CI runs the broader browser and backend suites; start locally with tests focused on
-your change.
+your change. `npm run test:browser` runs the whole browser suite CI runs in one concurrent
+pass. CI skips it for pull requests that change only `workflow_packages/`.
 
 Ordinary tests use fixtures and mocked provider responses. Live provider, E2B and integration
 acceptance tests are separate opt-in checks: inspect their prerequisites, use authorized test

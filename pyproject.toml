@@ -33,6 +33,7 @@ dev = [
   "import-linter>=2.3,<3",
   "pytest>=8.4,<9",
   "pytest-asyncio>=1.1,<2",
+  "pytest-xdist>=3.6,<4",
   "ruff>=0.12,<1",
 ]
 
