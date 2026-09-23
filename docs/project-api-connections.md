@@ -95,8 +95,10 @@ public DNS addresses before attaching credentials, preserves the host resolver's
 preference, verifies TLS for the approved hostname,
 ignores proxy environment variables, refuses compressed responses and bounds returned JSON.
 Credential echoes are withheld. Non-redirect HTTP responses return `{status, data}` so code
-can validate business results. Invalid, oversized, unavailable or ambiguous results stop the
-attempt and do not silently repeat the external request.
+can validate business results. Invalid, unavailable or ambiguous results stop the attempt and
+do not silently repeat the external request. An oversized response is different: it arrived,
+so it is settled as a named `max_response_bytes` error for that step, counted against the
+allowance, and later steps can still call the service.
 
 GET requires `http.read`. POST/PUT/PATCH/DELETE require `http.write` **and** that exact method
 on the connection. Where supported, configuring `Idempotency-Key` or `X-Idempotency-Key`
@@ -107,6 +109,27 @@ Up to four service bindings and eight total calls share the existing 60-second c
 Requests are at most 16 KB; each response is bounded to 1–64 KB. Sandboxes remain networkless
 and credential-free. Only the trusted activity invokes the gateway through the existing
 protected E2B controller channel and checks the run, membership, lease and fencing tuple.
+
+### Response size and Search Console rows
+
+`max_response_bytes` is measured on the serialized JSON the step receives, and it is what
+bounds result size in practice. A Search Console row costs roughly 110–250 bytes depending on
+its dimensions, so a 64000-byte binding holds about 250–550 rows, far fewer than the provider's
+25000-row maximum. `search_analytics.read` accepts:
+
+- `start_date`, `end_date` (YYYY-MM-DD, at most 366 days apart), `dimensions` (up to three of
+  `date`, `query`, `page`, `country`, `device`, `searchAppearance`) and `row_limit` (1–25000).
+- `start_row` (0–100000) to read a later page.
+- `dimension_filters`: up to five `{"dimension", "operator", "expression"}` items, combined
+  with AND. Dimensions are the list above except `date`; operators are `equals`, `notEquals`,
+  `contains`, `notContains`, `includingRegex` and `excludingRegex`; expressions are 1–4096
+  characters.
+
+Tin gives the adapter the binding's bound. It never asks Google for more rows than could fit,
+and keeps Google's leading rows (highest clicks first) that do. When rows were left out, or may
+exist beyond the page, the response adds `"truncated": true` and `"next_start_row"`; pass that
+value as `start_row` in a new step to continue. Filters are usually the better way to get the
+rows that matter within the eight-call allowance.
 
 ## Codex procedures
 

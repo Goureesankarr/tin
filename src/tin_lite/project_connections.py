@@ -19,6 +19,7 @@ from tin_lite.integrations import (
     IntegrationDefinition,
     IntegrationError,
     IntegrationNotConfiguredError,
+    ServiceResponseTooLarge,
 )
 from tin_lite.usage_capture import borrowed_connection
 
@@ -417,7 +418,7 @@ async def request_api(
             async for chunk in response.aiter_raw():
                 raw.extend(chunk)
                 if len(raw) > maximum:
-                    raise IntegrationError("API response exceeds its declared bound.")
+                    raise ServiceResponseTooLarge("API response exceeds its declared bound.")
             try:
                 value = json.loads(raw)
                 safe = json.dumps(value, ensure_ascii=False, allow_nan=False)

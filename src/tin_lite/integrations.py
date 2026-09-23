@@ -102,6 +102,15 @@ WORKSPACE_DEFAULT_CAPABILITIES = (
 GITHUB_OPEN_PULL_REQUEST_LIMIT = 20
 GITHUB_OPEN_PULL_REQUEST_FILE_LIMIT = 100
 GITHUB_OPEN_PULL_REQUEST_EVIDENCE_MAX_BYTES = 250_000
+GSC_FILTER_DIMENSIONS = frozenset({"query", "page", "country", "device", "searchAppearance"})
+GSC_FILTER_OPERATORS = frozenset(
+    {"equals", "notEquals", "contains", "notContains", "includingRegex", "excludingRegex"}
+)
+GSC_MAX_FILTERS = 5
+GSC_MAX_START_ROW = 100_000
+# Serialized size (json.dumps defaults, as service bounds measure) of the smallest row Search
+# Console can return. A response within a byte bound has at most bound // this many rows.
+GSC_MIN_ROW_BYTES = 70
 
 
 class IntegrationError(RuntimeError):
@@ -118,6 +127,10 @@ class IntegrationAuthorizationError(IntegrationError):
 
 class IntegrationUpstreamError(IntegrationError):
     pass
+
+
+class ServiceResponseTooLarge(IntegrationError):
+    """A received response exceeded its declared byte bound; the outcome is known, not uncertain."""
 
 
 class GitHubInstallationRequiredError(IntegrationAuthorizationError):
@@ -2214,9 +2227,12 @@ class IntegrationService:
         end_date: str,
         dimensions: tuple[str, ...] = ("date",),
         row_limit: int = 1000,
+        start_row: int = 0,
+        dimension_filters: list[dict[str, Any]] | tuple[dict[str, Any], ...] | None = None,
         execution_key: str | None = None,
         run_id: UUID | None = None,
         expected_site_url: str | None = None,
+        max_response_bytes: int | None = None,
     ) -> dict[str, Any]:
         connection = await self._connection(project_id, GSC_PROVIDER)
         selected_site = connection.configuration.get("selected_site_url")
@@ -2238,14 +2254,27 @@ class IntegrationService:
             or any(item not in allowed_dimensions for item in dimensions)
         ):
             raise IntegrationError("Search Console dimensions are unsupported")
-        if not 1 <= row_limit <= 25_000:
+        if type(row_limit) is not int or not 1 <= row_limit <= 25_000:
             raise IntegrationError("Search Console row limit must be between 1 and 25000")
-        request_body = {
+        if type(start_row) is not int or not 0 <= start_row <= GSC_MAX_START_ROW:
+            raise IntegrationError(
+                f"Search Console start row must be between 0 and {GSC_MAX_START_ROW}"
+            )
+        filters = _search_console_filters(dimension_filters)
+        sent_limit = row_limit
+        if max_response_bytes is not None:
+            # Lossless: a response that fits the bound cannot hold more rows than this.
+            sent_limit = max(1, min(row_limit, max_response_bytes // GSC_MIN_ROW_BYTES))
+        request_body: dict[str, Any] = {
             "startDate": start_date,
             "endDate": end_date,
             "dimensions": list(dimensions),
-            "rowLimit": row_limit,
+            "rowLimit": sent_limit,
         }
+        if start_row:
+            request_body["startRow"] = start_row
+        if filters:
+            request_body["dimensionFilterGroups"] = [{"groupType": "and", "filters": filters}]
         fingerprint = _sha256(_canonical_json({"site": selected_site, **request_body}))
         receipt_key = execution_key or f"integration:{uuid4()}"
         access_token = await self._google_access_token(connection)
@@ -2273,6 +2302,20 @@ class IntegrationService:
             )
             raise
         rows = payload.get("rows", [])
+        truncated = False
+        if max_response_bytes is not None:
+            payload = _fit_search_console_rows(
+                payload,
+                max_response_bytes=max_response_bytes,
+                start_row=start_row,
+                clamped=sent_limit < row_limit,
+                sent_limit=sent_limit,
+            )
+            truncated = bool(payload.get("truncated"))
+        summary: dict[str, Any] = {"row_count": len(rows) if isinstance(rows, list) else 0}
+        if truncated:
+            summary["returned_row_count"] = len(payload["rows"])
+            summary["truncated"] = True
         await self._database.record_integration_call(
             execution_key=receipt_key,
             project_id=project_id,
@@ -2282,9 +2325,11 @@ class IntegrationService:
             capability="search_analytics.read",
             request_fingerprint=fingerprint,
             status="completed",
-            response_summary={"row_count": len(rows) if isinstance(rows, list) else 0},
+            response_summary=summary,
             provider_request_id=response.headers.get("x-guploader-uploadid"),
         )
+        if max_response_bytes is not None and not payload.get("rows") and rows:
+            raise ServiceResponseTooLarge("A single Search Console row exceeds the response bound.")
         return payload
 
     async def github_create_pull_request(
@@ -4211,6 +4256,68 @@ def _installation_id(connection: IntegrationConnection) -> int:
 def _selected_string(connection: IntegrationConnection, key: str) -> str | None:
     value = connection.configuration.get(key)
     return value if isinstance(value, str) and value else None
+
+
+def _search_console_filters(value: Any) -> list[dict[str, str]]:
+    if value is None:
+        return []
+    if not isinstance(value, (list, tuple)) or len(value) > GSC_MAX_FILTERS:
+        raise IntegrationError(f"Search Console accepts at most {GSC_MAX_FILTERS} filters")
+    filters = []
+    for item in value:
+        if (
+            not isinstance(item, dict)
+            or set(item) != {"dimension", "operator", "expression"}
+            or item["dimension"] not in GSC_FILTER_DIMENSIONS
+            or item["operator"] not in GSC_FILTER_OPERATORS
+            or not isinstance(item["expression"], str)
+            or not 1 <= len(item["expression"]) <= 4096
+        ):
+            raise IntegrationError("Search Console filters are unsupported")
+        filters.append(
+            {
+                "dimension": item["dimension"],
+                "operator": item["operator"],
+                "expression": item["expression"],
+            }
+        )
+    return filters
+
+
+def _json_size(value: Any) -> int:
+    return len(json.dumps(value, ensure_ascii=False, allow_nan=False).encode())
+
+
+def _fit_search_console_rows(
+    payload: dict[str, Any],
+    *,
+    max_response_bytes: int,
+    start_row: int,
+    clamped: bool,
+    sent_limit: int,
+) -> dict[str, Any]:
+    """Keep Google's leading rows that fit the bound and say where the next page starts."""
+    rows = payload.get("rows", [])
+    if not isinstance(rows, list):
+        raise IntegrationError("Search Console returned an unexpected response")
+    more = clamped and len(rows) >= sent_limit
+    if not more and _json_size(payload) <= max_response_bytes:
+        return payload
+    # Budget the envelope with the widest metadata it can carry, then add rows in order.
+    envelope = {
+        **{k: v for k, v in payload.items() if k != "rows"},
+        "rows": [],
+        "truncated": True,
+        "next_start_row": start_row + len(rows),
+    }
+    used = _json_size(envelope)
+    kept = 0
+    for index, row in enumerate(rows):
+        used += _json_size(row) + (2 if index else 0)  # ", " between rows
+        if used > max_response_bytes:
+            break
+        kept += 1
+    return {**envelope, "rows": rows[:kept], "next_start_row": start_row + kept}
 
 
 def _sha256(value: str) -> str:

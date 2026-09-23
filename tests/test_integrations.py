@@ -33,6 +33,7 @@ from tin_lite.integrations import (
     ADS_PROVIDER,
     GITHUB_PROVIDER,
     GOOGLE_WORKSPACE_PROVIDER,
+    GSC_MIN_ROW_BYTES,
     GSC_PROVIDER,
     CredentialCipher,
     GitHubFileChange,
@@ -47,6 +48,7 @@ from tin_lite.integrations import (
     IntegrationRequirement,
     IntegrationService,
     IntegrationUpstreamError,
+    ServiceResponseTooLarge,
     load_pinned_integration_requirements,
     parse_integration_requirements,
     registered_integrations,
@@ -405,6 +407,145 @@ async def test_required_capability_preflight_is_project_scoped_and_selection_awa
         )
     finally:
         await service.close()
+
+
+@asynccontextmanager
+async def search_console(rows: list[dict]):
+    """A GSC read against a fixed property, recording each body sent to Google."""
+    sent: list[dict] = []
+
+    async def provider(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content)
+        sent.append(body)
+        start = body.get("startRow", 0)
+        return httpx.Response(
+            200,
+            json={
+                "rows": rows[start : start + body["rowLimit"]],
+                "responseAggregationType": "byProperty",
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(provider)) as client:
+        service = IntegrationService(
+            database=FakeIntegrationDatabase(),  # type: ignore[arg-type]
+            settings=settings(),  # type: ignore[arg-type]
+            client=client,
+        )
+        connection = SimpleNamespace(
+            id=uuid4(), configuration={"selected_site_url": "sc-domain:example.com"}
+        )
+
+        async def found(*_args):
+            return connection
+
+        async def token(_connection):
+            return "short-access"
+
+        service._connection = found  # type: ignore[method-assign]
+        service._google_access_token = token  # type: ignore[method-assign]
+
+        async def read(**kwargs):
+            return await service.search_console_analytics(
+                project_id=PROJECT_ID, start_date="2026-08-01", end_date="2026-08-31", **kwargs
+            )
+
+        yield read, sent
+
+
+def gsc_rows(count: int) -> list[dict]:
+    return [
+        {
+            "keys": [f"query number {i}", f"https://example.com/blog/post-{i}"],
+            "clicks": count - i,
+            "impressions": 1000 + i,
+            "ctr": 0.0123,
+            "position": 4.56,
+        }
+        for i in range(count)
+    ]
+
+
+def test_search_console_min_row_bytes_is_the_smallest_possible_row() -> None:
+    smallest = {"keys": [""], "clicks": 0, "impressions": 0, "ctr": 0, "position": 0}
+    assert len(json.dumps(smallest, ensure_ascii=False).encode()) == GSC_MIN_ROW_BYTES
+
+
+@pytest.mark.asyncio
+async def test_search_console_sends_paging_and_filters_and_validates_them() -> None:
+    filters = [
+        {"dimension": "page", "operator": "contains", "expression": "/blog/"},
+        {"dimension": "country", "operator": "equals", "expression": "usa"},
+    ]
+    async with search_console(gsc_rows(3)) as (read, sent):
+        await read(
+            dimensions=("query", "page"), row_limit=50, start_row=2, dimension_filters=filters
+        )
+        assert sent[-1] == {
+            "startDate": "2026-08-01",
+            "endDate": "2026-08-31",
+            "dimensions": ["query", "page"],
+            "rowLimit": 50,
+            "startRow": 2,
+            "dimensionFilterGroups": [{"groupType": "and", "filters": filters}],
+        }
+        # Without a bound the response is exactly Google's, as native workflows expect.
+        assert await read(row_limit=2) == {
+            "rows": gsc_rows(3)[:2],
+            "responseAggregationType": "byProperty",
+        }
+        invalid = [
+            {"start_row": -1},
+            {"start_row": 100_001},
+            {"dimension_filters": [{**filters[0], "dimension": "date"}]},
+            {"dimension_filters": [{**filters[0], "operator": "like"}]},
+            {"dimension_filters": [{**filters[0], "expression": ""}]},
+            {"dimension_filters": [{**filters[0], "expression": "x" * 4097}]},
+            {"dimension_filters": [{**filters[0], "extra": 1}]},
+            {"dimension_filters": filters * 3},
+        ]
+        for arguments in invalid:
+            with pytest.raises(IntegrationError):
+                await read(**arguments)
+        assert len(sent) == 2
+
+
+@pytest.mark.asyncio
+async def test_search_console_bound_clamps_trims_and_points_to_the_next_page() -> None:
+    rows = gsc_rows(2000)
+    async with search_console(rows) as (read, sent):
+        small = await read(row_limit=3, max_response_bytes=64_000)
+        assert small == {"rows": rows[:3], "responseAggregationType": "byProperty"}
+
+        page = await read(dimensions=("query", "page"), row_limit=25_000, max_response_bytes=64_000)
+        assert sent[-1]["rowLimit"] == 64_000 // GSC_MIN_ROW_BYTES
+        assert len(json.dumps(page, ensure_ascii=False).encode()) <= 64_000
+        assert page["truncated"] is True
+        assert page["rows"] == rows[: len(page["rows"])]
+        assert 200 < len(page["rows"]) < sent[-1]["rowLimit"]
+        assert page["next_start_row"] == len(page["rows"])
+
+        following = await read(
+            dimensions=("query", "page"),
+            row_limit=25_000,
+            start_row=page["next_start_row"],
+            max_response_bytes=64_000,
+        )
+        assert following["rows"][0] == rows[page["next_start_row"]]
+        assert following["next_start_row"] == page["next_start_row"] + len(following["rows"])
+
+        # A clamped limit that Google fills may hide more rows, even when every row fit.
+        tiny = [{"keys": ["a"], "clicks": 1, "impressions": 1, "ctr": 1, "position": 1}] * 40
+    async with search_console(tiny) as (read, sent):
+        filled = await read(row_limit=1000, max_response_bytes=1024)
+        assert sent[-1]["rowLimit"] == 1024 // GSC_MIN_ROW_BYTES
+        assert filled["truncated"] is True
+        assert filled["next_start_row"] == len(filled["rows"])
+
+    huge = [{"keys": ["x" * 2000], "clicks": 1, "impressions": 1, "ctr": 1, "position": 1}]
+    async with search_console(huge) as (read, _):
+        with pytest.raises(ServiceResponseTooLarge):
+            await read(row_limit=10, max_response_bytes=1024)
 
 
 def test_credential_cipher_is_context_bound_and_never_embeds_plaintext() -> None:

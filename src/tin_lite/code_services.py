@@ -9,7 +9,11 @@ from datetime import UTC, datetime
 import httpx
 
 from tin_lite.billing_contracts import digest
-from tin_lite.integrations import IntegrationError, IntegrationRequirement
+from tin_lite.integrations import (
+    IntegrationError,
+    IntegrationRequirement,
+    ServiceResponseTooLarge,
+)
 from tin_lite.project_connections import CUSTOM_KEY, READ_METHODS, request_api, request_contract
 
 OPERATION = "code_service_call_v1"
@@ -18,7 +22,9 @@ OPERATIONS = {
     ("analytics.gsc", "sites.list"): ("sites.list", frozenset()),
     ("analytics.gsc", "search_analytics.read"): (
         "search_analytics.read",
-        frozenset({"start_date", "end_date", "dimensions", "row_limit"}),
+        frozenset(
+            {"start_date", "end_date", "dimensions", "row_limit", "start_row", "dimension_filters"}
+        ),
     ),
     ("infra.github", "repositories.list"): ("repositories.list", frozenset()),
     ("workspace.google", "gmail.messages.search"): (
@@ -35,6 +41,15 @@ OPERATIONS = {
 
 class CodeServiceError(ValueError):
     """Fixed safe errors; never supplier exceptions, bodies, URLs or authentication."""
+
+
+def _too_large(service):
+    # The bound is the author's own declared value; naming it lets them size the next request.
+    return CodeServiceError(
+        f"The service response exceeded this binding's max_response_bytes "
+        f"({service.max_response_bytes}); request less data, for example a smaller "
+        "row_limit or the next start_row page."
+    )
 
 
 class CodeServices:
@@ -134,6 +149,8 @@ class CodeServices:
                 if record.get("fingerprint") != fingerprint:
                     raise CodeServiceError("This service step already has a different request.")
                 if saved.status == "completed":
+                    if record.get("error") == "response_too_large":
+                        raise _too_large(service)
                     return record["response"]
                 raise CodeServiceError(
                     "A service request has an unconfirmed result; "
@@ -206,14 +223,33 @@ class CodeServices:
                         )
                         if custom
                         else await self.adapter(
-                            service.provider_key, payload["operation"], args, run, connection, key
+                            service.provider_key,
+                            payload["operation"],
+                            args,
+                            run,
+                            connection,
+                            key,
+                            max_response_bytes=service.max_response_bytes,
                         )
                     )
                 if (
                     len(json.dumps(response, ensure_ascii=False, allow_nan=False).encode())
                     > service.max_response_bytes
                 ):
-                    raise ValueError("oversized response")
+                    raise ServiceResponseTooLarge("oversized response")
+            except ServiceResponseTooLarge:
+                # A response arrived and was refused by size: a known outcome, not an uncertain
+                # one. Settle both receipts so later steps are not blocked; the call still counts.
+                async with conn.transaction():
+                    await self.db.complete_effect(
+                        conn, execution_key=key, result={**record, "error": "response_too_large"}
+                    )
+                    await self.db.complete_effect(
+                        conn,
+                        execution_key=usage_key,
+                        result={**usage, "outcome": "response_received", "usage": {"requests": 1}},
+                    )
+                raise _too_large(service) from None
             except (
                 IntegrationError,
                 httpx.HTTPError,
@@ -269,7 +305,7 @@ class CodeServices:
                     )
             return response
 
-    async def adapter(self, provider, operation, args, run, connection, key):
+    async def adapter(self, provider, operation, args, run, connection, key, *, max_response_bytes):
         service = self.integrations
         if operation == "sites.list":
             return {
@@ -287,6 +323,7 @@ class CodeServices:
                 run_id=run.id,
                 execution_key=key,
                 expected_site_url=connection.configuration.get("selected_site_url"),
+                max_response_bytes=max_response_bytes,
                 **args,
             )
         common = {

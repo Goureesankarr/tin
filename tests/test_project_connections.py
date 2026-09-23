@@ -423,6 +423,139 @@ async def test_uncertain_service_blocks_repurchase_even_with_new_step(billed, mo
     await service.close()
 
 
+async def test_oversized_service_response_is_named_settled_and_does_not_block_later_steps(
+    billed, monkeypatch
+):
+    f = billed
+    service, _, code, run_id = await prepared(f, monkeypatch)
+    calls = []
+
+    def wire(request):
+        calls.append(request)
+        if len(calls) == 1:
+            body = json.dumps({"accounts": [{"id": f"company-{i}"} for i in range(1000)]})
+            return httpx.Response(200, stream=httpx.ByteStream(body.encode()))
+        return httpx.Response(200, stream=httpx.ByteStream(b'{"accounts":[]}'))
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(wire)) as client:
+        code.services.client, code.services.resolver = client, public_dns
+        with pytest.raises(Exception, match=r"max_response_bytes \(8000\)"):
+            await ActivityEnvironment().run(code.execute, run_id)
+        run, workflow, _, spec, _ = await code.selected(run_id)
+        async with f.db.pool.acquire() as conn:
+            # The same step replays its settled outcome without another provider call.
+            with pytest.raises(CodeServiceError, match=r"max_response_bytes \(8000\)"):
+                await code.services.call(
+                    conn=conn, run=run, workflow=workflow, spec=spec, payload=payload()
+                )
+            assert len(calls) == 1
+            # A later step is not wedged behind it, and the refused call still counts.
+            result = await code.services.call(
+                conn=conn, run=run, workflow=workflow, spec=spec, payload=payload(step="smaller")
+            )
+            assert result == {"status": 200, "data": {"accounts": []}}
+            with pytest.raises(CodeServiceError, match="limit"):
+                await code.services.call(
+                    conn=conn, run=run, workflow=workflow, spec=spec, payload=payload(step="third")
+                )
+        assert len(calls) == 2
+        rows = await f.db.pool.fetch(
+            """SELECT operation, status, result FROM effect_receipts
+               WHERE operation IN ('code_service_call_v1', 'external_usage_v1')
+               ORDER BY created_at"""
+        )
+        assert all(row["status"] == "completed" for row in rows)
+        refused = json.loads(rows[0]["result"])
+        assert refused["error"] == "response_too_large" and "response" not in refused
+        usage = await read_run_usage(database=f.db, run=await f.db.get_run(UUID(run_id)))
+        external = [o for o in usage["own"]["observations"] if o["kind"] == "connected_api"]
+        assert [o["outcome"] for o in external] == ["response_received", "response_received"]
+    await service.close()
+
+
+async def test_search_console_service_forwards_paging_filters_and_bound(billed, monkeypatch):
+    from dataclasses import replace
+
+    f = billed
+    service, _, code, run_id = await prepared(f, monkeypatch)
+    service._settings.google_oauth_client_id = "test-client"
+    service._settings.google_oauth_client_secret = SecretStr("fixture-google-client")
+    await f.db.upsert_integration_connection(
+        project_id=f.project.id,
+        provider_key="analytics.gsc",
+        external_account_id="fixture-google-user",
+        external_account_label="fixture",
+        configuration={"selected_site_url": "https://fixture.example"},
+        credential_ciphertext=None,
+        credential_key_version=None,
+        connected_by_clerk_user_id=ACTOR,
+    )
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(
+            lambda request: httpx.Response(200, stream=httpx.ByteStream(b'{"accounts":[]}'))
+        )
+    ) as client:
+        code.services.client, code.services.resolver = client, public_dns
+        with pytest.raises(RuntimeError, match="worker loss"):
+            await ActivityEnvironment().run(code.execute, run_id)
+    run, workflow, _, _, _ = await code.selected(run_id)
+    body = definition()
+    body["code"]["services"] = {
+        "gsc": {"provider_key": "analytics.gsc", "max_calls": 2, "max_response_bytes": 16000}
+    }
+    body["integration_requirements"] = [
+        {
+            "provider_key": "analytics.gsc",
+            "capabilities": ["search_analytics.read"],
+            "required": True,
+        }
+    ]
+    seen = []
+
+    async def analytics(**kwargs):
+        seen.append(kwargs)
+        return {"rows": [], "truncated": True, "next_start_row": 200}
+
+    monkeypatch.setattr(service, "search_console_analytics", analytics)
+    filters = [{"dimension": "page", "operator": "contains", "expression": "/blog/"}]
+    arguments = {
+        "start_date": "2026-08-01",
+        "end_date": "2026-08-31",
+        "dimensions": ["query", "page"],
+        "row_limit": 500,
+        "start_row": 200,
+        "dimension_filters": filters,
+    }
+    selected = {
+        "service": "gsc",
+        "step": "queries",
+        "operation": "search_analytics.read",
+        "arguments": arguments,
+    }
+    changed = replace(workflow, definition=body)
+    spec = validate_code_definition(body)
+    async with f.db.pool.acquire() as conn:
+        result = await code.services.call(
+            conn=conn, run=run, workflow=changed, spec=spec, payload=selected
+        )
+        assert result["next_start_row"] == 200
+        assert seen[0]["max_response_bytes"] == 16000
+        assert seen[0]["start_row"] == 200 and seen[0]["dimension_filters"] == filters
+        with pytest.raises(CodeServiceError, match="declared contract"):
+            await code.services.call(
+                conn=conn,
+                run=run,
+                workflow=changed,
+                spec=spec,
+                payload={
+                    **selected,
+                    "step": "extra",
+                    "arguments": {**arguments, "aggregation_type": "byPage"},
+                },
+            )
+    await service.close()
+
+
 async def test_write_only_api_never_echoes_values_in_validation_or_metadata(billed):
     f = billed
     service = await integrations(f)
