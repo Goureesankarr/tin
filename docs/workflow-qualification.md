@@ -12,8 +12,8 @@ files; adopt the checks when adding or revising a package.
 
 1. Call `get_workflow_authoring_guide(project_id)`. Its `creator_files` are the Tin-owned
    `custom.workflow_create` package. Commit them to the project through the existing file
-   service, validate, and explicitly activate that revision once. The private-workflow
-   allowlist and protected Codex runtime are required, as for other private procedures.
+   service, validate, and explicitly activate that revision once. Private execution and the
+   protected Codex runtime are required, as for other private procedures.
 2. Start the creator through the normal workflow start tool or app form. Supply `brief`,
    `workflow_key`, optional `scope` (`private` or `public`) and `constraints`. Ordinary billing
    applies to the creator itself. It chooses deterministic Python, managed-model Python or

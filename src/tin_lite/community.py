@@ -10,6 +10,8 @@ Nothing here activates a workflow, registers one in the catalog, or reaches a da
 
 from __future__ import annotations
 
+import json
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from types import SimpleNamespace
@@ -216,15 +218,75 @@ async def validate_files(files: dict[str, bytes], *, definition_path: str):
     return source.definition, fingerprint
 
 
+class PrivateCopyError(ValueError):
+    """The public package is valid, but its custom.* copy would not activate privately."""
+
+
+def private_key(key: str) -> str:
+    """Name the custom.* copy a contributor activates in their own project."""
+    return "custom." + re.sub(r"[^a-z0-9_]", "_", key.split(".", 1)[-1].lower())
+
+
+async def validate_private_copy(package: ContributedPackage, *, root: Path | None = None) -> None:
+    """Raise ValueError when the package's custom.* copy would not activate privately.
+
+    Mirrors private activation without a database: the package is re-rooted in memory under
+    its custom.* key, then checked by the private policy and the pinned loader. Prerequisite
+    workflow keys are only resolvable against a project, so activation still checks those.
+    """
+    from tin_lite.private_workflows import validate_private_definition
+
+    root = root or REPOSITORY_ROOT
+    storage = CheckoutStorage(root)
+    source = decode_workflow_source(
+        storage._read(package.definition_path), definition_path=package.definition_path
+    )
+    key = private_key(package.key)
+    prefix = f"{PACKAGE_DIRECTORY}/{package.key}/"
+    definition_path = f"{PACKAGE_DIRECTORY}/{key}/{MANIFEST_NAME}"
+    manifest = json.loads(storage._read(package.definition_path))
+    manifest["definition"]["key"] = key
+    files = {definition_path: json.dumps(manifest).encode()}
+    for path in source.resource_paths.values():
+        files[f"{PACKAGE_DIRECTORY}/{key}/{path.removeprefix(prefix)}"] = storage._read(path)
+    private = decode_workflow_source(files[definition_path], definition_path=definition_path)
+    validate_private_definition(private.definition)
+
+    async def read(*, path, **_):
+        return files[path]
+
+    executor = private.definition["executor"]
+    loader = load_code_package if executor == "workflow.code" else load_pinned_codex_procedure
+    await loader(
+        storage=SimpleNamespace(read_workflow_resource=read),
+        repo_id=PACKAGE_DIRECTORY,
+        commit_sha="private-copy",
+        definition_path=definition_path,
+    )
+
+
 async def validate_all(
-    root: Path | None = None,
+    root: Path | None = None, *, private: bool = False, only: str | None = None
 ) -> list[tuple[ContributedPackage, Exception | None]]:
-    """Check every contributed package and report each result in key order."""
+    """Check every contributed package, or only one key, and report results in key order.
+
+    With private, a package must also activate as a custom.* copy in a Tin project.
+    """
     directory = (root / PACKAGE_DIRECTORY) if root else None
     results: list[tuple[ContributedPackage, Exception | None]] = []
-    for package in discover(directory):
+    packages = discover(directory)
+    if only is not None:
+        packages = [package for package in packages if package.key == only]
+        if not packages:
+            raise ValueError(f"no contributed package named {only}")
+    for package in packages:
         try:
             await validate(package, root=root)
+            if private:
+                try:
+                    await validate_private_copy(package, root=root)
+                except Exception as error:  # noqa: BLE001 - reported like any failure
+                    raise PrivateCopyError(f"as {private_key(package.key)}: {error}") from error
         except Exception as error:  # noqa: BLE001 - the report names every failure
             results.append((package, error))
         else:

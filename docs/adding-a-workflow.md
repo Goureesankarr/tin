@@ -77,6 +77,43 @@ The [package guide](../workflow_packages/README.md#codex-procedure-example) has 
 example. Procedure packages can produce a project artifact or an unmerged GitHub PR.
 They don't acquire the interactive conversation and controls of a one-off `project.task`.
 
+## Test it as a private workflow
+
+Fixture tests show that the package fits the contract; a private run shows that it does the
+job. You can run your package on hosted Tin before it is merged, as a `custom.*` copy in your
+own project.
+
+1. Sign up at [Tin](https://app.tin.computer) and connect your coding agent over MCP. New
+   accounts get a one-time credit that covers test runs; code-only runs use no credits.
+2. Check that the copy would activate:
+
+   ```bash
+   uv run tin-lite validate-community --private --package <your key>
+   ```
+
+   A private failure means the public package is valid but its copy needs a change for the
+   test run. Make that change in the copy only and keep the public package as it is.
+3. Ask your agent to commit the package to the project as
+   `workflow_packages/custom.<name>/`, where `<name>` is the part of your key after the first
+   dot. The copy's manifest `key` must be the same `custom.<name>`. Then call
+   `validate_workflow_package`, `activate_workflow_package` and `start_workflow` with real
+   inputs, and read the result with `read_run_output`.
+4. Invite the maintainer reviewing your PR to the project (Invite someone in the dashboard),
+   so they can open the run themselves. Put the run ID and the output in the PR.
+
+Private copies have narrower rules than public packages. For the test copy:
+
+- Declare `schedule_modes: ["on_demand"]` for a Codex procedure. Private procedures don't run on
+  schedules; your public package can keep `daily` or `weekly`.
+- Use a fixed output `path` instead of `path_template`.
+- Name a prerequisite by its workflow or file, without `producer`. Run the producing built-in
+  workflow first if your package reads its output.
+
+Some packages can't be tested privately yet: procedures that need the browser profile, and
+integrations other than GitHub, Google Workspace read access and
+[project API connections](project-api-connections.md). Say so in the PR; a maintainer can
+run those.
+
 ## Submit it
 
 For a new or revised package, follow [creation and qualification](workflow-qualification.md):
@@ -103,7 +140,8 @@ it. Your tests execute code separately, without production credentials or paid A
 A passing validator proves the package fits the contract, not that its output is useful.
 
 In the PR, explain who would run this, what they get, why an existing workflow doesn't
-cover it, and how you tested it. Name the integrations, model costs and any external effects.
+cover it, and how you tested it, including the private run ID when you have one. Name the
+integrations, model costs and any external effects.
 External contributions need passing CI and maintainer review; see [CONTRIBUTING](../CONTRIBUTING.md).
 
 ## From a package to the public Registry
@@ -145,8 +183,9 @@ in the worker. Keep I/O in activities, payloads out of Temporal history, and tes
 billing and artifact publication. Discuss that larger change in an issue first.
 
 Public and private describe who can use a workflow, not how it runs. You can try a package
-as a `custom.*` copy in an operator-enabled project using the existing
-[validate/activate flow](private-workflow-activation.md). Public Registry registration doesn't
-need that private-project allowlist. Schedules and review remain properties of the definition;
+as a `custom.*` copy in your own project using the existing
+[validate/activate flow](private-workflow-activation.md); see
+[Test it as a private workflow](#test-it-as-a-private-workflow). Public Registry registration
+doesn't need private execution. Schedules and review remain properties of the definition;
 private Codex procedures are still on demand. Project-owned writing guides and other skills
 remain in `.agents/skills/<name>/SKILL.md` in project Files.

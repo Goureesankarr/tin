@@ -24,14 +24,15 @@ inputs, prerequisites and supported schedule modes.
 See [architecture](architecture.md), [content delivery](repository-aware-content-delivery.md), and the
 [README](../README.md) for the product and execution contracts.
 
-## Operator-enabled private-workflow pilot
+## Private workflows
 
 Private packages live in project Files. A coding agent commits, validates and explicitly
 activates an exact package revision through MCP. New saved configurations select the latest
 active definition automatically; existing configurations and runs keep their selected version.
-Editing files alone does not activate a workflow. The
-`TIN_LITE_PRIVATE_WORKFLOW_PROJECTS` allowlist remains required; hosted billing enablement
-does not remove this separate private-execution gate.
+Editing files alone does not activate a workflow. Execution needs the isolated template plus
+either the `TIN_LITE_PRIVATE_WORKFLOW_PROJECTS` allowlist or
+`TIN_LITE_PRIVATE_WORKFLOWS_OPEN=true`, which admits every project and requires billing so each
+run spends credits. Hosted billing enablement alone does not open private execution.
 
 | Executor | Implemented | Not included |
 | --- | --- | --- |

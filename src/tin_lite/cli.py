@@ -10,7 +10,7 @@ from temporalio.client import Client
 
 from tin_lite.catalog import sync_builtin_workflows
 from tin_lite.code_storage import CodeStorage
-from tin_lite.community import validate_all
+from tin_lite.community import PrivateCopyError, private_key, validate_all
 from tin_lite.db import Database, apply_migrations
 from tin_lite.rollouts import parse_rollout_filename, render_rollout_trace
 from tin_lite.schedules import TemporalScheduleService
@@ -165,9 +165,11 @@ async def _rollouts(run_id: UUID, *, out: Path | None, trace: bool, max_output_c
         await database.close()
 
 
-async def _validate_community(root: Path | None) -> None:
+async def _validate_community(
+    root: Path | None, private: bool = False, package: str | None = None
+) -> None:
     try:
-        results = await validate_all(root)
+        results = await validate_all(root, private=private, only=package)
     except (ValueError, OSError) as error:
         print(f"FAIL  {error}")
         raise SystemExit(1) from None
@@ -182,7 +184,13 @@ async def _validate_community(root: Path | None) -> None:
         failed += 1
         print(f"FAIL  {package.key}")
         print(f"      {error}")
-        print(f"      Fix it in {package.path}, then run this command again.")
+        if isinstance(error, PrivateCopyError):
+            print(
+                "      The public package is valid. For a private test run, change this in"
+                f" your {private_key(package.key)} copy only."
+            )
+        else:
+            print(f"      Fix it in {package.path}, then run this command again.")
     print(f"\n{len(results) - failed} of {len(results)} packages are valid.")
     if failed:
         raise SystemExit(1)
@@ -206,6 +214,12 @@ def main() -> None:
     community.add_argument(
         "--root", type=Path, help="checkout to read instead of the one this package lives in"
     )
+    community.add_argument(
+        "--private",
+        action="store_true",
+        help="also check that each package activates as a custom.* private workflow",
+    )
+    community.add_argument("--package", help="check only the package with this key")
     project = commands.add_parser("create-project")
     project.add_argument("--name", required=True)
     project.add_argument("--repo-id", required=True)
@@ -230,7 +244,7 @@ def main() -> None:
     elif args.command == "repair-schedule-timeouts":
         asyncio.run(_repair_schedule_timeouts(apply=args.apply))
     elif args.command == "validate-community":
-        asyncio.run(_validate_community(args.root))
+        asyncio.run(_validate_community(args.root, args.private, args.package))
     elif args.command == "serve":
         # OAuth providers return short-lived authorization codes in callback query
         # strings. Uvicorn's generic access logger includes the full query string;

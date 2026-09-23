@@ -100,7 +100,8 @@ contract and pinned in the existing included-workflow receipt. It admits runs at
 without creating credit budgets, paid operations, or deductions. An authored cost/free flag does
 not grant this policy. Existing paid procedure/model accounting is unchanged.
 
-Private activation still requires the existing explicit project allowlist and isolated template.
+Private activation still requires the isolated template and either the explicit project
+allowlist or the billed open setting (`TIN_LITE_PRIVATE_WORKFLOWS_OPEN`).
 No credentials, production configuration, migrations, catalog sources, or rollout flags changed.
 The opt-in proof creates a **new test code.storage repository** and real short-lived E2B sandboxes;
 it never uses the configured product database. The report repository is retained for retrieval.
