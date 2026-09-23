@@ -454,11 +454,16 @@ _OPENAI_TOOL_STRING_FORMATS = {
 
 
 def _normalize_model_tool_schema(value: Any) -> None:
-    """Remove JSON Schema formats unsupported by strict Responses tools in-place."""
+    """Remove JSON Schema keywords unsupported by strict Responses tools in-place.
+
+    The run API still validates the full input schema when Luna starts a workflow.
+    """
     if isinstance(value, dict):
         schema_format = value.get("format")
         if isinstance(schema_format, str) and schema_format not in _OPENAI_TOOL_STRING_FORMATS:
             value.pop("format")
+        if value.get("type") == "array":
+            value.pop("uniqueItems", None)
         for child in value.values():
             _normalize_model_tool_schema(child)
     elif isinstance(value, list):
