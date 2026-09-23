@@ -773,3 +773,28 @@ async def test_final_review_does_not_hold_unused_money_or_change_approval(billed
                 kind="isolated_codex",
                 maximum=NANOS_PER_DOLLAR,
             )
+
+
+async def test_ads_launch_budget_stays_open_while_awaiting_approval(billed):
+    f = billed
+    await fund(f)
+    run = await start(f, await quote(f))
+    async with f.db.pool.acquire() as conn:
+        await conn.execute(
+            "UPDATE workflow_runs SET status='needs_input', executor='ads.launch' WHERE id=$1",
+            run.id,
+        )
+    await f.billing.reconcile()
+    assert (
+        await f.db.pool.fetchval("SELECT status FROM billing_run_budgets WHERE run_id=$1", run.id)
+        == "reserved"
+    )
+    async with f.db.pool.acquire() as conn:
+        await conn.execute("UPDATE workflow_runs SET status='running' WHERE id=$1", run.id)
+        await f.billing.begin_operation(
+            conn,
+            run_id=run.id,
+            operation_id="after-approval",
+            kind="isolated_codex",
+            maximum=0,
+        )

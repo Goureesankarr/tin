@@ -72,6 +72,22 @@ def _rows(result: dict) -> list[dict]:
     return [row for row in rows if isinstance(row, dict)]
 
 
+def _failed(result: dict, action: str, outcome: str) -> str:
+    """Name the side that failed: Tin's own gate, a Google Ads refusal, or a lost answer."""
+    if result.get("status") == "unavailable":
+        return (
+            f"Tin could not authorize {action} ({result.get('reason') or 'unavailable'}), so "
+            f"Google Ads was not contacted; {outcome}. Check the project's spending limits, "
+            "then try again."
+        )
+    if result.get("error"):
+        return f"Google Ads refused {action} ({result['error']}); {outcome}."
+    return (
+        f"Tin did not receive Google Ads' answer to {action} "
+        f"({result.get('reason') or 'unknown'}); {outcome}."
+    )
+
+
 class PaidAdsLaunchActivities:
     def __init__(
         self, *, database, storage, settings, router=None, integrations=None, site_reader=None
@@ -174,8 +190,9 @@ class PaidAdsLaunchActivities:
                     from tin_lite.billing_contracts import BillingError
 
                     # Raw provider errors, headers and credentials never enter evidence.
+                    # A billing refusal keeps its fixed code so the failure names it.
                     result = (
-                        {"status": "unavailable", "reason": "spending_limit"}
+                        {"status": "unavailable", "reason": exc.code}
                         if isinstance(exc, BillingError)
                         else {"status": "unknown", "reason": "provider_result_unavailable"}
                     )
@@ -454,7 +471,7 @@ class PaidAdsLaunchActivities:
         }
         if reads["account"].get("status") != "completed" or reads["account"].get("error"):
             raise ApplicationError(
-                "Google Ads did not answer the account read; nothing was changed. Try again.",
+                _failed(reads["account"], "the account read", "nothing was changed"),
                 non_retryable=reads["account"].get("error") is not None,
             )
         await self._save(run_id, "gathered:account", {"status": "completed", "value": account})
@@ -772,17 +789,9 @@ class PaidAdsLaunchActivities:
             "mutate",
             {"operations": operations, "validate_only": True},
         )
-        if validated.get("status") != "completed":
+        if validated.get("status") != "completed" or validated.get("error"):
             await self._refuse(
-                run_id,
-                "validate",
-                "Google Ads did not confirm the plan check; nothing was created. Try again.",
-            )
-        if validated.get("error"):
-            await self._refuse(
-                run_id,
-                "validate",
-                f"Google Ads rejected the plan ({validated['error']}). Nothing was created.",
+                run_id, "validate", _failed(validated, "the plan check", "nothing was created")
             )
         created = await self._ads(
             run_id, "apply:create", "mutate", {"operations": operations, "validate_only": False}
@@ -825,6 +834,12 @@ class PaidAdsLaunchActivities:
                     ),
                     "adopted": True,
                 }
+            elif created.get("status") == "unavailable":
+                await self._refuse(
+                    run_id,
+                    "create",
+                    _failed(created, "creating the campaign", "nothing was created"),
+                )
             elif created.get("error"):
                 await self._refuse(
                     run_id,
@@ -873,8 +888,12 @@ class PaidAdsLaunchActivities:
             await self._refuse(
                 run_id,
                 "enable",
-                "The campaign was created but Google Ads did not confirm switching it on. It "
-                "is paused in your account; enable it there or run the launch again.",
+                _failed(
+                    enabled,
+                    "switching the campaign on",
+                    "the campaign was created and is paused in your account; enable it there "
+                    "or run the launch again",
+                ),
             )
         enabled_at = datetime.now(UTC).isoformat()
         await self.db.update_paid_ads_campaign(
@@ -938,8 +957,11 @@ class PaidAdsLaunchActivities:
                     await self._refuse(
                         run_id,
                         "conversion_action",
-                        "Google Ads did not confirm the conversion action. Check the account "
-                        "before running the launch again.",
+                        _failed(
+                            created,
+                            "creating the conversion action",
+                            "check the account before running the launch again",
+                        ),
                     )
                 results = created["value"].get("results") or []
                 resource = (results[0] or {}).get("resourceName") if results else None
