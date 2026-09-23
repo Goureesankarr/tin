@@ -54,7 +54,7 @@ In the next phase, Tin can
 - fix the site's technical gaps, once GitHub is connected
 
 ## What Tin would run
-Tell your agent, in your words, what Tin should take on.
+Your agent asks what Tin should take on as a quick multiple choice; your own words work too.
 - [ ] technical-seo **Technical SEO** — Tin will fix what slows the site, as pull requests. Needs: GitHub
 - [x] ai-visibility **AI visibility** — weekly audit plus a first pass. Needs: nothing (Tin's suggestion)
 - [X] outreach **Outreach desk** — a weekly shortlist of prospects. Needs: Google Workspace

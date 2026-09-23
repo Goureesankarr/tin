@@ -156,8 +156,8 @@ these up now. Omit the section when nothing key is missing.
 
 ## 4. List what Tin would run, system by system
 
-No options to pick from. The founder's agent shows this list and asks them, in their words, what
-Tin should take on; Tin's suggestion is one of the answers. Write `## What Tin would run` as a
+The founder's agent turns this list into a multiple-choice question, one option per system, and
+asks what Tin should take on; Tin's suggestion is one of the answers. Write `## What Tin would run` as a
 checklist, one line per system in rank order (fit × Tin impact, as in the scope), each line in
 the exact shape of the structure below: the system id (lowercase, hyphens, the same id as in the
 block), the name in bold, what Tin runs and how often in one plain sentence, and `Needs:` the
@@ -316,7 +316,7 @@ Own workflows to carry to Tin
 - <piece>: once <it exists and is connected>, Tin <what it ships>.
 
 ## What Tin would run
-Tell your agent, in your words, what Tin should take on. It records your answer with record_onboarding_picks, which ticks these lines.
+Your agent asks what Tin should take on as a quick multiple choice; your own words work too. It records your answer with record_onboarding_picks, which ticks these lines.
 - [ ] <system-id> **<System name>** — Tin will <what, how often>; <where it lands>. Needs: <integrations, or nothing> (Tin's suggestion)
 - [ ] <system-id> **<System name>** — Tin will <what, how often>; <where it lands>. Needs: <integrations, or nothing>
 (one line per system with a runnable workflow, in rank order; the id matches the block)

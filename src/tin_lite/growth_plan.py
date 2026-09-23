@@ -1011,7 +1011,7 @@ def render(
         "",
         "## What Tin would run",
         *([" ".join(view["first_deliverable"]), ""] if view.get("first_deliverable") else []),
-        "Tell your agent, in your words, what Tin should take on. It records your answer with record_onboarding_picks, which ticks these lines.",
+        "Your agent asks what Tin should take on as a quick multiple choice; your own words work too. It records your answer with record_onboarding_picks, which ticks these lines.",
     ]
     block = []
     for s in systems:

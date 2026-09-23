@@ -224,6 +224,9 @@ def test_server_instructions_open_with_the_offer_and_the_one_message_rule() -> N
     assert "default to side and signups" in SERVER_INSTRUCTIONS
     assert "refuses growth.onboarding" not in SERVER_INSTRUCTIONS
     assert "What do you want Tin to take on?" in SERVER_INSTRUCTIONS
+    assert "AskUserQuestion in Claude Code" in SERVER_INSTRUCTIONS
+    assert "request_user_input in Codex" in SERVER_INSTRUCTIONS
+    assert "ONE open question" not in SERVER_INSTRUCTIONS
     assert "expand the scope" not in SERVER_INSTRUCTIONS
     assert "A to D" not in SERVER_INSTRUCTIONS
     assert "get_started return them as `links`" not in SERVER_INSTRUCTIONS
