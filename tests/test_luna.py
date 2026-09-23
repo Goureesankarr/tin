@@ -93,6 +93,25 @@ def test_catalog_tools_remove_only_model_unsupported_string_formats() -> None:
     assert input_schema["properties"]["site_url"]["format"] == "uri"
 
 
+def test_catalog_tools_remove_unique_items_from_arrays() -> None:
+    workflow = catalog_workflow()
+    input_schema = workflow["definition"]["input_schema"]
+    input_schema["properties"]["website_hosts"] = {
+        "type": "array",
+        "items": {"type": "string", "maxLength": 253},
+        "maxItems": 5,
+        "uniqueItems": True,
+        "default": [],
+    }
+
+    tools, _targets = _catalog_tools([workflow], project_id=uuid4())
+
+    hosts = tools[0]["parameters"]["properties"]["website_hosts"]
+    assert "uniqueItems" not in hosts
+    assert hosts["maxItems"] == 5
+    assert input_schema["properties"]["website_hosts"]["uniqueItems"] is True
+
+
 def text_response(text: str, *, response_id: str = "resp_text") -> dict:
     return {
         "id": response_id,
