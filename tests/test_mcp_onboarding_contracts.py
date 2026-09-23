@@ -9,6 +9,8 @@ from test_private_workflows import ACTOR, activate, fixture, mcp, structured
 from test_procedure_publication import publication_db as publication_db
 from test_service_billing import install
 
+from tin_lite.integrations import ConnectStart, IntegrationNotConfiguredError
+
 
 @pytest.fixture
 async def account(publication_db, monkeypatch):
@@ -190,3 +192,29 @@ async def test_founder_words_come_apart_as_quote_and_relay(account):
         "they keep and any connections. Nothing runs until they have said.",
     ]
     assert held["tell_the_founder"] == "\n\n".join([view, *held["relay"]])
+
+
+async def test_integration_connection_returns_the_link_and_surfaces_provider_errors(account):
+    f = account
+    url = "https://github.com/login/oauth/authorize?state=synthetic"
+    f.runtime.integrations.start_connect = AsyncMock(return_value=ConnectStart(url))
+    started = await call(
+        f, "start_integration_connection", project_id=str(f.project.id), provider_key="infra.github"
+    )
+    assert started["authorization_url"] == url
+    assert started["relay"] == [
+        "I am opening the github connection for Private pilot in your browser; it takes about "
+        "a minute. Tell me when it says connected."
+    ]
+    assert started["tell_the_founder"] == started["relay"][0]
+
+    f.runtime.integrations.start_connect = AsyncMock(
+        side_effect=IntegrationNotConfiguredError("GitHub is not configured on this Tin deployment")
+    )
+    with pytest.raises(ToolError, match="GitHub is not configured"):
+        await call(
+            f,
+            "start_integration_connection",
+            project_id=str(f.project.id),
+            provider_key="infra.github",
+        )

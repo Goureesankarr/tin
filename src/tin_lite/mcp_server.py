@@ -3705,7 +3705,7 @@ def create_mcp_app(
         project_id: str,
         provider_key: str,
         capabilities: list[str] | None = None,
-    ) -> dict[str, str]:
+    ) -> dict[str, Any]:
         """Create a short-lived project-bound provider authorization URL for the human.
 
         Open it in their browser yourself when your shell allows it (open_command), otherwise
@@ -3717,12 +3717,15 @@ def create_mcp_app(
         assert clerk_user_id is not None
         parsed_project_id = _mcp_uuid(project_id, field="project_id")
         await require_project(parsed_project_id, token, tool_name="start_integration_connection")
-        started = await runtime().integrations.start_connect(
-            project_id=parsed_project_id,
-            provider_key=provider_key,
-            clerk_user_id=clerk_user_id,
-            capabilities=capabilities,
-        )
+        try:
+            started = await runtime().integrations.start_connect(
+                project_id=parsed_project_id,
+                provider_key=provider_key,
+                clerk_user_id=clerk_user_id,
+                capabilities=capabilities,
+            )
+        except IntegrationError as exc:
+            raise ToolError(str(exc)) from exc
         project = await runtime().database.get_project(parsed_project_id)
         return {
             "authorization_url": started.authorization_url,
