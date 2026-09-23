@@ -1,6 +1,6 @@
 // Packaged UI with synthetic APIs. No live credentials or projects.
-// A browser sign-up whose project has no workflow yet sees the locked dashboard; a project
-// with one workflow, or the setting turned off, renders System as before.
+// A browser sign-up whose project has no workflow or run yet sees the locked dashboard; a
+// project with one workflow, one run, or the setting turned off, renders System as before.
 import assert from "node:assert/strict";
 import fs from "node:fs/promises";
 import http from "node:http";
@@ -10,7 +10,7 @@ import { chromium } from "playwright";
 
 const assets = path.resolve("src/tin_lite/static");
 
-async function serve({ lockEnabled, projectWorkflows, connections = false }) {
+async function serve({ lockEnabled, projectWorkflows, runs = [], connections = false }) {
   const project = {id: "project-1", name: "QA’s project", workspace_id: "ws", workspace_name: "QA", member_count: 1, hidden: false};
   const integrations = connections ? [
     {key: "infra.github", name: "GitHub", badge: "GH", description: "Repositories", unlocks: [], configured: true, status: "available", connection_id: null},
@@ -54,6 +54,7 @@ async function serve({ lockEnabled, projectWorkflows, connections = false }) {
     }
     if (url.pathname === "/api/projects") return send(connections ? [project, {...project, id: "project-2", name: "Second project"}] : [project]);
     if (/\/api\/projects\/[^/]+\/workflows$/.test(url.pathname)) return send(projectWorkflows);
+    if (/\/api\/projects\/[^/]+\/runs$/.test(url.pathname)) return send(runs);
     if (url.pathname.endsWith("/integrations")) return send(integrations);
     if (url.pathname.endsWith("/infra.github/options")) return send([{id: "repo-1", label: "example/site"}]);
     if (url.pathname.endsWith("/system")) return send({workflow_count: projectWorkflows.length, running_count: 0, waiting_count: 0, runs_this_month: 0});
@@ -203,11 +204,13 @@ test("agent connection links survive the sign-in return", async () => {
   } finally { await browser.close(); server.close(); }
 });
 
-test("lock page: one workflow, or the setting off, renders System as before", async () => {
+test("lock page: one workflow, one run, or the setting off, renders System as before", async () => {
   const workflow = {id: "cfg-1", workflow_id: "wf-1", name: "Audit AI visibility", status: "active", schedule: null, inputs: {}};
+  // A one-off run started by the coding agent, with no saved workflow.
+  const run = {id: "run-1", workflow_id: "wf-1", workflow: "organic.audit", status: "succeeded", created_at: "2026-09-01T00:00:00Z"};
   const browser = await chromium.launch({headless: true});
   try {
-    for (const scenario of [{lockEnabled: true, projectWorkflows: [workflow]}, {lockEnabled: false, projectWorkflows: []}]) {
+    for (const scenario of [{lockEnabled: true, projectWorkflows: [workflow]}, {lockEnabled: true, projectWorkflows: [], runs: [run]}, {lockEnabled: false, projectWorkflows: []}]) {
       const {server, writes, base} = await serve(scenario);
       try {
         const {page, context, errors} = await open(browser, base);

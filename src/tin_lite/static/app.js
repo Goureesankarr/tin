@@ -47,7 +47,8 @@ const RUNNING_STATES = new Set(["pending", "running"]);
 const ACTIVE_TASK_STATES = new Set(["pending", "running", "needs_input", "paused"]);
 const BILLING_ENABLED = document.documentElement.dataset.billingEnabled === "true";
 // Browser sign-ups see a locked dashboard until their coding agent sets up the first
-// workflow. Server setting TIN_LITE_BROWSER_LOCK_ENABLED; unlocks on the next reload.
+// workflow or starts the first run. Server setting TIN_LITE_BROWSER_LOCK_ENABLED;
+// unlocks on the next reload.
 const BROWSER_LOCK_ENABLED = document.documentElement.dataset.browserLockEnabled === "true";
 // Server-owned addresses: changing the dashboard must not move MCP's OAuth resource.
 const APP_URL = configuredOrigin(document.documentElement.dataset.appUrl);
@@ -6191,7 +6192,7 @@ async function loadProject(project, { announce = false, integrationReturn = null
     await loadRunWorkflows(runs);
     if (generation !== state.projectGeneration || state.project?.id !== project.id) return false;
     state.activityHasMore = activity.length === 100;
-    state.projectAccess = BROWSER_LOCK_ENABLED && !projectWorkflows.length ? "locked" : "ready";
+    state.projectAccess = BROWSER_LOCK_ENABLED && !projectWorkflows.length && !runs.length ? "locked" : "ready";
     // A callback may arrive in a new tab or from the legacy origin. Let this project
     // finish that connection while keeping its dashboard locked.
     if (state.projectAccess === "locked" && integrationReturn?.projectId === project.id) {
