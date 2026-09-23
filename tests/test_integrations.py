@@ -1456,6 +1456,114 @@ async def test_github_snapshot_is_bounded_to_safe_site_files_at_one_commit(tmp_p
     assert receipt.provider_request_id == "tree-request"
 
 
+def git_blob_sha(content: bytes) -> str:
+    return hashlib.sha1(b"blob %d\0" % len(content) + content, usedforsecurity=False).hexdigest()
+
+
+def tree_entry(path: str, content: bytes, mode: str = "100644") -> dict:
+    return {
+        "type": "blob",
+        "mode": mode,
+        "path": path,
+        "sha": git_blob_sha(content),
+        "size": len(content),
+    }
+
+
+def github_tarball(
+    files: dict[str, bytes], *, root: str = "example-org-site-aaaaaaa", links=()
+) -> bytes:
+    """The shape codeload serves: a pax header, one root directory and its members."""
+    buffer = io.BytesIO()
+    with tarfile.open(
+        fileobj=buffer, mode="w:gz", format=tarfile.PAX_FORMAT, pax_headers={"comment": "a" * 40}
+    ) as archive:
+        directory = tarfile.TarInfo(root)
+        directory.type = tarfile.DIRTYPE
+        archive.addfile(directory)
+        for path, content in files.items():
+            info = tarfile.TarInfo(f"{root}/{path}")
+            info.size = len(content)
+            archive.addfile(info, io.BytesIO(content))
+        for path in links:
+            info = tarfile.TarInfo(f"{root}/{path}")
+            info.type = tarfile.SYMTYPE
+            info.linkname = "src/index.html"
+            archive.addfile(info)
+    return buffer.getvalue()
+
+
+CODELOAD = "https://codeload.github.com/example-org/site/legacy.tar.gz/refs?token=signed"
+
+
+class RepositoryGitHub:
+    """Synthetic GitHub API and codeload host for repository snapshots."""
+
+    def __init__(self, tree, tarball, *, blobs=None, location=CODELOAD, head_sha="a" * 40):
+        self.tree, self.tarball, self.blobs = tree, tarball, blobs or {}
+        self.location, self.head_sha = location, head_sha
+        self.requests: list[httpx.Request] = []
+
+    def paths(self, suffix: str) -> list[httpx.Request]:
+        return [request for request in self.requests if suffix in request.url.path]
+
+    async def __call__(self, request: httpx.Request) -> httpx.Response:
+        self.requests.append(request)
+        path = request.url.path
+        if str(request.url) == self.location:
+            return httpx.Response(200, content=self.tarball)
+        assert request.url.host == "api.github.com", request.url
+        if request.method == "POST" and path.endswith("/access_tokens"):
+            return httpx.Response(201, json={"token": "installation-token"})
+        if path == "/repos/example-org/site":
+            return httpx.Response(200, json={"default_branch": "main"})
+        if path.endswith("/git/ref/heads/main"):
+            return httpx.Response(200, json={"object": {"sha": self.head_sha}})
+        if path.endswith(f"/git/trees/{self.head_sha}"):
+            return httpx.Response(200, json={"tree": self.tree, "truncated": False})
+        if path.endswith(f"/tarball/{self.head_sha}"):
+            return httpx.Response(302, headers={"location": self.location})
+        for sha, content in self.blobs.items():
+            if path.endswith(f"/git/blobs/{sha}"):
+                encoded = base64.b64encode(content).decode()
+                return httpx.Response(200, json={"encoding": "base64", "content": encoded})
+        raise AssertionError(f"unexpected GitHub request {request.method} {request.url}")
+
+
+@asynccontextmanager
+async def repository_service(monkeypatch, github):
+    from unittest.mock import AsyncMock
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(github)) as client:
+        service = IntegrationService(
+            database=FakeIntegrationDatabase(),  # type: ignore[arg-type]
+            settings=settings(),  # type: ignore[arg-type]
+            client=client,
+        )
+        monkeypatch.setattr(
+            service,
+            "_connection",
+            AsyncMock(
+                return_value=SimpleNamespace(
+                    id=uuid4(),
+                    external_account_id="42",
+                    configuration={
+                        "selected_repository": "example-org/site",
+                        "permissions": {"contents": "read"},
+                    },
+                )
+            ),
+        )
+        monkeypatch.setattr(
+            service, "_github_installation_token", AsyncMock(return_value="synthetic-token")
+        )
+        yield service
+
+
+def bundle_args(key: str = "run-9:procedure-repository") -> dict:
+    return {"project_id": PROJECT_ID, "run_id": RUN_ID, "execution_key": key}
+
+
 @pytest.mark.asyncio
 async def test_github_repository_bundle_is_pinned_bounded_and_tokenless(tmp_path) -> None:
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -1490,56 +1598,16 @@ async def test_github_repository_bundle_is_pinned_bounded_and_tokenless(tmp_path
         updated_at=now,
     )
     head_sha = "a" * 40
-    blobs = {
-        "1" * 40: b"<main>Before</main>\n",
-        "2" * 40: b"name: ci\n",
-    }
-
-    async def github(request: httpx.Request) -> httpx.Response:
-        path = request.url.path
-        if request.method == "POST" and path.endswith("/access_tokens"):
-            return httpx.Response(201, json={"token": "installation-token"})
-        if request.method == "GET" and path == "/repos/example-org/site":
-            return httpx.Response(200, json={"default_branch": "main"})
-        if request.method == "GET" and path.endswith("/git/ref/heads/main"):
-            return httpx.Response(200, json={"object": {"sha": head_sha}})
-        if request.method == "GET" and path.endswith(f"/git/trees/{head_sha}"):
-            return httpx.Response(
-                200,
-                json={
-                    "truncated": False,
-                    "tree": [
-                        {
-                            "type": "blob",
-                            "mode": "100644",
-                            "path": "src/index.html",
-                            "sha": "1" * 40,
-                            "size": len(blobs["1" * 40]),
-                        },
-                        {
-                            "type": "blob",
-                            "mode": "100644",
-                            "path": ".github/workflows/ci.yml",
-                            "sha": "2" * 40,
-                            "size": len(blobs["2" * 40]),
-                        },
-                        {
-                            "type": "blob",
-                            "mode": "120000",
-                            "path": "unsafe-link",
-                            "sha": "3" * 40,
-                            "size": 4,
-                        },
-                    ],
-                },
-            )
-        for sha, content in blobs.items():
-            if request.method == "GET" and path.endswith(f"/git/blobs/{sha}"):
-                return httpx.Response(
-                    200,
-                    json={"encoding": "base64", "content": base64.b64encode(content).decode()},
-                )
-        raise AssertionError(f"unexpected GitHub request {request.method} {request.url}")
+    files = {"src/index.html": b"<main>Before</main>\n", ".github/workflows/ci.yml": b"name: ci\n"}
+    github = RepositoryGitHub(
+        [
+            tree_entry("src/index.html", files["src/index.html"]),
+            tree_entry(".github/workflows/ci.yml", files[".github/workflows/ci.yml"]),
+            {**tree_entry("unsafe-link", b"link"), "mode": "120000"},
+        ],
+        github_tarball(files, links=["unsafe-link"]),
+        head_sha=head_sha,
+    )
 
     configured = settings(
         integration_credential_key=None,
@@ -1563,37 +1631,11 @@ async def test_github_repository_bundle_is_pinned_bounded_and_tokenless(tmp_path
             execution_key="run-9:procedure-repository",
             run_id=RUN_ID,
         )
-        # Limits are explicitly selected and remain part of request identity.
-        larger = await service.github_repository_bundle(
-            project_id=PROJECT_ID,
-            execution_key="run-9:larger-repository",
-            run_id=RUN_ID,
-            max_files=1000,
-            max_bytes=100_000_000,
-        )
-        assert (larger.repository, larger.head_sha, larger.file_count) == (
-            bundle.repository,
-            bundle.head_sha,
-            bundle.file_count,
-        )
         with pytest.raises(SideEffectConflictError):
             await service.github_repository_bundle(
                 project_id=PROJECT_ID,
-                execution_key="run-9:larger-repository",
-                run_id=RUN_ID,
-            )
-        with pytest.raises(IntegrationAuthorizationError, match="workspace limits"):
-            await service.github_repository_bundle(
-                project_id=PROJECT_ID,
-                execution_key="run-9:small-repository",
-                run_id=RUN_ID,
-                max_files=1,
-            )
-        with pytest.raises(IntegrationError, match="limits"):
-            await service.github_repository_bundle(
-                project_id=PROJECT_ID,
-                execution_key="run-9:invalid-repository",
-                max_files=1001,
+                execution_key="run-9:procedure-repository",
+                run_id=uuid4(),
             )
 
     assert bundle.repository == "example-org/site"
@@ -1602,7 +1644,13 @@ async def test_github_repository_bundle_is_pinned_bounded_and_tokenless(tmp_path
     assert bundle.complete is False  # The excluded symlink prevents a complete build proof.
     with tarfile.open(fileobj=io.BytesIO(bundle.archive), mode="r:gz") as archive:
         assert archive.getnames() == [".github/workflows/ci.yml", "src/index.html"]
-        assert archive.extractfile("src/index.html").read() == blobs["1" * 40]
+        assert archive.extractfile("src/index.html").read() == files["src/index.html"]
+    # One tarball download; the signed codeload URL never receives the installation token.
+    (tarball,) = github.paths(f"/tarball/{head_sha}")
+    assert tarball.headers["authorization"] == "Bearer installation-token"
+    (download,) = [r for r in github.requests if r.url.host == "codeload.github.com"]
+    assert "authorization" not in download.headers
+    assert not github.paths("/git/blobs/")
     receipt = database.call_receipts["run-9:procedure-repository"]
     assert receipt.response_summary["head_sha"] == head_sha
 
@@ -2523,74 +2571,33 @@ async def test_github_commit_adapter_writes_the_default_branch_and_replays(tmp_p
 
 
 @pytest.mark.parametrize(
-    ("file_count", "file_bytes", "limits", "accepted"),
+    ("file_count", "file_bytes", "accepted"),
     [
-        (750, 40_000, {"max_files": 1000, "max_bytes": 100_000_000}, True),
-        (1000, 100_000, {"max_files": 1000, "max_bytes": 100_000_000}, True),
-        (1001, 0, {"max_files": 1000, "max_bytes": 100_000_000}, False),
-        (51, 2_000_000, {"max_files": 1000, "max_bytes": 100_000_000}, False),
-        (750, 1, {}, False),  # Historical default still enforces 500 files.
-        (6, 2_000_000, {}, False),  # Historical default still enforces 10 MB.
+        (50, 1, True),  # At the (lowered) file cap.
+        (51, 0, False),
+        (40, 2_000_000, True),  # 80 MB of eligible files.
+        (51, 2_000_000, False),  # Over the 100 MB byte cap.
     ],
 )
-async def test_repository_bundle_expanded_bounds_and_legacy_rejection(
-    monkeypatch, file_count, file_bytes, limits, accepted
+async def test_repository_bundle_bounds_apply_to_every_workspace(
+    monkeypatch, file_count, file_bytes, accepted
 ):
-    from unittest.mock import AsyncMock
+    from tin_lite import integrations
 
-    db = FakeIntegrationDatabase()
+    assert (integrations.REPOSITORY_MAX_FILES, integrations.REPOSITORY_MAX_BYTES) == (
+        20_000,
+        100_000_000,
+    )
+    monkeypatch.setattr(integrations, "REPOSITORY_MAX_FILES", 50)
     content = b"x" * file_bytes
-    head_sha = "a" * 40
-    blob_reads = []
-    tree = [
-        {
-            "type": "blob",
-            "mode": "100644",
-            "path": f"src/file-{index}.txt",
-            "sha": f"{index:040x}",
-            "size": file_bytes,
-        }
-        for index in range(file_count)
-    ]
-
-    async def github(request):
-        path = request.url.path
-        if path == "/repos/example-org/site":
-            return httpx.Response(200, json={"default_branch": "main"})
-        if path.endswith("/git/ref/heads/main"):
-            return httpx.Response(200, json={"object": {"sha": head_sha}})
-        if path.endswith(f"/git/trees/{head_sha}"):
-            return httpx.Response(200, json={"tree": tree, "truncated": False})
-        assert "/git/blobs/" in path
-        blob_reads.append(path)
-        return httpx.Response(
-            200, json={"encoding": "base64", "content": base64.b64encode(content).decode()}
-        )
-
-    async with httpx.AsyncClient(transport=httpx.MockTransport(github)) as client:
-        service = IntegrationService(database=db, settings=settings(), client=client)
-        monkeypatch.setattr(
-            service,
-            "_connection",
-            AsyncMock(
-                return_value=SimpleNamespace(
-                    id=uuid4(),
-                    external_account_id="42",
-                    configuration={
-                        "selected_repository": "example-org/site",
-                        "permissions": {"contents": "read"},
-                    },
-                )
-            ),
-        )
-        monkeypatch.setattr(
-            service, "_github_installation_token", AsyncMock(return_value="synthetic-token")
-        )
-        args = dict(project_id=PROJECT_ID, run_id=RUN_ID, execution_key="larger-repo", **limits)
+    files = {f"src/file-{index}.txt": content for index in range(file_count)}
+    tree = [tree_entry(path, content) for path in files]
+    github = RepositoryGitHub(tree, github_tarball(files) if accepted else b"")
+    async with repository_service(monkeypatch, github) as service:
         if accepted:
-            bundle = await service.github_repository_bundle(**args)
+            bundle = await service.github_repository_bundle(**bundle_args())
             assert bundle.file_count == file_count and bundle.complete
-            assert len(blob_reads) == file_count
+            assert not github.paths("/git/blobs/")
             with tarfile.open(fileobj=io.BytesIO(bundle.archive), mode="r:gz") as archive:
                 members = archive.getmembers()
                 assert len(members) == file_count
@@ -2598,9 +2605,86 @@ async def test_repository_bundle_expanded_bounds_and_legacy_rejection(
                 assert archive.extractfile(members[-1]).read() == content
         else:
             with pytest.raises(IntegrationAuthorizationError, match="workspace limits") as error:
-                await service.github_repository_bundle(**args)
+                await service.github_repository_bundle(**bundle_args())
             assert f"{file_count:,} files / {file_count * file_bytes:,} bytes" in str(error.value)
-            assert not blob_reads  # Reject before downloading any file contents.
+            assert not github.paths("/tarball/")  # Reject before downloading anything.
+
+
+async def test_repository_bundle_reads_export_ignored_and_rewritten_files_by_blob(monkeypatch):
+    files = {"README.md": b"# Site\n", "VERSION": b"$Format:%H$\n", "ops/deploy.sh": b"ship\n"}
+    tree = [tree_entry(path, content) for path, content in files.items()]
+    # export-subst rewrites VERSION and export-ignore drops ops/ from the tarball.
+    tarball = github_tarball({"README.md": files["README.md"], "VERSION": b"0123abc\n"})
+    blobs = {git_blob_sha(files[path]): files[path] for path in ("VERSION", "ops/deploy.sh")}
+    github = RepositoryGitHub(tree, tarball, blobs=blobs)
+    async with repository_service(monkeypatch, github) as service:
+        bundle = await service.github_repository_bundle(**bundle_args())
+    with tarfile.open(fileobj=io.BytesIO(bundle.archive), mode="r:gz") as archive:
+        assert {name: archive.extractfile(name).read() for name in archive.getnames()} == files
+    assert len(github.paths("/git/blobs/")) == 2
+
+
+@pytest.mark.parametrize(
+    ("change", "error", "message"),
+    [
+        # A fallback blob must still match the pinned tree.
+        ("wrong_blob", IntegrationUpstreamError, "pinned tree"),
+        # Only codeload may serve the redirected archive.
+        ("foreign_redirect", IntegrationUpstreamError, "unexpectedly"),
+        ("insecure_redirect", IntegrationUpstreamError, "unexpectedly"),
+        # Members outside the single archive root are never read as repository files.
+        ("two_roots", IntegrationUpstreamError, "layout"),
+        ("not_gzip", IntegrationUpstreamError, "unreadable"),
+        ("too_many_fallbacks", IntegrationUpstreamError, "missing pinned files"),
+        ("oversized_download", IntegrationAuthorizationError, "archive exceeds"),
+    ],
+)
+async def test_repository_bundle_rejects_unverifiable_archives(monkeypatch, change, error, message):
+    from tin_lite import integrations
+
+    files = {"README.md": b"# Site\n", "src/app.py": b"print('hi')\n"}
+    tree = [tree_entry(path, content) for path, content in files.items()]
+    tarball = github_tarball(files)
+    blobs = {}
+    location = CODELOAD
+    if change == "wrong_blob":
+        tarball = github_tarball({"README.md": files["README.md"]})
+        blobs = {git_blob_sha(files["src/app.py"]): b"print('bye')\n"}
+    elif change == "foreign_redirect":
+        location = "https://files.example.com/site.tar.gz"
+    elif change == "insecure_redirect":
+        location = "http://codeload.github.com/example-org/site/legacy.tar.gz/refs"
+    elif change == "two_roots":
+        buffer = io.BytesIO()
+        with tarfile.open(fileobj=buffer, mode="w:gz") as archive:
+            for name, content in (("one/README.md", b"a"), ("two/src/app.py", b"b")):
+                info = tarfile.TarInfo(name)
+                info.size = len(content)
+                archive.addfile(info, io.BytesIO(content))
+        tarball = buffer.getvalue()
+    elif change == "not_gzip":
+        tarball = b"<html>rate limited</html>"
+    elif change == "too_many_fallbacks":
+        tarball = github_tarball({"README.md": files["README.md"]})
+        monkeypatch.setattr(integrations, "REPOSITORY_BLOB_FALLBACKS", 0)
+    elif change == "oversized_download":
+        monkeypatch.setattr(integrations, "REPOSITORY_DOWNLOAD_MAX_BYTES", len(tarball) - 1)
+    github = RepositoryGitHub(tree, tarball, blobs=blobs, location=location)
+    async with repository_service(monkeypatch, github) as service:
+        with pytest.raises(error, match=message):
+            await service.github_repository_bundle(**bundle_args())
+    assert not any(r.url.host == "files.example.com" for r in github.requests)
+    assert not any(r.url.scheme == "http" for r in github.requests)
+
+
+async def test_repository_bundle_ignores_members_outside_the_pinned_tree(monkeypatch):
+    files = {"README.md": b"# Site\n"}
+    tarball = github_tarball({**files, "../escape": b"x", "extra.txt": b"not in tree"})
+    github = RepositoryGitHub([tree_entry("README.md", files["README.md"])], tarball)
+    async with repository_service(monkeypatch, github) as service:
+        bundle = await service.github_repository_bundle(**bundle_args())
+    with tarfile.open(fileobj=io.BytesIO(bundle.archive), mode="r:gz") as archive:
+        assert archive.getnames() == ["README.md"]
 
 
 # ---------------------------------------------------------------- Google Ads (ads.google)

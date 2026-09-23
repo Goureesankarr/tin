@@ -59,7 +59,7 @@ class TechnicalFixExecution:
             await self.db.complete_effect(conn, execution_key=key, result=value)
             return value
 
-    async def prepare(self, run, *, policy=contract.LEGACY_POLICY, workspace_limits=None):
+    async def prepare(self, run, *, policy=contract.LEGACY_POLICY):
         async def select():
             result = await TechnicalFixSources(
                 database=self.db,
@@ -107,7 +107,6 @@ class TechnicalFixExecution:
                     run_id=run.id,
                     execution_key=f"{run.id}:procedure_repository_workspace",
                     expected_binding=binding,
-                    **(workspace_limits or {}),
                 )
                 if policy == contract.LEGACY_POLICY:
                     originals = contract.matched_sources(bundle.archive, pages)

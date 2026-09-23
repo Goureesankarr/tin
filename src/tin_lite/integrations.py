@@ -10,7 +10,9 @@ import logging
 import re
 import secrets
 import tarfile
+import tempfile
 import time
+import zlib
 from dataclasses import asdict, dataclass
 from datetime import UTC, date, datetime, timedelta
 from email.utils import parseaddr
@@ -21,6 +23,7 @@ from uuid import UUID, uuid4
 
 import httpx
 from anyio import Path as AsyncPath
+from anyio import to_thread
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -35,10 +38,10 @@ from tin_lite.domain import (
 )
 from tin_lite.email_outreach import build_email_message, campaign_message_id
 from tin_lite.repository_limits import (
-    LEGACY_REPOSITORY_BYTES,
-    LEGACY_REPOSITORY_FILES,
-    MAX_REPOSITORY_BYTES,
-    MAX_REPOSITORY_FILES,
+    REPOSITORY_BLOB_FALLBACKS,
+    REPOSITORY_DOWNLOAD_MAX_BYTES,
+    REPOSITORY_MAX_BYTES,
+    REPOSITORY_MAX_FILES,
 )
 from tin_lite.settings import Settings
 
@@ -1487,17 +1490,8 @@ class IntegrationService:
         execution_key: str,
         run_id: UUID | None = None,
         expected_binding: GitHubRepositoryBinding | None = None,
-        max_files: int = LEGACY_REPOSITORY_FILES,
-        max_bytes: int = LEGACY_REPOSITORY_BYTES,
     ) -> GitHubRepositoryBundle:
         """Build a bounded immutable repository archive without exposing GitHub auth to E2B."""
-        if (
-            type(max_files) is not int
-            or not 1 <= max_files <= MAX_REPOSITORY_FILES
-            or type(max_bytes) is not int
-            or not 1 <= max_bytes <= MAX_REPOSITORY_BYTES
-        ):
-            raise IntegrationError("GitHub repository workspace limits are invalid")
         if not execution_key or len(execution_key) > 200:
             raise IntegrationError("GitHub execution key is invalid")
         connection = await self._connection(project_id, GITHUB_PROVIDER)
@@ -1514,9 +1508,7 @@ class IntegrationService:
             raise IntegrationAuthorizationError(
                 "Choose a GitHub repository with contents access first"
             )
-        selector = {"repository": repository, "selector": "procedure-repository-v1"}
-        if (max_files, max_bytes) != (LEGACY_REPOSITORY_FILES, LEGACY_REPOSITORY_BYTES):
-            selector["limits"] = {"max_files": max_files, "max_bytes": max_bytes}
+        selector = {"repository": repository, "selector": "procedure-repository-v2"}
         fingerprint = _sha256(_canonical_json(selector))
         token = await self._github_installation_token(_installation_id(connection))
         headers = self._github_headers(token)
@@ -1637,43 +1629,31 @@ class IntegrationService:
             raise IntegrationAuthorizationError(
                 "The selected repository has no eligible files for a procedure workspace"
             )
-        if len(blobs) > max_files or total_bytes > max_bytes:
+        if len(blobs) > REPOSITORY_MAX_FILES or total_bytes > REPOSITORY_MAX_BYTES:
             raise IntegrationAuthorizationError(
                 "The selected repository is outside the procedure workspace limits: "
                 f"{len(blobs):,} files / {total_bytes:,} bytes; "
-                f"this workflow allows {max_files:,} files / {max_bytes:,} bytes"
+                f"this workflow allows {REPOSITORY_MAX_FILES:,} files / "
+                f"{REPOSITORY_MAX_BYTES:,} bytes"
             )
-        archive_buffer = io.BytesIO()
-        with tarfile.open(
-            fileobj=archive_buffer, mode="w:gz", format=tarfile.PAX_FORMAT
-        ) as archive:
-            for item in sorted(blobs, key=lambda value: value["path"]):
-                blob_response = await self._client.get(
-                    f"https://api.github.com/repos/{repository_path}/git/blobs/{item['sha']}",
-                    headers=headers,
-                )
-                blob_payload = _provider_json(blob_response, provider="GitHub")
-                encoded = blob_payload.get("content")
-                if not isinstance(encoded, str) or blob_payload.get("encoding") != "base64":
-                    raise IntegrationUpstreamError("GitHub repository blob is unreadable")
-                try:
-                    content = base64.b64decode("".join(encoded.split()), validate=True)
-                except ValueError as exc:
-                    raise IntegrationUpstreamError("GitHub repository blob is invalid") from exc
-                if len(content) != item["size"]:
-                    raise IntegrationUpstreamError("GitHub repository blob size changed")
-                info = tarfile.TarInfo(name=item["path"])
-                info.size = len(content)
-                info.mode = 0o755 if item["mode"] == "100755" else 0o644
-                info.mtime = 0
-                info.uid = info.gid = 0
-                info.uname = info.gname = ""
-                archive.addfile(info, io.BytesIO(content))
+        wanted = {item["path"]: item for item in blobs}
+        # One tarball request instead of one API call per file. Every file is checked
+        # against its blob hash in the pinned tree, so the archive is exactly head_sha.
+        with tempfile.SpooledTemporaryFile(max_size=16_000_000) as download:
+            await self._github_tarball(repository_path, head_sha, headers, download)
+            contents = await to_thread.run_sync(_verified_tarball_blobs, download, wanted)
+        missing = [item for path, item in wanted.items() if path not in contents]
+        if len(missing) > REPOSITORY_BLOB_FALLBACKS:
+            raise IntegrationUpstreamError("GitHub repository tarball is missing pinned files")
+        for item in missing:
+            # export-ignore drops a path from the tarball and export-subst rewrites it.
+            contents[item["path"]] = await self._github_blob_content(repository_path, headers, item)
+        archive = await to_thread.run_sync(_repository_archive, blobs, contents)
         return GitHubRepositoryBundle(
             repository=repository,
             default_branch=default_branch,
             head_sha=head_sha,
-            archive=archive_buffer.getvalue(),
+            archive=archive,
             file_count=len(blobs),
             complete=len(blobs)
             == len(
@@ -3846,6 +3826,56 @@ class IntegrationService:
             )
         return int(found[0]["id"])
 
+    async def _github_tarball(
+        self, repository_path: str, head_sha: str, headers: dict[str, str], sink: Any
+    ) -> None:
+        url = f"https://api.github.com/repos/{repository_path}/tarball/{head_sha}"
+        async with self._client.stream("GET", url, headers=headers) as response:
+            if response.status_code == 200:
+                await _download_bounded(response, sink)
+                return
+            location = response.headers.get("location", "")
+            if not response.is_redirect or not location:
+                raise IntegrationUpstreamError(
+                    f"GitHub could not complete the request ({response.status_code})"
+                )
+        target = urlsplit(location)
+        if (
+            target.scheme != "https"
+            or target.hostname != "codeload.github.com"
+            or target.port not in {None, 443}
+            or target.username is not None
+            or target.password is not None
+        ):
+            raise IntegrationUpstreamError("GitHub redirected the repository tarball unexpectedly")
+        # The signed codeload URL carries its own short-lived grant; never forward the token.
+        public = {key: value for key, value in headers.items() if key != "Authorization"}
+        async with self._client.stream("GET", location, headers=public) as response:
+            if response.status_code != 200:
+                raise IntegrationUpstreamError(
+                    f"GitHub could not complete the request ({response.status_code})"
+                )
+            await _download_bounded(response, sink)
+
+    async def _github_blob_content(
+        self, repository_path: str, headers: dict[str, str], item: dict[str, Any]
+    ) -> bytes:
+        blob_response = await self._client.get(
+            f"https://api.github.com/repos/{repository_path}/git/blobs/{item['sha']}",
+            headers=headers,
+        )
+        blob_payload = _provider_json(blob_response, provider="GitHub")
+        encoded = blob_payload.get("content")
+        if not isinstance(encoded, str) or blob_payload.get("encoding") != "base64":
+            raise IntegrationUpstreamError("GitHub repository blob is unreadable")
+        try:
+            content = base64.b64decode("".join(encoded.split()), validate=True)
+        except ValueError as exc:
+            raise IntegrationUpstreamError("GitHub repository blob is invalid") from exc
+        if len(content) != item["size"] or _git_blob_sha(content, item["sha"]) != item["sha"]:
+            raise IntegrationUpstreamError("GitHub repository blob does not match the pinned tree")
+        return content
+
     def _github_headers(self, token: str) -> dict[str, str]:
         return {
             "Accept": "application/vnd.github+json",
@@ -4479,6 +4509,78 @@ def _safe_github_source_path(value: str) -> bool:
         return False
     path = PurePosixPath(value)
     return not path.is_absolute() and all(part not in {"", ".", ".."} for part in path.parts)
+
+
+async def _download_bounded(response: httpx.Response, sink: Any) -> None:
+    declared = response.headers.get("content-length", "")
+    total = 0
+    if declared.isdigit() and int(declared) > REPOSITORY_DOWNLOAD_MAX_BYTES:
+        total = int(declared)
+    else:
+        async for chunk in response.aiter_bytes():
+            total += len(chunk)
+            if total > REPOSITORY_DOWNLOAD_MAX_BYTES:
+                break
+            sink.write(chunk)
+    if total > REPOSITORY_DOWNLOAD_MAX_BYTES:
+        raise IntegrationAuthorizationError(
+            "The selected repository is outside the procedure workspace limits: its archive "
+            f"exceeds {REPOSITORY_DOWNLOAD_MAX_BYTES:,} bytes"
+        )
+    sink.seek(0)
+
+
+def _git_blob_sha(content: bytes, expected: str) -> str:
+    digest = hashlib.sha256() if len(expected) == 64 else hashlib.sha1(usedforsecurity=False)
+    digest.update(b"blob %d\0" % len(content))
+    digest.update(content)
+    return digest.hexdigest()
+
+
+def _verified_tarball_blobs(fileobj: Any, wanted: dict[str, dict[str, Any]]) -> dict[str, bytes]:
+    """Read the tree's eligible files from a GitHub tarball; skip anything unverified."""
+    contents: dict[str, bytes] = {}
+    root: str | None = None
+    try:
+        with tarfile.open(fileobj=fileobj, mode="r|gz") as archive:
+            for member in archive:
+                head, _, path = member.name.partition("/")
+                root = head if root is None else root
+                if not head or head != root:
+                    raise IntegrationUpstreamError("GitHub repository tarball layout is invalid")
+                item = wanted.get(path)
+                if (
+                    item is None
+                    or path in contents
+                    or not member.isreg()
+                    or member.size != item["size"]
+                ):
+                    continue
+                handle = archive.extractfile(member)
+                content = handle.read() if handle is not None else b""
+                if (
+                    len(content) == item["size"]
+                    and _git_blob_sha(content, item["sha"]) == item["sha"]
+                ):
+                    contents[path] = content
+    except (tarfile.TarError, EOFError, OSError, zlib.error) as exc:
+        raise IntegrationUpstreamError("GitHub repository tarball is unreadable") from exc
+    return contents
+
+
+def _repository_archive(blobs: list[dict[str, Any]], contents: dict[str, bytes]) -> bytes:
+    archive_buffer = io.BytesIO()
+    with tarfile.open(fileobj=archive_buffer, mode="w:gz", format=tarfile.PAX_FORMAT) as archive:
+        for item in sorted(blobs, key=lambda value: value["path"]):
+            content = contents[item["path"]]
+            info = tarfile.TarInfo(name=item["path"])
+            info.size = len(content)
+            info.mode = 0o755 if item["mode"] == "100755" else 0o644
+            info.mtime = 0
+            info.uid = info.gid = 0
+            info.uname = info.gname = ""
+            archive.addfile(info, io.BytesIO(content))
+    return archive_buffer.getvalue()
 
 
 def _safe_github_ref(value: str) -> bool:

@@ -17,45 +17,24 @@ from tin_lite.run_service import start_workflow_run
 from tin_lite.workflow_inputs import WorkflowInputError
 
 
-def test_snapshot_bounds_are_explicit_and_legacy_definitions_keep_their_limits():
+def test_repository_workspaces_share_the_gateway_bounds():
     from tin_lite.procedures import validate_codex_procedure_definition
 
     chosen = next(w for w in BUILTIN_WORKFLOWS if w.key == delivery.KEY)
     definition, _ = chosen.definition_and_resource_files()
     spec = validate_codex_procedure_definition(definition)
-    assert (spec.workspace_max_files, spec.workspace_max_bytes) == (1000, 100_000_000)
     for workflow in BUILTIN_WORKFLOWS:
-        if workflow.executor != "codex.procedure":
-            continue
-        current, _ = workflow.definition_and_resource_files()
-        parsed = validate_codex_procedure_definition(current)
-        if parsed.repository_workspace:
-            assert current["procedure"]["workspace"]["limits"] == {
-                "max_files": 1000,
-                "max_bytes": 100_000_000,
-            }
-            assert (parsed.workspace_max_files, parsed.workspace_max_bytes) == (1000, 100_000_000)
-            legacy = deepcopy(current)
-            del legacy["procedure"]["workspace"]["limits"]
-            original = validate_codex_procedure_definition(legacy)
-            assert (original.workspace_max_files, original.workspace_max_bytes) == (500, 10_000_000)
-        else:
+        if workflow.executor == "codex.procedure":
+            current, _ = workflow.definition_and_resource_files()
             assert "limits" not in current["procedure"]["workspace"]
-    # Previously explicit 20 MB contracts remain unchanged too.
-    older = deepcopy(definition)
-    older["procedure"]["workspace"]["limits"] = {"max_files": 1000, "max_bytes": 20_000_000}
-    assert validate_codex_procedure_definition(older).workspace_max_bytes == 20_000_000
+    # Stored definitions that still pin their former limits parse to the same contract.
     for limits in (
-        {"max_files": 1001, "max_bytes": 20_000_000},
-        {"max_files": True, "max_bytes": 1},
-        {"max_files": 1, "max_bytes": 100_000_001},
-        {"max_files": 1, "max_bytes": True},
-        {"max_files": 1, "max_bytes": 0},
+        {"max_files": 1000, "max_bytes": 100_000_000},
+        {"max_files": 1000, "max_bytes": 20_000_000},
     ):
-        changed = deepcopy(definition)
-        changed["procedure"]["workspace"]["limits"] = limits
-        with pytest.raises(ValueError, match="limits"):
-            validate_codex_procedure_definition(changed)
+        older = deepcopy(definition)
+        older["procedure"]["workspace"]["limits"] = limits
+        assert validate_codex_procedure_definition(older) == spec
 
 
 async def prepared(db, monkeypatch, *, approved=True):

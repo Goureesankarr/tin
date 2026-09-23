@@ -36,14 +36,12 @@ approval of its content; it does not silently acquire a publishing action.
   GitHub gateway checks the destination, overlaps and retry identity, and opens an
   unmerged PR. Unrelated base advances use the existing bounded content-delivery exception;
   changed destination paths are not silently rebased.
-- Current repository procedure definitions explicitly permit snapshots of up to 1,000
-  files / 100 MB (individual file cap remains 2 MB). This includes article delivery,
-  site health, technical fixes and code maps. Legacy definitions without explicit limits
-  retain 500 files / 10 MB; earlier explicit 20 MB definitions keep that limit. Limits
-  are pinned in the definition and bound into gateway request identity. Saved configurations
-  keep their selected revision; select the updated definition to use the larger snapshot.
-  Oversized repositories fail before blob downloads, with their eligible file count and
-  byte total alongside the pinned limits.
+- Every repository procedure (article delivery, site health, technical fixes, code maps)
+  reads a snapshot of up to 20,000 eligible files / 100 MB, each file at most 2 MB. The
+  gateway downloads the pinned commit as one tarball and checks every file against its blob
+  hash in the pinned tree; paths the tarball omits or rewrites (`export-ignore`,
+  `export-subst`) are read individually. Oversized repositories fail before the download,
+  with their eligible file count and byte total alongside the bound.
 - A canonical receipt at `content/deliveries/{run_id}.md` links the PR. The original
   Markdown and the roadmap are unchanged. Status, article choices, titles and PR links
   are Postgres projections, shared by HTTP/MCP and the existing content card.
