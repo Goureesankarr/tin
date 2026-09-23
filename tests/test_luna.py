@@ -310,7 +310,7 @@ async def test_responses_client_does_not_hide_retries() -> None:
 
     client = OpenAIResponsesClient(
         api_key="test-key",  # noqa: S106
-        model="gpt-5.6-luna",
+        model="gpt-6-luna",
         base_url="https://api.openai.test/v1",
         timeout_seconds=1,
         transport=httpx.MockTransport(fail_once),
@@ -336,7 +336,7 @@ async def test_responses_timeout_is_transport_only_and_failure_is_safe(monkeypat
 
     client = OpenAIResponsesClient(
         api_key="test-key",
-        model="gpt-5.6-luna",  # noqa: S106
+        model="gpt-6-luna",  # noqa: S106
         base_url="https://api.openai.test/v1",
         timeout_seconds=90,
         transport=httpx.MockTransport(timeout),

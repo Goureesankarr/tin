@@ -62,8 +62,8 @@ pins those cases.
 
 ## Model steps
 
-`profile` and `verdict` and `diagnose` use `gpt-6-astra`; `seeds`, `classify` and `repair` use
-`gpt-5.6-luna`. Each step has one retry under its own `:retry` id and the verdict gets one
+`profile` and `verdict` and `diagnose` use `gpt-6-sol`; `seeds`, `classify` and `repair` use
+`gpt-6-luna`. Each step has one retry under its own `:retry` id and the verdict gets one
 repair pass; code then clamps anything still outside its bounds. The verdict step receives the
 decision, the binding constraint and the numeric ranges as fixed inputs and may only explain,
 cite evidence ids and shape the campaign inside them.

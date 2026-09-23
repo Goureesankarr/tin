@@ -26,7 +26,7 @@ from tin_lite.model_providers import (
 SITE_HEALTH_MODEL_ROUTE = ModelRoute(
     key="site-health-fix-v1",
     provider=ProviderName.OPENAI,
-    model="gpt-5.6-luna",
+    model="gpt-6-luna",
     capabilities=frozenset(
         {
             ModelCapability.TEXT,

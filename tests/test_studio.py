@@ -332,7 +332,7 @@ def test_creative_studio_workflows_are_registered_with_studio_sandboxes() -> Non
         assert "integration_requirements" not in definition
     # The character is a native model workflow; only the demo needs the studio sandbox.
     assert "procedure" not in character
-    assert character["model_route"]["model"] == "gpt-6-astra"
+    assert character["model_route"]["model"] == "gpt-6-sol"
     assert demo["procedure"]["sandbox"]["profile"] == STUDIO_SANDBOX_PROFILE
     assert demo["procedure"]["sandbox"]["egress"] == "open"
     assert demo["procedure"]["output"] == {

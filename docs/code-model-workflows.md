@@ -22,7 +22,7 @@ Add `model_routes` to the existing `code` contract:
 {
   "classification": {
     "provider": "openai",
-    "model": "gpt-5.6-luna",
+    "model": "gpt-6-luna",
     "max_calls": 1,
     "max_input_bytes": 4096,
     "max_output_tokens": 512
@@ -50,7 +50,7 @@ The response has `text` and `parsed`; without an output schema, `parsed` is `Non
 logical call across execution attempts. Repeating an identical completed request returns the
 saved result. A different request needs a distinct step and another declared call allowance.
 
-Current supported routes are explicitly `openai/gpt-5.6-luna` and `openai/gpt-6-astra`, through
+Current supported routes are explicitly `openai/gpt-6-luna` and `openai/gpt-6-sol`, through
 the existing OpenAI adapter and pinned supplier price card. Other providers/models and custom
 URLs fail validation; a configured credential alone does not admit an unpriced route.
 

@@ -44,7 +44,7 @@ def markdown_page() -> str:
 
 
 class FakeResponses:
-    model = "gpt-5.6-luna"
+    model = "gpt-6-luna"
 
     def __init__(self) -> None:
         self.payloads: list[dict] = []
@@ -294,7 +294,7 @@ class FakeDrafter:
         await asyncio.sleep(0)
         return {
             "response_id": "resp_answer_page",
-            "model": "gpt-5.6-luna",
+            "model": "gpt-6-luna",
             "markdown": markdown_page(),
             "search_calls": 1,
             "queries": ["durable AI workflows"],

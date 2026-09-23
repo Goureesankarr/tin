@@ -70,14 +70,14 @@ Stopping a run or replacing its sandbox/fencing tuple prevents new relay admissi
 
 ## Transport and usage
 
-The protected isolated controller selects a custom Responses provider in Codex 0.153.4:
+The protected isolated controller selects a custom Responses provider in Codex 0.156.1:
 `requires_openai_auth=false`, WebSockets disabled, both request and stream retries zero.
 An environment-backed `X-Tin-Codex-Grant` reaches only the controller; user tools run under
 the existing separate credential-free UID. No `auth.json` is fetched and no broker grant
 is issued for an API attempt. The provider key remains on the switchboard.
 
 The relay fixes the upstream to OpenAI and permits only POST `responses` and
-`responses/compact`. The original v1 pilot pins `gpt-6-astra`, default service tier, at most eight
+`responses/compact`. The original v1 pilot pins `gpt-6-sol`, default service tier, at most eight
 requests, 256 KiB request bodies, 4,096 output tokens per ordinary response, one hosted
 tool call per response, and stops further requests after 100,000 observed cumulative
 tokens. These are request/observed-token bounds, **not a guaranteed dollar ceiling**.
@@ -98,13 +98,16 @@ this is not unlimited customer liability or unlimited supplier spending protecti
 
 New, customer-funded ordinary procedures (`default` and `isolated`) pin
 **`tin-codex-api-v4`** and `funding=procedure_session_v1`. Their Responses requests use
-GPT-6 Astra's supported 128,000 output-token maximum and 1,050,000-token context. The
+GPT-6 Sol's supported 128,000 output-token maximum and 1,050,000-token context. The
 controller compacts at 922,000 context tokens, leaving room for one maximum response.
 An explicit smaller output limit remains valid. Output tokens include reasoning; these
 are per-response/context limits, not a cumulative session allowance. Requests remain
 bounded to 8 MiB; artifact, tool, sandbox isolation and timeout contracts still apply.
 There is no separate 64-request or lifetime-token stop for these sessions.
-[Model limits](https://developers.openai.com/api/docs/models/gpt-6-astra).
+[Model limits](https://developers.openai.com/api/docs/models/gpt-6-sol).
+
+Every contract named `gpt-6-astra` until 2026-09-23. Runs admitted before then keep
+that pin; new runs use `gpt-6-sol`.
 
 Tin authorizes the existing $5 session maximum once, internally holding those credits
 until settlement. Each request checks the run grant, project membership, current spending
@@ -133,7 +136,7 @@ isolation probe. Historical readiness checks remain supported. Roll back by stop
 new admissions and retaining a v4-capable worker for admitted v4 runs; do not rewrite
 those runs' terms or resume them with an older controller.
 
-Codex 0.153.4's custom provider performs context compaction using an ordinary Responses
+Codex 0.156.1's custom provider performs context compaction using an ordinary Responses
 model call. That call therefore has the same reservation, actual supplier model/tier/usage,
 and settlement as its other model steps. No second summarizer is added. The separate remote
 `/responses/compact` endpoint remains excluded from billed execution: it has no requested
@@ -222,15 +225,17 @@ OAuth tariff or bypass an existing billing account.
 
 ## Test-credit settlement
 
-The immutable `openai-codex-standard-2026-09-12-v1` card names OpenAI, `gpt-6-astra`,
+The immutable `openai-codex-standard-2026-09-23-v1` card names OpenAI, `gpt-6-sol`,
 default service tier, cache-write rates, long-context rates, and hosted search charges.
-Rates are from the [model page](https://developers.openai.com/api/docs/models/gpt-6-astra),
+Rates are from the [model page](https://developers.openai.com/api/docs/models/gpt-6-sol),
 [caching contract](https://developers.openai.com/api/docs/guides/prompt-caching), and
 [tool pricing](https://developers.openai.com/api/docs/pricing). Per million tokens: ordinary
-input $10, cached input $1, cache writes $12.50, output $50. Above 272,000 input tokens,
+input $2, cached input $0.20, cache writes $2.50, output $10. Above 272,000 input tokens,
 all input/cache rates double and output is 1.5x for that response. Search is $0.01/call,
 plus its model tokens. Ordinary input is input minus cache hits minus cache writes.
 Never modify this card in place or reinterpret old receipts when adding another rate card.
+The earlier `openai-codex-standard-2026-09-12-v1` card (`gpt-6-astra`: $10 / $1 / $12.50 /
+$50) stays in `HISTORICAL_RATE_CARDS` so runs that pinned it still settle at their rates.
 
 The original quote/run admission pinned those rates and the API auth path atomically with a
 $5 reservation. New runs instead use [per-call funding](workflow-credit-simplification.md):

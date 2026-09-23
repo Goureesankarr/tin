@@ -54,7 +54,7 @@ Keep rubric questions independent; no overall score. Maintainers review cases an
   {"path": declared_path, "content": text}. Code has no direct network or secrets.
 - Managed steps: optional code.model_routes, at most four routes and eight total calls.
   Each names provider/model/max_calls/max_input_bytes/max_output_tokens. Supported targets:
-  openai/gpt-5.6-luna and openai/gpt-6-astra. Per-route max_calls 1–4, input bytes 1024–32000,
+  openai/gpt-6-luna and openai/gpt-6-sol. Per-route max_calls 1–4, input bytes 1024–32000,
   output tokens 64–4096. Call await ctx.models.generate(route=..., step=..., instructions=...,
   data=..., output_schema=...). Validate result["parsed"] before use. Keep step IDs stable.
 - codex.procedure: PROMPT.md plus skills/<name>/SKILL.md and declared text resources.

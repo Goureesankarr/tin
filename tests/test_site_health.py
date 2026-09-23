@@ -30,7 +30,7 @@ class FakeRouter:
         self.calls.append((route_key, request))
         return ModelResult(
             provider=ProviderName.OPENAI,
-            model="gpt-5.6-luna",
+            model="gpt-6-luna",
             text="structured",
             parsed=self.parsed,
             request_id="resp_site_health",

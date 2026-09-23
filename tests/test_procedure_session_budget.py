@@ -37,7 +37,7 @@ def test_session_contract_and_model_capacity(tmp_path):
         == 12345
     )
     config = tmp_path / "config.toml"
-    config.write_text('model="gpt-6-astra"\n')
+    config.write_text('model="gpt-6-sol"\n')
     load_sandbox_module("codex_api_config").configure(
         config,
         {
@@ -83,7 +83,10 @@ async def test_long_session_uses_returned_usage_without_wallet_lock_or_history_r
 
     f = billed
     run, relay, client, sent = await paid_relay(
-        f, contract=SESSION_CONTRACT, provider_usage=(30_000, 1, 30_000, 0)
+        # 150,000 cached x $0.20/M + 5 x $10/M = $0.03005 per response: about $3 over 100.
+        f,
+        contract=SESSION_CONTRACT,
+        provider_usage=(150_000, 5, 150_000, 0),
     )
     prices = []
 
@@ -130,14 +133,17 @@ async def test_long_session_uses_returned_usage_without_wallet_lock_or_history_r
 async def test_final_response_overage_never_increases_customer_ceiling(billed):
     f = billed
     run, relay, client, sent = await paid_relay(
-        f, contract=SESSION_CONTRACT, provider_usage=(300_000, 128_000, 0, 0)
+        # Long context at gpt-6-sol: 1M x $4/M + 128,000 x $15/M = $5.92, over the $5 ceiling.
+        f,
+        contract=SESSION_CONTRACT,
+        provider_usage=(1_000_000, 128_000, 0, 0),
     )
     try:
         assert (await post(client, run)).status_code == 200
         assert (await post(client, run, {**BODY, "input": "another step"})).status_code == 402
         operation = await f.db.pool.fetchrow("SELECT * FROM billing_operations")
         assert operation["observed_nanos"] == MAXIMUM
-        assert json.loads(operation["observation"])["overage_absorbed_nanos"] == 10_600_000_000
+        assert json.loads(operation["observation"])["overage_absorbed_nanos"] == 920_000_000
         await finish(f, run)
         assert await f.billing.settle(run.id) == MAXIMUM
         assert len(sent) == 1

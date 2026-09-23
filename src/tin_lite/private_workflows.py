@@ -801,8 +801,7 @@ def authoring_guide(*, settings, project_id):
                     "route=..., step=..., instructions=..., data=..., output_schema=None)"
                 ),
                 "routes": [
-                    {"provider": "openai", "model": model}
-                    for model in ("gpt-5.6-luna", "gpt-6-astra")
+                    {"provider": "openai", "model": model} for model in ("gpt-6-luna", "gpt-6-sol")
                 ],
                 "limits": (
                     "Declare max_calls (1-4 per route, 8 total), "

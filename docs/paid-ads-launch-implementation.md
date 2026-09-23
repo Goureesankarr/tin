@@ -50,7 +50,7 @@ keywords from `keywords.csv` (never broad; a group the assessment named as held 
 "pending purchase evidence", is created paused), and the shared negative list from the assessment,
 the starter list in `paid_ads_launch_assets/negatives.json` and the irrelevant keywords. Model
 steps then write twelve headlines and four descriptions per ad group, sitelinks and callouts
-(`paid-ads-launch-copy-v1`, `gpt-6-astra`), expand the negative themes and write the founder
+(`paid-ads-launch-copy-v1`, `gpt-6-sol`), expand the negative themes and write the founder
 brief; code validates lengths, duplicates, capitals, superlatives and competitor names, allows
 one repair pass, and publishes `ads/google/{run}/PLAN.md`, `plan.json` and `negatives.csv`.
 The run then requests the single human review; the review's summary says which of the two

@@ -135,7 +135,7 @@ def response(text="Useful answer", *, search=True, citations=None):
     return {
         "id": "resp_test",
         "status": "completed",
-        "model": "gpt-5.6-luna",
+        "model": "gpt-6-luna",
         "usage": {"input_tokens": 500, "output_tokens": 200},
         "output": [
             *(

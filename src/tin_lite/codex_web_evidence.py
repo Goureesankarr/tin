@@ -1,7 +1,7 @@
 """Carry hosted search evidence through Codex's stateless tool history.
 
 Responses returns page text with include=web_search_call.results, but replaying
-that field on a web_search_call does not make the text model input. Codex 0.153.4
+that field on a web_search_call does not make the text model input. Codex 0.156.1
 supports unsolicited function_call_output items (no call_id) for external data.
 Use that existing wire shape; never invent an assistant message or another tool
 execution, persist a provider conversation, or interpret source text as commands.

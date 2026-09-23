@@ -77,7 +77,7 @@ def test_procedure_context_config_does_not_change_v1(tmp_path, contract):
 
     module = load_sandbox_module("codex_api_config")
     path = tmp_path / "config.toml"
-    path.write_text('model="gpt-6-astra"\n[mcp_servers.test]\ncommand="true"\n')
+    path.write_text('model="gpt-6-sol"\n[mcp_servers.test]\ncommand="true"\n')
     module.configure(
         path,
         {
@@ -439,7 +439,7 @@ async def test_multiple_searches_compaction_and_retry_settle_once(billed, monkey
         await f.billing.settle(run.id)
         await f.billing.settle(run.id)
         charge = await f.billing.run_charge(run.id, ACTOR)
-        assert charge["charged_usd"] == "0.06"
+        assert charge["charged_usd"] == "0.04"
         assert len(sent) == 2
         assert all("max_tool_calls" not in json.loads(request.content) for request in sent)
         assert (
@@ -449,7 +449,7 @@ async def test_multiple_searches_compaction_and_retry_settle_once(billed, monkey
             == 1
         )
         usage = await read_run_usage(database=f.db, run=run)
-        assert Decimal(usage["own"]["totals"]["known_api_list_price_usd"]) == Decimal("0.0582")
+        assert Decimal(usage["own"]["totals"]["known_api_list_price_usd"]) == Decimal("0.03564")
     finally:
         await client.aclose()
         await relay.close()
@@ -610,7 +610,7 @@ async def test_diagram_images_use_quoted_tokens_and_settle_once(billed, monkeypa
             )
             == 1
         )
-        assert (await f.billing.run_charge(run.id, ACTOR))["charged_usd"] == "0.12"
+        assert (await f.billing.run_charge(run.id, ACTOR))["charged_usd"] == "0.02"
     finally:
         await client.aclose()
         await relay.close()

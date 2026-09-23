@@ -97,9 +97,9 @@ def test_contract_and_schema_are_stable_and_closed():
     assert launch.INPUT_SCHEMA["additionalProperties"] is False
     assert launch.contract_digest() == launch.contract_digest()
     assert [(r["provider"], r["model"]) for r in launch.route_definitions()] == [
-        ("openai", "gpt-6-astra"),
-        ("openai", "gpt-6-astra"),
-        ("openai", "gpt-5.6-luna"),
+        ("openai", "gpt-6-sol"),
+        ("openai", "gpt-6-sol"),
+        ("openai", "gpt-6-luna"),
     ]
     assert launch.route_for("copy").key == "paid-ads-launch-copy-v1"
     assert launch.route_for("brief").key == "paid-ads-judgment-v1"

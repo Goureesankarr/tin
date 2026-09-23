@@ -548,7 +548,8 @@ async def test_live_runner_stops_for_human_review_without_approving(tmp_path):
 
 async def test_unrounded_model_usage_and_actual_settlement_remain_separate(billed):
     f = billed
-    run, _, application, _ = await paid_relay(f, provider_usage=(100, 60, 0, 0))
+    # gpt-6-sol: 500 x $2/M + 300 x $10/M = $0.004, below the one-cent settlement unit.
+    run, _, application, _ = await paid_relay(f, provider_usage=(500, 300, 0, 0))
     response = await post(application, run)
     assert response.status_code == 200
     await application.aclose()

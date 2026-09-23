@@ -140,7 +140,7 @@ def test_workflow_ui_hints_are_versioned_inside_the_input_schema() -> None:
 
 
 class FakeResponses:
-    model = "gpt-5.6-luna"
+    model = "gpt-6-luna"
 
     async def create(self, payload):
         assert payload["store"] is False

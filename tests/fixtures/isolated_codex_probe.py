@@ -239,7 +239,7 @@ class Handler(BaseHTTPRequestHandler):
             "id": f"resp_{number}",
             "object": "response",
             "status": "completed",
-            "model": "gpt-6-astra",
+            "model": "gpt-6-sol",
             "output": output,
             "usage": {
                 "input_tokens": input_tokens,

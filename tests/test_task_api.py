@@ -80,11 +80,12 @@ async def test_task_questions_retries_and_next_turn_charge_once(billed, monkeypa
     wire = httpx.MockTransport(
         lambda request: httpx.Response(
             200,
+            # gpt-6-sol: 5,000 x $2/M + 1,000 x $10/M = $0.02 per turn, so each turn shows.
             content=result_event(
                 usage={
-                    "input_tokens": 1000,
-                    "output_tokens": 200,
-                    "total_tokens": 1200,
+                    "input_tokens": 5000,
+                    "output_tokens": 1000,
+                    "total_tokens": 6000,
                     "input_tokens_details": {"cached_tokens": 0, "cache_write_tokens": 0},
                 }
             ),

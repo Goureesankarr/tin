@@ -57,12 +57,12 @@ attempt can recover its checkpoint but cannot purchase the model work again.
 ### Prices and ceilings
 
 `service_pricing.py` pins `tin-native-supplier-2026-09-22-v1` in each new budget.
-Its currently used routes are OpenAI GPT-5.6 Luna and GPT-6 Astra, standard tier.
+Its currently used routes are OpenAI GPT-6 Luna and GPT-6 Sol, standard tier.
 The card distinguishes uncached input, cached reads, cache writes, output, long
 context and web search. Pricing sources:
 
 - [OpenAI API pricing](https://developers.openai.com/api/docs/pricing)
-- [GPT-5.6 Luna](https://developers.openai.com/api/docs/models/gpt-5.6-luna)
+- [GPT-6 Luna](https://developers.openai.com/api/docs/models/gpt-6-luna)
 - [DataForSEO task response cost](https://docs.dataforseo.com/v3/on_page/task_post/)
 
 Provider adapters remain independent from pricing. A new Anthropic, Gemini or

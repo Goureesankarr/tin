@@ -91,7 +91,7 @@ async def admit(f, key, inputs=None, *, parent=None, step=None):
     return run
 
 
-def response(*, model="gpt-5.6-luna", searches=2):
+def response(*, model="gpt-6-luna", searches=2):
     return {
         "id": "resp-supplier-fixture",
         "object": "response",
@@ -137,7 +137,7 @@ def test_supplier_rates_caching_search_and_unknowns():
     terms = service_terms(SPECS["visibility.audit"].definition)
     record = {
         "provider": "openai",
-        "model": "gpt-5.6-luna",
+        "model": "gpt-6-luna",
         "service_tier": "default",
         "outcome": "response_received",
         "usage": {
@@ -149,7 +149,7 @@ def test_supplier_rates_caching_search_and_unknowns():
             "web_search_calls": 2,
         },
     }
-    assert receipt_charge(terms, "native_model", record)[0] == 20_299_000
+    assert receipt_charge(terms, "native_model", record)[0] == 20_139_500
     for patch in (
         {"model": "unknown"},
         {"provider": "anthropic"},
@@ -204,7 +204,7 @@ async def test_search_response_and_dataforseo_settle_once(billed, monkeypatch, l
 
     client = OpenAIResponsesClient(
         api_key="fake",
-        model="gpt-5.6-luna",
+        model="gpt-6-luna",
         base_url="https://model.test/v1",
         timeout_seconds=5,
         transport=httpx.MockTransport(wire),
@@ -255,9 +255,19 @@ async def test_native_adapter_supplier_usage_and_pre_dispatch_unpriced_rejection
     run = await native_run(f)
     sent = []
 
+    # Four times the shared fixture's usage: 4 x $0.00279 at gpt-6-sol settles as a visible $0.01.
+    body = response(model="gpt-6-sol", searches=0)
+    body["usage"] = {
+        "input_tokens": 4000,
+        "output_tokens": 400,
+        "total_tokens": 4400,
+        "input_tokens_details": {"cached_tokens": 800, "cache_write_tokens": 1200},
+        "output_tokens_details": {"reasoning_tokens": 160},
+    }
+
     def wire(req):
         sent.append(req)
-        return httpx.Response(200, json=response(model="gpt-6-astra", searches=0))
+        return httpx.Response(200, json=body)
 
     from openai import AsyncOpenAI
 
@@ -269,9 +279,7 @@ async def test_native_adapter_supplier_usage_and_pre_dispatch_unpriced_rejection
             http_client=httpx.AsyncClient(transport=httpx.MockTransport(wire)),
         ),
     )  # noqa: S106
-    route = ModelRoute(
-        "test", ProviderName.OPENAI, "gpt-6-astra", frozenset({ModelCapability.TEXT})
-    )
+    route = ModelRoute("test", ProviderName.OPENAI, "gpt-6-sol", frozenset({ModelCapability.TEXT}))
     request = ModelRequest(
         messages=(ModelMessage(MessageRole.USER, "Generate a character"),), max_output_tokens=100
     )
@@ -501,12 +509,12 @@ def test_reservation_uses_cache_write_upper_bound():
         model_maximum(
             terms,
             provider="openai",
-            model="gpt-5.6-luna",
+            model="gpt-6-luna",
             input_tokens=1000,
             output_tokens=100,
             searches=2,
         )
-        == 20_370_000
+        == 20_175_000
     )
 
 
@@ -704,7 +712,7 @@ async def test_unfinished_extra_search_never_locks_credits_for_verified_model_us
 
     client = OpenAIResponsesClient(
         api_key="synthetic",
-        model="gpt-5.6-luna",
+        model="gpt-6-luna",
         base_url="https://model.test/v1",
         timeout_seconds=5,
         transport=httpx.MockTransport(wire),
@@ -729,7 +737,7 @@ async def test_unfinished_extra_search_never_locks_credits_for_verified_model_us
 def test_old_partial_search_receipt_prices_tokens_but_waives_unconfirmed_search_fees():
     record = {
         "provider": "openai",
-        "model": "gpt-5.6-luna",
+        "model": "gpt-6-luna",
         "service_tier": "default",
         "outcome": "response_received",
         "usage": {
@@ -745,7 +753,7 @@ def test_old_partial_search_receipt_prices_tokens_but_waives_unconfirmed_search_
     amount, proof = receipt_charge(
         service_terms(SPECS["organic.audit"].definition), "native_model", record
     )
-    assert amount == 299_000
+    assert amount == 139_500
     assert proof["unpriced_search_fees_absorbed"] == 4
 
 

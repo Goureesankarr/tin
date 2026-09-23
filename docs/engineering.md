@@ -308,7 +308,7 @@ what is known about the business, the scorer profile (each parameter needs a ver
 the evidence or code drops it), the scope decision (where growth breaks, which few systems, the
 founder's part, one number to watch), one role per system, the table cells and the spoken view
 with the answers to what the founder asked for. The judgment steps (`facts`, `scope`, `view`)
-use `gpt-6-astra`; the mechanical steps use `gpt-5.6-luna`; both at medium effort, pinned in the
+use `gpt-6-sol`; the mechanical steps use `gpt-6-luna`; both at medium effort, pinned in the
 definition with a digest of the rules, rubric, programs, scorer and prompts. When code changes a
 system's setup after its text was written, that text is rewritten to match the final setup; a
 code-side lint then sends only the offending sentences for one or two short repairs. Each step
@@ -338,7 +338,7 @@ joined, kept one release for clients on older instructions.
 extracts what a designer would notice (title, description, headings, calls to action, body
 text, brand colors weighted by where they appear, JSON-LD and Open Graph facts for
 client-rendered shells), pairs that with project memory and the founder's brief, and sends one
-prepared request to `gpt-6-astra` at medium reasoning with a strict JSON schema for the concept
+prepared request to `gpt-6-sol` at medium reasoning with a strict JSON schema for the concept
 and the drawing. The result is one animatable SVG at `characters/{slug}.svg`; the
 `character-svg.v1` contract accepts only pure geometry (no text, images, scripts, or external
 references) with the five state groups the video renderer flips: `mouth-closed`, `mouth-mid`,
@@ -372,7 +372,7 @@ switchboard fetches the product page itself (public HTTPS only, resolved address
 and up to three stylesheets bounded), extracts what a designer would notice (title, description,
 headings, calls to action, body text, brand colors weighted by where they appear, JSON-LD and
 Open Graph facts for client-rendered shells), pairs that with project memory and the founder's
-brief, and sends one prepared request to `gpt-6-astra` at medium reasoning with a strict JSON
+brief, and sends one prepared request to `gpt-6-sol` at medium reasoning with a strict JSON
 schema for the concept and the drawing. The validator's exact complaints go back for at most two
 repairs, and one refinement pass plays the role of the agent's look-and-fix step. Each model call
 and the publication are effect receipts, so a retry replays instead of paying again. Neither
@@ -416,7 +416,7 @@ POST /api/chat
 GET  /api/projects/{project_id}/chat/messages
 ```
 
-Luna uses `gpt-5.6-luna` on the Responses API. Its tools are compiled from `GET /api/workflows`,
+Luna uses `gpt-6-luna` on the Responses API. Its tools are compiled from `GET /api/workflows`,
 and a selected action is executed through `POST /api/workflows/{id}/runs`; there is no privileged
 model-only dispatch path. The trusted switchboard reads `TIN_LITE_LUNA_API_KEY`. That credential
 is never sent to Temporal history or an E2B sandbox. `OPENAI_API_KEY` and

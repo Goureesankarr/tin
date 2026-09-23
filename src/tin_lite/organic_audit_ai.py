@@ -560,7 +560,7 @@ def summarize(
     }
     summary = (
         f"{len(complete)}/{planned} planned observations completed. "
-        "OpenAI GPT-5.6 Luna, search-enabled API, English. Two fresh answers per question. "
+        "OpenAI GPT-6 Luna, search-enabled API, English. Two fresh answers per question. "
         "This is a sampled API diagnostic, not consumer ChatGPT or cross-engine market share. "
     )
     if measured:
