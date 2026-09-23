@@ -30,8 +30,8 @@ def test_definition_pins_the_contract_and_the_assets_stay_consistent():
     assert definition["paid_ads_policy"] == paid_ads.POLICY
     assert definition["paid_ads_contract_sha256"] == paid_ads.contract_digest()
     assert [(r["provider"], r["model"]) for r in definition["paid_ads_routes"]] == [
-        ("openai", "gpt-6-astra"),
-        ("openai", "gpt-5.6-luna"),
+        ("openai", "gpt-6-sol"),
+        ("openai", "gpt-6-luna"),
     ]
     properties = definition["input_schema"]["properties"]
     for item in definition["prerequisites"]:

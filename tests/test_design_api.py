@@ -94,10 +94,11 @@ async def test_design_api_pins_and_charges_supplier_once(billed, monkeypatch):
         return httpx.Response(
             200,
             content=result_event(
+                # 5,000 x $2/M + 1,000 x $10/M = $0.02 at gpt-6-sol: a visible cent charge.
                 usage={
-                    "input_tokens": 1000,
-                    "output_tokens": 200,
-                    "total_tokens": 1200,
+                    "input_tokens": 5000,
+                    "output_tokens": 1000,
+                    "total_tokens": 6000,
                     "input_tokens_details": {"cached_tokens": 0, "cache_write_tokens": 0},
                 }
             ),

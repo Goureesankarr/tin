@@ -19,7 +19,7 @@ KEY = "organic.keyword_plan"
 ROUTE_KEY = "organic.keyword_plan.v1"
 POLICY = {
     "version": "keyword-plan-v1",
-    "model": "gpt-5.6-luna",
+    "model": "gpt-6-luna",
     "max_seeds": 8,
     "max_competitors": 3,
     "footprint_rows": 200,

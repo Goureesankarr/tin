@@ -17,7 +17,7 @@ KEY = "content.plan"
 ROUTE_KEY = "content.plan.v1"
 POLICY = {
     "version": "content-program-v1",
-    "model": "gpt-5.6-luna",
+    "model": "gpt-6-luna",
     "max_input_bytes": 240_000,
     "max_output_tokens": 16000,
     "reservation_usd": "1.00",

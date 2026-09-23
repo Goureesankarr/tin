@@ -15,7 +15,7 @@ mascot reacting in the corner. The design record is the "Creative studio outcome
 | Contracts | `sandbox/studio/studio_contracts.py` = `src/tin_lite/studio_contracts.py` | character SVG validator, MP4 validator, state flipping; a test keeps the copies identical |
 | Voice route | `src/tin_lite/run_tools.py`, `src/tin_lite/studio.py` | `POST /internal/run-tools/studio/voice` with the run grant; fal Gemini TTS + Whisper words; receipts + quotas |
 | Grants | migration `027_studio_run_tools.sql` | `run_tool_grants.provider_key = 'tin.studio'` with `connection_id NULL` |
-| Character workflow | `src/tin_lite/character_design.py`, `character_design_activities.py`, `example_character.svg` | page fetch and extraction, prompts, schema, validate/repair/refine, Temporal activities; route `creative.character.v1` = gpt-6-astra medium |
+| Character workflow | `src/tin_lite/character_design.py`, `character_design_activities.py`, `example_character.svg` | page fetch and extraction, prompts, schema, validate/repair/refine, Temporal activities; route `creative.character.v1` = gpt-6-sol medium |
 | Demo procedure | `codex_procedures/creative.product_demo/` | prompt + skill + `script-format.md` |
 | Catalog | `src/tin_lite/catalog.py` | system `creative-studio`, ids `…021` and `…022`, review-eligible, on demand only |
 | UI | `src/tin_lite/static/app.js` | Files renders `.svg` and plays `.mp4` from an authenticated blob; review approves from that view |
@@ -47,7 +47,7 @@ mascot reacting in the corner. The design record is the "Creative studio outcome
    text, JSON-LD and Open Graph facts, and a brand palette weighted by CSS context (button, CTA,
    `:root` and theme-color colors outrank syntax-highlighting themes). Saved as the
    `character_context` receipt.
-2. Step "design": one strict-schema request to gpt-6-astra (medium reasoning) with the
+2. Step "design": one strict-schema request to gpt-6-sol (medium reasoning) with the
    character-design rules as the system prompt and a JSON payload (brief, notes, memory, page
    facts, the example character). The model returns audience, product noun, concept, palette,
    SVG. The SVG is checked by `studio_contracts.validate_character_svg` plus geometry checks

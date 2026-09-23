@@ -389,7 +389,7 @@ def test_direct_workflow_is_registered_with_a_pinned_route_and_no_style_picker()
     assert direct["model_route"] == {
         "key": "creative.character.v1",
         "provider": "openai",
-        "model": "gpt-6-astra",
+        "model": "gpt-6-sol",
         "capabilities": ["json_schema", "reasoning_effort", "text"],
     }
     assert direct["human_review"]["review_label"] == "Review character"

@@ -58,7 +58,7 @@ class Settings(BaseSettings):
         default="Tin <hello@tin.computer>", alias="TIN_LITE_WELCOME_EMAIL_REPLY_TO"
     )
     posthog_host: str = Field(default="https://us.i.posthog.com", alias="TIN_LITE_POSTHOG_HOST")
-    luna_model: str = Field(default="gpt-5.6-luna", alias="TIN_LITE_LUNA_MODEL")
+    luna_model: str = Field(default="gpt-6-luna", alias="TIN_LITE_LUNA_MODEL")
     luna_base_url: str = Field(default="https://api.openai.com/v1", alias="TIN_LITE_LUNA_BASE_URL")
     luna_timeout_seconds: float = Field(default=90, alias="TIN_LITE_LUNA_TIMEOUT")
     anthropic_api_key: SecretStr | None = Field(default=None, alias="ANTHROPIC_API_KEY")

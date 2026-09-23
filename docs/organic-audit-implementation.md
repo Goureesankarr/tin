@@ -28,7 +28,7 @@ question preparation must not reinterpret an older run's pinned evidence.
 - Public search-backed research creates a frozen buyer panel: one to three supported
   jobs, four question families per job, two fresh answers per question. A separate
   validator rejects identity/fit errors and brand leakage. No repair/resampling loop.
-- Explicit OpenAI GPT-5.6 Luna route. Answering receives only the neutral buyer question
+- Explicit OpenAI GPT-6 Luna route. Answering receives only the neutral buyer question
   and market, not the target or project memory. Final-answer citations are distinct
   from provider-returned sources. When a complete answer contains none of the validated
   target names, deterministic code records name absence without a paid grading call.
@@ -139,7 +139,7 @@ at 21 KB, and crawl evidence at 240 KB. Oversized observations become unavailabl
 rather than being silently truncated and scored.
 
 Pricing was checked against [DataForSEO OnPage](https://dataforseo.com/pricing/on-page/onpage-api),
-[OpenAI model pricing](https://developers.openai.com/api/docs/models/gpt-5.6-luna),
+[OpenAI model pricing](https://developers.openai.com/api/docs/models/gpt-6-luna),
 [hosted-tool pricing](https://developers.openai.com/api/docs/pricing), and the
 [search-context limit](https://developers.openai.com/api/docs/guides/tools-web-search).
 Basic crawling is $0.00015/page; its reservation includes headroom. Model reservations

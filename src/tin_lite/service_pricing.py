@@ -11,28 +11,23 @@ from decimal import Decimal, InvalidOperation
 from tin_lite.billing_contracts import NANOS_PER_DOLLAR, BillingError, digest, token_charge
 
 CARD = {
-    "id": "tin-native-supplier-2026-09-22-v1",
+    "id": "tin-native-supplier-2026-09-23-v1",
     "source": "https://developers.openai.com/api/docs/pricing",
     "provider": "openai",
     "service_tier": "default",
     "long_context_above_input_tokens": 272_000,
     "models": {
-        "gpt-5.6-luna": {
-            "standard": {"input": 200, "cached_input": 20, "cache_write": 250, "output": 1200},
-            "long_context": {"input": 400, "cached_input": 40, "cache_write": 500, "output": 1800},
+        "gpt-6-luna": {
+            "standard": {"input": 100, "cached_input": 10, "cache_write": 125, "output": 500},
+            "long_context": {"input": 200, "cached_input": 20, "cache_write": 250, "output": 750},
         },
-        "gpt-6-astra": {
-            "standard": {
-                "input": 10_000,
-                "cached_input": 1000,
-                "cache_write": 12_500,
-                "output": 50_000,
-            },
+        "gpt-6-sol": {
+            "standard": {"input": 2000, "cached_input": 200, "cache_write": 2500, "output": 10_000},
             "long_context": {
-                "input": 20_000,
-                "cached_input": 2000,
-                "cache_write": 25_000,
-                "output": 75_000,
+                "input": 4000,
+                "cached_input": 400,
+                "cache_write": 5000,
+                "output": 15_000,
             },
         },
     },

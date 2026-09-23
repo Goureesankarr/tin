@@ -127,7 +127,7 @@ def adjudication() -> dict:
 
 
 class FakeResponses:
-    model = "gpt-5.6-luna"
+    model = "gpt-6-luna"
 
     def __init__(self, *responses: dict) -> None:
         self.responses = list(responses)
@@ -365,7 +365,7 @@ class FakeStorage:
 
 
 class FakeAuditor:
-    model = "gpt-5.6-luna"
+    model = "gpt-6-luna"
 
     def __init__(self) -> None:
         self.panel_calls = 0

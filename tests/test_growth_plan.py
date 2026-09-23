@@ -517,8 +517,8 @@ def test_definition_pins_the_contract_and_the_assets_stay_consistent():
     assert definition["plan_policy"] == plan.POLICY
     assert definition["plan_contract_sha256"] == plan.contract_digest()
     assert [(r["provider"], r["model"]) for r in definition["plan_routes"]] == [
-        ("openai", "gpt-6-astra"),
-        ("openai", "gpt-5.6-luna"),
+        ("openai", "gpt-6-sol"),
+        ("openai", "gpt-6-luna"),
     ]
     properties = definition["input_schema"]["properties"]
     assert definition["input_schema"]["required"] == ["project_id"]

@@ -37,13 +37,13 @@ _CAPABILITIES = frozenset(
 JUDGMENT_ROUTE = ModelRoute(
     key="paid-ads-judgment-v1",
     provider=ProviderName.OPENAI,
-    model="gpt-6-astra",
+    model="gpt-6-sol",
     capabilities=_CAPABILITIES,
 )
 DRAFTING_ROUTE = ModelRoute(
     key="paid-ads-drafting-v1",
     provider=ProviderName.OPENAI,
-    model="gpt-5.6-luna",
+    model="gpt-6-luna",
     capabilities=_CAPABILITIES,
 )
 ROUTES = (JUDGMENT_ROUTE, DRAFTING_ROUTE)

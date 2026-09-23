@@ -203,6 +203,10 @@ async def test_two_model_steps_validate_then_pass_results_to_next_step(invalid_i
 
 def test_estimate_covers_both_declared_model_steps():
     _, definition = example("example.feedback_digest")
+    # One gpt-6-luna call's bound is about $0.003, so the cent-rounded ceilings of one and two
+    # single-call steps are both $0.01. Four calls per step make each step's bound exceed a cent.
+    for route in definition["code"]["model_routes"].values():
+        route["max_calls"] = 4
     both = model_terms(definition)
     one = deepcopy(definition)
     del one["code"]["model_routes"]["summarize"]
@@ -326,7 +330,7 @@ async def test_public_multistep_model_recovery_reuses_paid_results(billed, monke
         charge = await f.billing.run_charge(UUID(run_id), ACTOR)
         operations = await f.db.pool.fetch("SELECT status, observed_nanos FROM billing_operations")
         assert all(row["status"] == "observed" for row in operations)
-        assert sum(row["observed_nanos"] for row in operations) == 640_000
+        assert sum(row["observed_nanos"] for row in operations) == 1_500_000
         # Two small Luna calls are below one cent. Preserve supplier precision; the existing
         # policy rounds once at root settlement, not up to a cent for each model step.
         assert charge["status"] == "settled" and charge["charged_usd"] == "0.00"

@@ -193,7 +193,7 @@ def request_body(raw: bytes, operation: str, contract=CONTRACT):
 
 
 def request_identity(headers, raw, operation):
-    # Codex 0.153.4 uses its THREAD id for x-client-request-id, not a per-call id.
+    # Codex 0.156.1 uses its THREAD id for x-client-request-id, not a per-call id.
     # Within our single-turn controller, a new model step changes explicit context.
     # Bind identical-request rejection to the actual turn/window as well as bytes.
     try:

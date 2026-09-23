@@ -15,24 +15,52 @@ from tin_lite.codex_api import (
 from tin_lite.workflow_costs import SESSION_FUNDING
 
 RATE_CARD = {
-    "id": "openai-codex-standard-2026-09-12-v1",
+    "id": "openai-codex-standard-2026-09-23-v1",
     "provider": "openai",
     "model": MODEL,
     "service_tier": "default",
-    "source": "https://developers.openai.com/api/docs/models/gpt-6-astra",
+    "source": "https://developers.openai.com/api/docs/models/gpt-6-sol",
     "tool_source": "https://developers.openai.com/api/docs/pricing",
     "cache_source": "https://developers.openai.com/api/docs/guides/prompt-caching",
     "unit": "USD_nanodollars_per_token",
-    "standard": {"input": 10_000, "cached_input": 1_000, "cache_write": 12_500, "output": 50_000},
+    "standard": {"input": 2_000, "cached_input": 200, "cache_write": 2_500, "output": 10_000},
     "long_context_above_input_tokens": 272_000,
     "long_context": {
-        "input": 20_000,
-        "cached_input": 2_000,
-        "cache_write": 25_000,
-        "output": 75_000,
+        "input": 4_000,
+        "cached_input": 400,
+        "cache_write": 5_000,
+        "output": 15_000,
     },
     "web_search_call_nanos": 10_000_000,
 }
+# Cards earlier runs pinned. They still price those runs' outstanding receipts;
+# new runs never select them.
+HISTORICAL_RATE_CARDS = (
+    {
+        "id": "openai-codex-standard-2026-09-12-v1",
+        "provider": "openai",
+        "model": "gpt-6-astra",
+        "service_tier": "default",
+        "source": "https://developers.openai.com/api/docs/models/gpt-6-astra",
+        "tool_source": "https://developers.openai.com/api/docs/pricing",
+        "cache_source": "https://developers.openai.com/api/docs/guides/prompt-caching",
+        "unit": "USD_nanodollars_per_token",
+        "standard": {
+            "input": 10_000,
+            "cached_input": 1_000,
+            "cache_write": 12_500,
+            "output": 50_000,
+        },
+        "long_context_above_input_tokens": 272_000,
+        "long_context": {
+            "input": 20_000,
+            "cached_input": 2_000,
+            "cache_write": 25_000,
+            "output": 75_000,
+        },
+        "web_search_call_nanos": 10_000_000,
+    },
+)
 # Reserve the entire pilot input envelope, not a guess at its cache-hit rate.
 # This is a customer liability ceiling, not a promise that the supplier cannot
 # exceed it (e.g. hidden search context). Tin absorbs that excess and stops calls.
@@ -103,7 +131,7 @@ def price_response(card, record):
     """Only complete, internally consistent supplier facts admit a price."""
     usage = record.get("usage")
     if (
-        card != RATE_CARD
+        (card != RATE_CARD and card not in HISTORICAL_RATE_CARDS)
         or record.get("pricing") != card
         or record.get("provider") != card["provider"]
         or record.get("model") != card["model"]

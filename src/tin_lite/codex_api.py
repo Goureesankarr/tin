@@ -61,7 +61,7 @@ async def record_attempt_failure(conn, key, exc=None):
     )
 
 
-MODEL = "gpt-6-astra"
+MODEL = "gpt-6-sol"
 # Execution bounds; enrolled API runs separately pin their billing terms.
 CONTRACT = {
     "mode": MODE,

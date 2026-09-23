@@ -17,7 +17,7 @@ MAX_GUIDE_BYTES = 24_000
 ROUTE = ModelRoute(
     key="style-capture-v1",
     provider=ProviderName.OPENAI,
-    model="gpt-6-astra",
+    model="gpt-6-sol",
     capabilities=frozenset({ModelCapability.TEXT, ModelCapability.JSON_SCHEMA}),
 )
 POLICY = {"version": 1, "max_source_bytes": MAX_SOURCE_BYTES, "max_output_tokens": 6000}

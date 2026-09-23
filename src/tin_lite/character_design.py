@@ -51,7 +51,7 @@ from tin_lite.studio_contracts import (
 KEY = "creative.character"
 ROUTE_KEY = "creative.character.v1"
 EXAMPLE_CHARACTER_PATH = Path(__file__).with_name("example_character.svg")
-MODEL = "gpt-6-astra"
+MODEL = "gpt-6-sol"
 MODEL_ROUTE = ModelRoute(
     key=ROUTE_KEY,
     provider=ProviderName.OPENAI,

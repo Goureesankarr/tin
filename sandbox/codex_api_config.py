@@ -44,7 +44,7 @@ def configure(path, env):
         raise ValueError("Invalid run-bound Codex API configuration")
     existing = path.read_text()
     config = tomllib.loads(existing)
-    if config.get("model") != "gpt-6-astra" or "model_provider" in config:
+    if config.get("model") != "gpt-6-sol" or "model_provider" in config:
         raise ValueError("Codex API requires the pinned model and a fresh controller")
     if path.with_name("auth.json").exists():
         raise ValueError("Codex API controller must not contain ChatGPT credentials")

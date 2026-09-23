@@ -87,7 +87,7 @@ def test_procedure_sandbox_template_pins_repository_tooling(
         (
             "run_cmd",
             (
-                "npm install -g @openai/codex@0.153.4 && codex --version",
+                "npm install -g @openai/codex@0.156.1 && codex --version",
                 {"user": "root"},
             ),
         ),
@@ -112,7 +112,7 @@ def test_procedure_sandbox_template_pins_repository_tooling(
         ),
     ) in calls
     config = (ROOT / "sandbox" / "codex_config.toml").read_text()
-    assert 'model = "gpt-6-astra"' in config
+    assert 'model = "gpt-6-sol"' in config
     assert "OPENAI_API_KEY" not in config
 
 

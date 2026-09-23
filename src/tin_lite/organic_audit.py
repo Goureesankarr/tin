@@ -23,7 +23,7 @@ LEGACY_AUDIT_POLICY = {
     "max_questions": 12,
     "repetitions": 2,
     "brand_checks": 2,
-    "model": "gpt-5.6-luna",
+    "model": "gpt-6-luna",
     "provider": "openai",
     "search_tool": "web_search",
     "max_tool_calls": 3,

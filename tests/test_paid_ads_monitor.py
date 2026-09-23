@@ -165,7 +165,7 @@ def decide(reads_value=None, labels=None, today=TODAY, cap=20, **campaign_overri
 def test_contract_and_schema_are_closed_and_stable():
     assert monitor.KEY == "ads.monitor" and monitor.PREFIX == "paid_ads_monitor"
     assert monitor.contract_digest() == monitor.contract_digest()
-    assert [r["model"] for r in monitor.route_definitions()] == ["gpt-6-astra", "gpt-5.6-luna"]
+    assert [r["model"] for r in monitor.route_definitions()] == ["gpt-6-sol", "gpt-6-luna"]
     assert monitor.route_for("brief") is paid_ads.JUDGMENT_ROUTE
     assert monitor.route_for("classify:1") is paid_ads.DRAFTING_ROUTE
     assert monitor.route_for("repair:1") is paid_ads.DRAFTING_ROUTE

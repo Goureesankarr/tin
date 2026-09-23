@@ -192,7 +192,7 @@ async def capture_fixture(db):
         generate=AsyncMock(
             return_value=ModelResult(
                 provider=ProviderName.OPENAI,
-                model="gpt-6-astra",
+                model="gpt-6-sol",
                 text="",
                 parsed=deepcopy(RESULT),
                 request_id="style-request",

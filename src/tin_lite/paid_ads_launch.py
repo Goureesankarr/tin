@@ -33,7 +33,7 @@ STARTER_NEGATIVES = json.loads((ASSETS / "negatives.json").read_text())
 COPY_ROUTE = ModelRoute(
     key="paid-ads-launch-copy-v1",
     provider=ProviderName.OPENAI,
-    model="gpt-6-astra",
+    model="gpt-6-sol",
     capabilities=JUDGMENT_ROUTE.capabilities,
 )
 ROUTES = (COPY_ROUTE,)

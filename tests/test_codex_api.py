@@ -298,7 +298,7 @@ async def test_compaction_crlf_and_missing_usage_stays_unknown(publication_db, o
 
 def test_config_and_environment_never_include_provider_key(tmp_path):
     config = tmp_path / "config.toml"
-    config.write_text('model = "gpt-6-astra"\n[mcp_servers.tin]\nurl="https://tin.test/tools"\n')
+    config.write_text('model = "gpt-6-sol"\n[mcp_servers.tin]\nurl="https://tin.test/tools"\n')
     url = f"https://tin.test/internal/codex-api/{uuid4()}/v1"
     module = load_sandbox_module("codex_api_config")
     module.configure(
@@ -346,7 +346,7 @@ def test_studio_shell_policy_delegates_only_voice_capability(tmp_path):
         "FAL_KEY": "provider-only",
     }
     config = tmp_path / "config.toml"
-    config.write_text('model = "gpt-6-astra"\n')
+    config.write_text('model = "gpt-6-sol"\n')
     module.configure(config, env)
     policy = tomllib.loads(config.read_text())["shell_environment_policy"]
     assert policy == {
