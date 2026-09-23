@@ -597,14 +597,17 @@ def test_product_ui_assets_are_packaged_beside_the_application() -> None:
     assert 'projectAccess: "loading"' in script
     assert "if (!hasProject)" in script
     assert ".nav-item:disabled" in stylesheet
-    # Browser sign-ups: a project with no workflow yet is locked behind the coding-agent page.
+    # Browser sign-ups: a project with no workflow or run yet is locked behind the coding-agent page.
     assert 'data-browser-lock-enabled="{{BROWSER_LOCK_ENABLED}}"' in index
     assert (
         '"{{BROWSER_LOCK_ENABLED}}": str(getattr(settings, "browser_lock_enabled", True)).lower()'
         in api_source
     )
-    assert "state.projectAccess = BROWSER_LOCK_ENABLED && !projectWorkflows.length" in script
-    assert '!projectWorkflows.length ? "locked" : "ready"' in script
+    assert (
+        "state.projectAccess = BROWSER_LOCK_ENABLED && !projectWorkflows.length && !runs.length"
+        in script
+    )
+    assert '!runs.length ? "locked" : "ready"' in script
     # Lock routing, including the agent connection exception, is exercised in Chromium
     # by web/lock-page.browser.test.js rather than matching one rendering branch here.
     assert "function renderLockPage()" in script
