@@ -701,3 +701,19 @@ async def test_an_unusable_model_result_is_receipted_and_retried_once():
     count = router.generate.await_count
     assert await activities.draft(run_id) == "launch"
     assert router.generate.await_count == count
+
+
+def test_failure_text_names_which_side_failed():
+    from tin_lite.paid_ads_launch_activities import _failed
+
+    gated = _failed(
+        {"status": "unavailable", "reason": "spending_stopped"},
+        "the plan check",
+        "nothing was created",
+    )
+    assert "Tin could not authorize" in gated and "spending_stopped" in gated
+    assert "Google Ads was not contacted" in gated
+    refused = _failed({"status": "completed", "error": "POLICY"}, "the plan check", "x")
+    assert refused.startswith("Google Ads refused the plan check (POLICY)")
+    lost = _failed({"status": "unknown", "reason": "provider_result_unavailable"}, "a", "x")
+    assert "did not receive Google Ads' answer" in lost

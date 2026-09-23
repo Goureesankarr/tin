@@ -1092,12 +1092,15 @@ class BillingService:
             )
             if root["status"] == "settled":
                 return root["charged_nanos"]
+            # ads.launch makes its metered Google Ads calls after approval, so its budget
+            # must stay open while it waits for review.
             active = await conn.fetchval(
                 """SELECT true FROM billing_run_budgets b JOIN workflow_runs r ON r.id=b.run_id
                    WHERE b.root_run_id=$1
                      AND (r.status IN ('pending','running','paused')
                           OR (r.status='needs_input'
-                              AND (b.terms->>'kind'='parent' OR r.executor='project.task'))
+                              AND (b.terms->>'kind'='parent'
+                                   OR r.executor IN ('project.task', 'ads.launch')))
                           OR (r.lease_active AND r.status<>'needs_input'))
                    LIMIT 1""",
                 root_id,
@@ -1268,7 +1271,8 @@ class BillingService:
                      WHERE child.root_run_id=b.run_id
                        AND (r.status IN ('pending','running','paused')
                             OR (r.status='needs_input'
-                                AND (child.terms->>'kind'='parent' OR r.executor='project.task'))
+                                AND (child.terms->>'kind'='parent'
+                                     OR r.executor IN ('project.task', 'ads.launch')))
                             OR (r.lease_active AND r.status<>'needs_input')))
                ORDER BY b.reconcile_by, b.created_at LIMIT 100"""
         )
