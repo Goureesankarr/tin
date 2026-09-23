@@ -16,12 +16,6 @@ from tin_lite.code_storage import CodeStorage
 from tin_lite.diagram_compositions import parse_diagram_v2
 from tin_lite.domain import CODEX_PROCEDURE_EXECUTOR, MEMORY_INDEX_PATH
 from tin_lite.memory import MAX_MEMORY_BYTES, validate_memory_index
-from tin_lite.repository_limits import (
-    LEGACY_REPOSITORY_BYTES,
-    LEGACY_REPOSITORY_FILES,
-    MAX_REPOSITORY_BYTES,
-    MAX_REPOSITORY_FILES,
-)
 from tin_lite.studio_contracts import (
     CHARACTER_SVG_MEDIA_TYPE,
     CHARACTER_SVG_VALIDATOR,
@@ -280,8 +274,6 @@ class GitHubPullRequestProcedure:
     provider_key: str = "infra.github"
     repair_policy: str | None = None
     allow_no_change: bool = False
-    workspace_max_files: int = MAX_REPOSITORY_FILES
-    workspace_max_bytes: int = MAX_REPOSITORY_BYTES
 
 
 @dataclass(frozen=True)
@@ -290,8 +282,6 @@ class GitHubRepositoryWorkspace:
 
     provider_key: str = "infra.github"
     capabilities: tuple[str, ...] = ("contents.read",)
-    max_files: int = MAX_REPOSITORY_FILES
-    max_bytes: int = MAX_REPOSITORY_BYTES
 
 
 @dataclass(frozen=True)
@@ -353,8 +343,6 @@ class CodexProcedureSpec:
     workspace_capabilities: tuple[str, ...] = ()
     repair_policy: str | None = None
     allow_no_change: bool = False
-    workspace_max_files: int = 500
-    workspace_max_bytes: int = 10_000_000
     services: tuple[ServiceBinding, ...] = ()
 
     @property
@@ -388,8 +376,6 @@ class PinnedCodexProcedure:
     allow_no_change: bool = False
     content_draft_context: dict[str, Any] | None = None
     review_revision_context: dict[str, Any] | None = None
-    workspace_max_files: int = 500
-    workspace_max_bytes: int = 10_000_000
     services: tuple[ServiceBinding, ...] = ()
 
     @property
@@ -634,10 +620,6 @@ class CodexProcedureSource:
                     "kind": GITHUB_REPOSITORY_WORKSPACE,
                     "provider_key": self.github_workspace.provider_key,
                     "capabilities": list(self.github_workspace.capabilities),
-                    "limits": {
-                        "max_files": self.github_workspace.max_files,
-                        "max_bytes": self.github_workspace.max_bytes,
-                    },
                 }
             output = {
                 "kind": PROJECT_ARTIFACT_RESULT,
@@ -664,14 +646,6 @@ class CodexProcedureSource:
                 "provider_key": pull_request.provider_key,
                 "capabilities": ["contents.read", "pull_requests.read"],
             }
-            if (pull_request.workspace_max_files, pull_request.workspace_max_bytes) != (
-                LEGACY_REPOSITORY_FILES,
-                LEGACY_REPOSITORY_BYTES,
-            ):
-                workspace["limits"] = {
-                    "max_files": pull_request.workspace_max_files,
-                    "max_bytes": pull_request.workspace_max_bytes,
-                }
             output = {
                 "kind": GITHUB_PULL_REQUEST_RESULT,
                 "provider_key": pull_request.provider_key,
@@ -769,18 +743,9 @@ def validate_codex_procedure_definition(definition: dict[str, Any]) -> CodexProc
             raise ValueError("GitHub procedure workspace capabilities are invalid")
         workspace_capabilities = tuple(capabilities)
 
-    limits = workspace.get(
-        "limits", {"max_files": LEGACY_REPOSITORY_FILES, "max_bytes": LEGACY_REPOSITORY_BYTES}
-    )
-    if (
-        not isinstance(limits, dict)
-        or set(limits) != {"max_files", "max_bytes"}
-        or type(limits["max_files"]) is not int
-        or not 1 <= limits["max_files"] <= MAX_REPOSITORY_FILES
-        or type(limits["max_bytes"]) is not int
-        or not 1 <= limits["max_bytes"] <= MAX_REPOSITORY_BYTES
-        or ("limits" in workspace and workspace_kind != GITHUB_REPOSITORY_WORKSPACE)
-    ):
+    # Repository snapshots share one gateway bound; older definitions may still carry
+    # their former per-workflow limits, which are accepted and ignored.
+    if "limits" in workspace and workspace_kind != GITHUB_REPOSITORY_WORKSPACE:
         raise ValueError("Codex repository workspace limits are invalid")
     output = procedure.get("output")
     if not isinstance(output, dict):
@@ -1072,8 +1037,6 @@ def validate_codex_procedure_definition(definition: dict[str, Any]) -> CodexProc
         workspace_capabilities=workspace_capabilities,
         repair_policy=repair_policy,
         allow_no_change=allow_no_change,
-        workspace_max_files=limits["max_files"],
-        workspace_max_bytes=limits["max_bytes"],
         services=services,
     )
 
@@ -1225,8 +1188,6 @@ async def load_pinned_codex_procedure(
         workspace_capabilities=spec.workspace_capabilities,
         repair_policy=spec.repair_policy,
         allow_no_change=spec.allow_no_change,
-        workspace_max_files=spec.workspace_max_files,
-        workspace_max_bytes=spec.workspace_max_bytes,
         services=spec.services,
     )
 

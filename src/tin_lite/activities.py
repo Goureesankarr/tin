@@ -861,7 +861,6 @@ class TinActivities:
         run_id: UUID,
         sandbox_id: str,
         expected_binding=None,
-        workspace_limits=None,
     ):
         if self._integrations is None:
             raise RuntimeError("GitHub procedure workspace is unavailable")
@@ -871,7 +870,6 @@ class TinActivities:
                 execution_key=f"{run_id}:procedure_repository_workspace",
                 run_id=run_id,
                 **({"expected_binding": expected_binding} if expected_binding else {}),
-                **(workspace_limits or {}),
             ),
             details={
                 "sandbox_id": sandbox_id,
@@ -886,7 +884,6 @@ class TinActivities:
         run_id: UUID,
         sandbox_id: str,
         expected_binding=None,
-        workspace_limits=None,
     ):
         if self._integrations is None:
             raise RuntimeError("GitHub procedure workspace is unavailable")
@@ -895,7 +892,6 @@ class TinActivities:
             run_id=run_id,
             sandbox_id=sandbox_id,
             **({"expected_binding": expected_binding} if expected_binding else {}),
-            **({"workspace_limits": workspace_limits} if workspace_limits else {}),
         )
         evidence = await self._await_with_heartbeats(
             self._integrations.github_open_pull_requests(
@@ -2638,14 +2634,7 @@ class TinActivities:
             database=self._db, storage=self._storage, integrations=self._integrations
         )
         handled = await self._await_with_heartbeats(
-            execution.prepare(
-                run,
-                policy=procedure.repair_policy,
-                workspace_limits={
-                    "max_files": procedure.workspace_max_files,
-                    "max_bytes": procedure.workspace_max_bytes,
-                },
-            ),
+            execution.prepare(run, policy=procedure.repair_policy),
             details={"stage": "technical_verification"},
         )
         if not handled:
@@ -3090,17 +3079,6 @@ class TinActivities:
                         f"{self._settings.switchboard_public_url.rstrip('/')}"
                         "/internal/run-tools/mcp"
                     )
-                workspace_limits = (
-                    {
-                        "workspace_limits": {
-                            "max_files": procedure.workspace_max_files,
-                            "max_bytes": procedure.workspace_max_bytes,
-                        }
-                    }
-                    if (procedure.workspace_max_files, procedure.workspace_max_bytes)
-                    != (500, 10_000_000)
-                    else {}
-                )
                 if procedure.result_kind == GITHUB_PULL_REQUEST_RESULT:
                     technical = None
                     expected_binding = None
@@ -3122,7 +3100,6 @@ class TinActivities:
                         run_id=run_id,
                         sandbox_id=sandbox_id,
                         **({"expected_binding": expected_binding} if expected_binding else {}),
-                        **workspace_limits,
                     )
                     workspace_archive = bundle.archive
                     workspace_evidence = open_pull_requests.document
@@ -3147,7 +3124,6 @@ class TinActivities:
                         project_id=run.project_id,
                         run_id=run_id,
                         sandbox_id=sandbox_id,
-                        **workspace_limits,
                     )
                     workspace_archive = bundle.archive
                     workspace_context = {
