@@ -17,7 +17,8 @@ operators still pay suppliers. Live Stripe payments stay off. See the current
 default. It selects the API path for procedures whose pinned sandbox profile is
 `default`, `isolated`, `browser` or `studio`, and for `content.design_md` and `project.task`.
 `TIN_LITE_BILLING_HOSTED_DEFAULTS_ENABLED` also enables that API path without project-by-project
-API enrollment. It does not remove the separate private-workflow project allowlist.
+API enrollment. It does not open private execution, which keeps its own gate: the project
+allowlist or `TIN_LITE_PRIVATE_WORKFLOWS_OPEN`.
 Default procedures and tasks use the isolated runtime image, without changing
 their declared workspace, result, verification, or review contract. It requires
 `TIN_LITE_LUNA_API_KEY` and an API-capable isolated image. No workflow

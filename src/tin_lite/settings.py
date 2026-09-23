@@ -171,6 +171,8 @@ class Settings(BaseSettings):
     private_workflow_projects_raw: str = Field(
         default="", alias="TIN_LITE_PRIVATE_WORKFLOW_PROJECTS"
     )
+    # Any project may run private workflows; requires billing so each run spends credits.
+    private_workflows_open: bool = Field(default=False, alias="TIN_LITE_PRIVATE_WORKFLOWS_OPEN")
     codex_api_projects_raw: str = Field(default="", alias="TIN_LITE_CODEX_API_PROJECTS")
     e2b_browser_template: str = Field(
         default="tin-lite-codex-browser", alias="TIN_LITE_E2B_BROWSER_TEMPLATE"
@@ -277,6 +279,8 @@ class Settings(BaseSettings):
             self.billing_enabled and self.billing_welcome_credits_enabled
         ):
             raise ValueError("Hosted credit defaults require billing and welcome credits enabled")
+        if self.private_workflows_open and not self.billing_enabled:
+            raise ValueError("Open private workflows require billing enabled")
         if self.billing_test_enabled and self.stripe_secret_key is not None:
             if not self.stripe_secret_key.get_secret_value().startswith(("sk_test_", "rk_test_")):
                 raise ValueError("Tin billing currently accepts Stripe test keys only")

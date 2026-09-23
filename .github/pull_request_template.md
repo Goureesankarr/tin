@@ -12,4 +12,7 @@
      explain permissions and paid effects, and include mocked provider tests. No real keys,
      customer data or production credentials. For workflows, name the execution type,
      inputs/output, model limits, retry tests and whether public registration is requested.
+     Include the private run ID from your custom.* copy and whether you invited the reviewing
+     maintainer to that project, or say why a private run wasn't possible
+     (docs/adding-a-workflow.md#test-it-as-a-private-workflow).
      Remove this section if not needed. -->

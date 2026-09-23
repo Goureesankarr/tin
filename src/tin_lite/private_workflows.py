@@ -225,7 +225,8 @@ def validate_private_definition(definition):
 
 def private_execution_ready(settings, project_id: UUID) -> bool:
     projects = getattr(settings, "private_workflow_projects", ())
-    return project_id in projects and bool(getattr(settings, "e2b_isolated_template", None))
+    admitted = getattr(settings, "private_workflows_open", False) or project_id in projects
+    return admitted and bool(getattr(settings, "e2b_isolated_template", None))
 
 
 def package_policy(definition):
@@ -717,7 +718,6 @@ def authoring_guide(*, settings, project_id):
                 "test identities",
                 "managed memory sections",
                 "private Codex procedure schedules",
-                "live customer billing",
             ],
         },
         "creator_files": creator_files(),

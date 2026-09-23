@@ -7,7 +7,8 @@ It then appears alongside built-in workflows and runs on Tin's existing compute.
 recipe does not activate or run it. Saving a configuration chooses the latest activated recipe
 automatically; existing configurations and runs keep the recipe they selected.
 
-This remains a project-allowlisted pilot, not unrestricted self-service execution.
+Execution is limited to allowlisted projects unless the operator opens it to every project on
+a billed deployment.
 Private procedures are manual; eligible code workflows also support schedules. There is no
 new engine, version database, filesystem copy, or workflow-specific reader/UI. Current
 capabilities and billing boundaries are summarized in [feature status](feature-status.md).
@@ -88,6 +89,9 @@ recovery continue to apply.
 
 Configure `TIN_LITE_E2B_ISOLATED_TEMPLATE` with the accepted isolated image and explicitly allow
 pilot project UUIDs in comma-separated `TIN_LITE_PRIVATE_WORKFLOW_PROJECTS`. Default is empty.
+`TIN_LITE_PRIVATE_WORKFLOWS_OPEN=true` admits every project instead. Startup refuses it unless
+`TIN_LITE_BILLING_ENABLED=true`, so private runs are funded through the credit ledger; the
+isolated template remains required either way.
 Do not enable unisolated/browser/Studio execution for private recipes. No migration, new native
 model route, API-key exposure, default image rebuild or credential replacement is required.
 

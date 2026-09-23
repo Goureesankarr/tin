@@ -103,13 +103,15 @@ cross-cutting implementation safeguards, not historical deployment logs.
   connections use the trusted service gateway; author code receives a service binding,
   not an API key. Preserve endpoint/redirect/private-address checks and stable operation IDs.
 - Private workflow packages require explicit validation and activation of an immutable
-  revision plus the existing operator allowlist. workflow.code supports bounded code,
-  managed model steps, service requests and eligible schedules. Private procedures remain
-  isolated and on demand; they are not interactive project.task sessions.
+  revision plus the private execution gate: the operator allowlist, or the open setting on
+  a billed deployment. workflow.code supports bounded code, managed model steps, service
+  requests and eligible schedules. Private procedures remain isolated and on demand; they
+  are not interactive project.task sessions.
 - Public contributions also support deterministic Python and multi-step managed-model code,
   not only Codex procedures. Validate packages without executing author code; select them
   explicitly in PUBLIC_WORKFLOWS for catalog publication. Keep examples unregistered, and
-  preserve the separate private activation gate. See docs/adding-a-workflow.md.
+  preserve the separate private activation gate: explicit validation and activation of an
+  immutable custom.* revision in the isolated runtime. See docs/adding-a-workflow.md.
 
 ## Billing
 
