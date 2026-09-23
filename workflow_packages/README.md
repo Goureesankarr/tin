@@ -29,7 +29,9 @@ See [code workflows](../docs/code-workflows.md) and
 [PostHog funnel](example.posthog_funnel/workflow.json) is a complete connection example:
 a bounded procedure uses `procedure.services` and a project-owned custom API key through
 Tin's gateway. It is not registered or live-qualified. See [API connections](../docs/project-api-connections.md)
-for secure setup, permissions, limits and evaluation requirements.
+for secure setup, permissions, limits and evaluation requirements. A binding's
+`max_response_bytes` bounds how much data one call can return; for Search Console that is a few
+hundred rows per page, with `start_row` paging and `dimension_filters` to narrow the read.
 Its [HogQL resource](example.posthog_funnel/skills/posthog-funnel/HOGQL.md) supplies a reusable
 ordered funnel calculation and aggregate validator. It has explicit actor/attempt semantics;
 it does not infer instrumentation or qualify a complete analytics product. Offline regression

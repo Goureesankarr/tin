@@ -66,6 +66,8 @@ Keep rubric questions independent; no overall score. Maintainers review cases an
 - API services: declare integration_requirements plus code.services or procedure.services.
   Up to four aliases, eight total provider calls, 16000-byte requests, and responses bounded
   to 1024–64000 bytes per alias. Use these exact byte counts, not KiB conversions.
+  The byte bound, not a provider row limit, caps results: GSC search_analytics.read returns
+  the rows that fit plus truncated/next_start_row, and accepts start_row and dimension_filters.
   Code calls await ctx.services.request(service=..., step=..., method=..., path=..., params=...,
   body=...). Procedures use request_service with the same arguments. Provider keys stay in Tin.
   GET needs http.read; POST needs http.write and the connection's POST permission even for a

@@ -785,10 +785,15 @@ def authoring_guide(*, settings, project_id):
                 "registered_adapters": "await ctx.services.call(service=..., step=..., "
                 "operation=..., arguments={}). Supports GSC sites.list/search_analytics.read, "
                 "GitHub repositories.list, Google Workspace gmail.messages.search/"
-                "gmail.thread.read/calendar.events.list. Existing connections are reused.",
+                "gmail.thread.read/calendar.events.list. Existing connections are reused. "
+                "GSC search_analytics.read accepts start_row and dimension_filters and returns "
+                "the leading rows that fit max_response_bytes, adding truncated and "
+                "next_start_row when more may exist.",
                 "recovery": "Stable steps replay completed bounded responses. Changed "
                 "requests/connections and uncertain attempts fail closed. Credential rotation "
-                "retains the binding. Provider costs remain separate from Tin model credits.",
+                "retains the binding. An oversized response is a named error for that step "
+                "and does not block later steps. Provider costs remain separate from Tin model "
+                "credits.",
             },
             "models": {
                 "method": (
