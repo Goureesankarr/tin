@@ -451,15 +451,20 @@ run's relay). Open with the run's quote, Tin's view, under a heading of its own 
 read on <business>" (the same text as the plan's "Tin's view" section). Lead with the suggested
 systems and their first useful deliverables: what arrives, when, and which decision it enables.
 Give one line per suggested system with cadence and access; keep the full ranked alternatives
-in the linked plan and expand them when asked. Then ask ONE open question, in chat, not
-blocking: "What do you want Tin to take on? Say it in your words; Tin's suggestion is a fine
-answer." Map their answer to the plan's system ids and set up whole systems: when they name one
-workflow that belongs to a system, pick that system, so every workflow in it gets built together
-(the plan groups them because they feed each other). Say the mapping back in one line ("So:
-AI visibility, the whole system: the audit Mondays and answer pages Wednesdays."). Then ask how
-much control they keep, from the
-plan's Control list, suggesting a review in Tin, since public pages and anything visual read best
-rendered there. Use access_needs to recommend connections with their benefits and permissions.
+in the linked plan and expand them when asked. Then ask the picks as ONE round of multiple
+choice, with your question tool when you have one (AskUserQuestion in Claude Code,
+request_user_input in Codex), otherwise as numbered options in chat that they answer by number:
+"What do you want Tin to take on?", multi-select, one option per system in the plan's rank
+order with its first deliverable and cadence, Tin's suggestion first and marked recommended;
+"How much control do you keep?", single choice from the plan's Control list, review in Tin
+recommended, since public pages and anything visual read best rendered there; and "Which
+connections should Tin set up now?", multi-select from access_needs, each with its benefit.
+Their own words are a fine answer too. Map the answer to the plan's system ids and
+set up whole systems: when they name one workflow that belongs to a system, pick that system,
+so every workflow in it gets built together (the plan groups them because they feed each
+other). Say the mapping back in one line ("So: AI visibility, the whole system: the audit
+Mondays and answer pages Wednesdays."). Use access_needs to recommend connections with their
+benefits and permissions.
 Unknown repository details are a reason to ask which repository serves the site, not to omit
 useful access. Ask for mailbox access only for selected work that needs it. Explain
 delivery_destination: reports, review queue, and whether notifications are enabled. Offer only
@@ -1599,8 +1604,9 @@ def create_mcp_app(
                     "what it will produce, which access makes it useful, and what we will learn."
                 ),
                 "picks": (
-                    "The next few minutes are yours: what Tin takes on, in your words, then "
-                    "control and any connections. Nothing runs until you have said."
+                    "The next few minutes are yours: a few quick choices on what Tin takes on, "
+                    "how much control you keep and which connections to set up. Nothing runs "
+                    "until you have said."
                 ),
                 "connections": (
                     "Let's give Tin the evidence and access that make the first result useful. "
@@ -1654,14 +1660,16 @@ def create_mcp_app(
                 "plan's Tin's view section); its relay says the plan is ready and what the "
                 "next minutes hold, in your words",
                 "show suggested systems first, with first_deliverables, cadence and access; "
-                "link the full ranked alternatives in the plan and expand on request. Ask one "
-                "open question in chat: what do you want Tin to take on? their words; Tin's "
-                "suggestion is a fine answer",
+                "link the full ranked alternatives in the plan and expand on request. Ask the "
+                "picks as one round of multiple choice with your question tool (AskUserQuestion "
+                "in Claude Code, request_user_input in Codex), otherwise as numbered options in "
+                "chat: what Tin takes on (multi-select, one option per system, Tin's suggestion "
+                "first and recommended), control (the plan's Control list, review in Tin "
+                "recommended) and connections (multi-select from access_needs); their own words "
+                "are a fine answer too",
                 "map the answer to the plan's system ids and set up whole systems: a named "
                 "workflow means its system, every workflow in it; say the mapping back in one "
                 "line",
-                "ask how much control they keep, from the plan's Control list, suggesting a "
-                "review in Tin",
                 "recommend access_needs with their benefits, permissions and resource selection. "
                 "Unknown repository or analytics details are discovery questions; ask which "
                 "connections to set up now, and respect explicit declines",
@@ -3124,13 +3132,13 @@ def create_mcp_app(
 
         Use it once the growth.onboarding run is waiting for you (get_run shows record_picks):
         systems are the plan's system ids the founder wants Tin to take on, mapped from their
-        answer to "what do you want Tin to take on?", or ["suggested"] for the set the plan marks
-        as Tin's suggestion. Pick whole systems: a workflow they name means its system, and Tin
-        builds every workflow in it. control: how much they keep. connections: one entry per
-        provider the plan lists that they decided on: connected once get_integration confirms, or
-        not_now with their reason in their words. Providers left out stay open. Reuse request_id
-        when retrying. Then call approve_workflow_run; it refuses until systems and a control
-        are recorded.
+        multiple-choice answer to "what do you want Tin to take on?", or ["suggested"] for the set
+        the plan marks as Tin's suggestion. Pick whole systems: a workflow they name means its
+        system, and Tin builds every workflow in it. control: how much they keep. connections: one
+        entry per provider the plan lists that they decided on: connected once get_integration
+        confirms, or not_now with their reason in their words. Providers left out stay open. Reuse
+        request_id when retrying. Then call approve_workflow_run; it refuses until systems and a
+        control are recorded.
         """
         token = await caller()
         clerk_user_id = token.subject
