@@ -14,7 +14,27 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  verify:
+  # Pull requests that only change workflow packages skip the browser suite.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      browser: ${{ github.event_name == 'push' || steps.filter.outputs.browser == 'true' }}
+    steps:
+      - if: github.event_name == 'pull_request'
+        id: filter
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        with:
+          predicate-quantifier: every
+          filters: |
+            browser:
+              - "**"
+              - "!workflow_packages/**"
+
+  python:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     services:
@@ -40,6 +60,25 @@ jobs:
       - uses: astral-sh/setup-uv@v10.0.1
         with:
           enable-cache: true
+      - run: uv python install 3.12
+      - run: uv sync --frozen
+      - run: uv run ruff format --check .
+      - run: uv run ruff check .
+      - run: uv run pytest -n auto
+      - run: uv run lint-imports
+
+  browser:
+    needs: changes
+    if: needs.changes.outputs.browser == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
       - uses: actions/setup-node@v6
         with:
           node-version: 22
@@ -49,31 +88,25 @@ jobs:
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm run check:diagrams
       - run: npm run check:comparison
+      - uses: actions/cache@v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
       - run: npx playwright install --with-deps chromium
-      - run: npm run test:raw-file-security
-      - run: npm run test:fonts-browser
-      - run: npm run test:diagrams-browser
-      - run: npm run test:diagram-viewport
-      - run: node --test scripts/check_diagram.test.mjs
-      - run: npm run test:json-viewer
-      - run: npm run test:comparison-browser
-      - run: npm run test:content-plan-browser
-      - run: npm run test:billing-browser
-      - run: npm run test:run-payment-card-browser
-      - run: npm run test:style-browser
-      - run: npm run test:content-draft-browser
-      - run: npm run test:content-delivery-browser
-      - run: npm run test:workflow-review-browser
-      - run: npm run test:auth-browser
-      - run: npm run test:lock-page-browser
-      - run: npm run test:project-menu-browser
-      - run: npm run test:chat-browser
-      - run: npm run test:connections-browser
-      - run: node --test web/code-workflow.browser.test.js
-      - run: uv run ruff format --check .
-      - run: uv run ruff check .
-      - run: uv run pytest
-      - run: uv run lint-imports
+      - run: npm run test:browser
+
+  # The required status check; a skipped browser job counts as passed.
+  verify:
+    needs: [python, browser]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: |
+          echo "python: ${{ needs.python.result }}, browser: ${{ needs.browser.result }}"
+          exit 1
+      - run: echo "python and browser checks passed"
 
   # Fast package feedback; the full verify job remains required before merging.
   contributions:
