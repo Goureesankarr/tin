@@ -179,6 +179,18 @@ def test_plan_sequences_this_week_before_later_dates(scoring):
     }
 
 
+def test_verdict_comes_from_the_counts_not_the_run(scoring):
+    # The first hosted run called one shortlisted course "fit"; one course is a lead.
+    one = scoring["plan"]([course(next_start="2026-11-02")], AS_OF, 5)
+    three = scoring["plan"]([course(f"C{n}") for n in range(3)], AS_OF, 5)
+    only_by_hand = scoring["plan"]([course(quote_source="snippet")], AS_OF, 5)
+    none = scoring["plan"]([course(hands_on=False)], AS_OF, 5)
+    assert one["verdict"] == "thin"
+    assert three["verdict"] == "fit"
+    assert only_by_hand["verdict"] == "not a fit"
+    assert none["verdict"] == "not a fit"
+
+
 def test_plan_keeps_the_shortlist_to_the_limit(scoring):
     courses = [course(f"Course {n}", next_start="2026-11-02") for n in range(8)]
     result = scoring["plan"](courses, AS_OF, 5)

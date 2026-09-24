@@ -5,7 +5,7 @@
     "title": "Get your product taught in the courses that pick students' tools",
     "description": "For a company whose product students could learn on: find public course pages that teach that job, rank them by when the instructor next chooses tools, and draft a teaching kit and one note per course. Nothing is sent.",
     "executor": "codex.procedure",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "schedule_modes": ["on_demand"],
     "input_schema": {
       "type": "object",

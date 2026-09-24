@@ -1,7 +1,10 @@
 # Report shape
 
 Write `reports/SYLLABUS_PLACEMENT.md` in this order. Keep evidence (quotes, URLs, dates read
-from a page) separate from judgment (slot, kit, notes).
+from a page) separate from judgment (slot, kit, notes). Use the headings and field labels
+exactly as shown, with straight quotes, so later runs and checks can read the report.
+Cite with plain Markdown links. Remove any citation markers the search tool inserts into
+the text (tokens such as `cite` followed by `turn` references); they are not links.
 
 ```markdown
 # Syllabus placement: <product or project name>
@@ -59,15 +62,24 @@ For each course, in SCORING.md order:
 
 <course, url, and the reason from SCORING.md.>
 
+## Discarded
+
+<course, url, and one line on what the document showed instead.>
+
 ## Search log
 
 | Query | Course documents | Noise | Notes |
 |---|---|---|---|
 
+<One row per query, even when the search tool pooled several queries' results.>
+
 <Syllabus index URLs worth starting from next time.>
 ```
 
-For `Verdict: not a fit` or `Verdict: thin`, write the header, the funnel, what was searched,
-what the opened documents showed instead, and one sentence on what would change the answer
-(another subject, another region, or a different phrasing of the job). Leave out the kit and
-the notes.
+For `Verdict: not a fit`, write the header, the funnel, what was searched, what the opened
+documents showed instead, and one sentence on what would change the answer (another subject,
+another region, or a different phrasing of the job). Leave out the kit and the notes.
+
+For `Verdict: thin`, write the full report but keep the teaching kit to the one-session lab
+plan for the courses on the shortlist. One or two courses are worth a note; they are not
+yet worth an education program.

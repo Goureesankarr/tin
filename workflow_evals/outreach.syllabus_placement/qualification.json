@@ -30,7 +30,7 @@
       "expect": {
         "contains": [
           "Status: complete",
-          "Verdict: fit",
+          "Verdict: ",
           "## Funnel",
           "## Send calendar",
           "## Shortlist",
@@ -39,7 +39,7 @@
           "Decide first",
           "## Search log"
         ],
-        "excludes": ["udemy.com", "Status: incomplete", "@"]
+        "excludes": ["udemy.com", "Status: incomplete", "@", "Verdict: not a fit", "citeturn"]
       }
     },
     {
@@ -73,7 +73,7 @@
       "expected_status": "succeeded",
       "expect": {
         "contains": ["Status: complete", "## Teaching kit", "60 students"],
-        "excludes": ["Decide first", "udemy.com", "@"]
+        "excludes": ["Decide first", "udemy.com", "@", "citeturn"]
       }
     }
   ]

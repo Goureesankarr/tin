@@ -33,10 +33,10 @@ counts for each one; the report shows where the funnel narrowed.
 
 Before a long search, run three to five searches from SEARCH.md aimed at the job phrasing.
 Open the most promising course documents. Stop early with `Verdict: not a fit` if none of the
-opened documents shows students doing the job themselves. Stop with `Verdict: thin` if one or
-two do and further searching does not add more. Both are useful answers: they save the
-founder from building a teaching kit nobody asks for. Write the short report described in
-REPORT.md and finish.
+opened documents shows students doing the job themselves. That is a useful answer: it saves
+the founder from building a teaching kit nobody asks for. Write the short report described
+in REPORT.md and finish. If even one document shows the job, carry on; the verdict comes
+from Station 4, not from the gate.
 
 ## Station 2: Search
 
@@ -57,6 +57,9 @@ contain. Record:
   Set `quote_source` to `document` only if you copied it from the opened document. If you
   could not open or read the document (login page, unreadable PDF), use `snippet` and the
   course goes to "Check by hand".
+  The quote has to show the job in `teaching_job`, not a neighbouring one. Interviewing the
+  public for a class survey is close to collecting household data on phones, but it is not
+  the same job; if the match is partial, say what differs next to the course in the report.
 - `hands_on`: true only if students do the job themselves (a lab, an assignment, fieldwork,
   a project). A lecture about the topic is false.
 - `slot`: one of
@@ -74,6 +77,10 @@ contain. Record:
   coordinator with a public staff page; otherwise `none`. Record the staff page URL, never an
   email address you had to guess.
 
+Every course the report names, even in passing, is a record here and goes through Station 4.
+Every detail about a course in the report (assessment, word count, class size, dates) comes
+from its document. If you did not read it there, leave it out.
+
 A course behind a learning-platform login is unreachable. Count it and move on. Do not try
 to log in.
 
@@ -81,7 +88,8 @@ to log in.
 
 Save the verified records as JSON in a scratch file and run the Python block in SCORING.md
 exactly as written, with today's UTC date as `as_of`. It returns each course's decision,
-window, score and send date, and the funnel counts. Do not re-rank by hand. If you disagree
+window, score and send date, the funnel counts and the verdict. Write that verdict on the
+`Verdict:` line with nothing after it. Do not re-rank by hand. If you disagree
 with a result, say why in the report next to that course.
 
 Decisions:

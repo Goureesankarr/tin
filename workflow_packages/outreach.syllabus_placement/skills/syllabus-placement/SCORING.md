@@ -10,7 +10,8 @@ syllabus deadlines usually fall in that span). Courses are assumed to run once a
 the page gives a later start date; for courses that run every term, enter the next start.
 A document dated more than two years before `as_of` is not evidence of a current course,
 and a course only seen in a search snippet is not evidence of anything yet, including that
-it already uses the product.
+it already uses the product. The verdict is `fit` only when at least three courses make the
+shortlist; one or two hands-on courses are `thin`.
 
 ```python
 import json
@@ -20,6 +21,7 @@ WINDOW_OPENS_DAYS = 120
 WINDOW_CLOSES_DAYS = 21
 SOON_DAYS = 180
 STALE_YEARS = 2
+FIT_MIN_SHORTLIST = 3
 
 SLOT_POINTS = {
     "open": 40,
@@ -137,6 +139,15 @@ def score_course(course, as_of):
     }
 
 
+def verdict(funnel):
+    """Fit needs several courses to act on; one good course is a lead, not a channel."""
+    if funnel["shortlisted"] >= FIT_MIN_SHORTLIST:
+        return "fit"
+    if funnel["hands_on"] > 0:
+        return "thin"
+    return "not a fit"
+
+
 def plan(courses, as_of, max_courses=15, searches=0, opened=0):
     if not isinstance(max_courses, int) or isinstance(max_courses, bool):
         raise ValueError("max_courses must be an integer")
@@ -161,22 +172,24 @@ def plan(courses, as_of, max_courses=15, searches=0, opened=0):
     eligible = sorted((row for row in unique if row["decision"] in DECISION_ORDER), key=rank)
     shortlist = eligible[:max_courses]
     verified = [row for row in unique if row["quote_source"] == "document"]
+    funnel = {
+        "searches": searches,
+        "documents_opened": opened,
+        "courses_recorded": len(unique),
+        "duplicates_dropped": duplicates,
+        "verified_from_document": len(verified),
+        "hands_on": sum(1 for row in verified if row["hands_on"] and row["slot"] != "none"),
+        "shortlisted": len(shortlist),
+        "contact_now": sum(1 for row in shortlist if row["decision"] == "contact_now"),
+    }
     return {
+        "verdict": verdict(funnel),
         "shortlist": shortlist,
         "over_limit": eligible[max_courses:],
         "check_by_hand": by("check_by_hand"),
         "already_teaching": by("already_teaching"),
         "discarded": by("discard"),
-        "funnel": {
-            "searches": searches,
-            "documents_opened": opened,
-            "courses_recorded": len(unique),
-            "duplicates_dropped": duplicates,
-            "verified_from_document": len(verified),
-            "hands_on": sum(1 for row in verified if row["hands_on"] and row["slot"] != "none"),
-            "shortlisted": len(shortlist),
-            "contact_now": sum(1 for row in shortlist if row["decision"] == "contact_now"),
-        },
+        "funnel": funnel,
     }
 
 
