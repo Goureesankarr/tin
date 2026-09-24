@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "assumptions": [
+    "Cases run against the live web through Codex web search; course pages change between runs, so assertions check structure, verdicts and exclusions rather than specific courses.",
+    "The timing window (120 to 21 days before the next start) and once-a-year offerings are assumptions kept as constants in SCORING.md.",
+    "Run success establishes artifact delivery. Ordinary cases also need a human check that each shortlisted quote appears in the linked document."
+  ],
+  "cost_drivers": [
+    "One bounded Codex session with web search, at most 40 searches and 30 opened documents, 1800 seconds and one 200000-byte report. No managed-model routes or connected providers.",
+    "Cost grows with how many course documents are PDFs that must be read in full, and with how quickly the fit gate can stop a poor fit."
+  ],
+  "effects": [
+    "Reads public web pages through web search.",
+    "Writes reports/SYLLABUS_PLACEMENT.md in this project.",
+    "No logins to course platforms, no email addresses guessed, no messages sent, nothing published."
+  ],
+  "cases": [
+    {
+      "id": "ordinary",
+      "description": "A field survey app. Courses in agricultural extension, public health and development economics collect household survey data; many use paper forms or a free competitor.",
+      "inputs": {
+        "teaching_job": "Design a questionnaire and collect household survey data on phones in the field, including where there is no signal.",
+        "alternatives": "KoboToolbox, paper questionnaires typed into Excel afterwards",
+        "subjects": "agricultural extension, public health, development economics",
+        "geography": "",
+        "education_offer": "",
+        "max_courses": 10
+      },
+      "expected_status": "succeeded",
+      "expect": {
+        "contains": [
+          "Status: complete",
+          "Verdict: fit",
+          "## Funnel",
+          "## Send calendar",
+          "## Shortlist",
+          "Evidence: \"",
+          "## Teaching kit",
+          "Decide first",
+          "## Search log"
+        ],
+        "excludes": ["udemy.com", "Status: incomplete", "@"]
+      }
+    },
+    {
+      "id": "not_taught",
+      "description": "A loyalty-stamp app for independent cafes. Courses do not have students run a cafe loyalty scheme, so the fit gate should stop early with no kit or notes.",
+      "inputs": {
+        "teaching_job": "Give coffee shop customers a digital stamp card and a free drink after ten visits.",
+        "alternatives": "paper stamp cards",
+        "subjects": "",
+        "geography": "",
+        "education_offer": "",
+        "max_courses": 5
+      },
+      "expected_status": "succeeded",
+      "expect": {
+        "contains": ["Status: complete", "## Funnel", "## Search log"],
+        "excludes": ["Verdict: fit", "## Notes to instructors", "## Teaching kit"]
+      }
+    },
+    {
+      "id": "offer_given",
+      "description": "Same job as ordinary with a stated education offer and one region. The kit must use the stated offer and must not ask the founder to decide it.",
+      "inputs": {
+        "teaching_job": "Design a questionnaire and collect household survey data on phones in the field, including where there is no signal.",
+        "alternatives": "KoboToolbox, paper questionnaires",
+        "subjects": "agriculture, agricultural extension",
+        "geography": "India",
+        "education_offer": "Free accounts for up to 60 students per class for one semester; the instructor gets a workspace the same day.",
+        "max_courses": 5
+      },
+      "expected_status": "succeeded",
+      "expect": {
+        "contains": ["Status: complete", "## Teaching kit", "60 students"],
+        "excludes": ["Decide first", "udemy.com", "@"]
+      }
+    }
+  ]
+}

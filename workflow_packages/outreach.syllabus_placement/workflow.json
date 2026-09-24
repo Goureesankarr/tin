@@ -1,0 +1,86 @@
+{
+  "package_format": "tin-workflow-package-v1",
+  "definition": {
+    "key": "outreach.syllabus_placement",
+    "title": "Get your product taught in the courses that pick students' tools",
+    "description": "For a company whose product students could learn on: find public course pages that teach that job, rank them by when the instructor next chooses tools, and draft a teaching kit and one note per course. Nothing is sent.",
+    "executor": "codex.procedure",
+    "version": "1.0.0",
+    "schedule_modes": ["on_demand"],
+    "input_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["project_id", "teaching_job"],
+      "properties": {
+        "project_id": { "type": "string", "format": "uuid" },
+        "teaching_job": {
+          "type": "string",
+          "title": "What a student would use your product to do",
+          "description": "The task in a course's own words, e.g. collect survey data on phones in the field.",
+          "minLength": 3,
+          "maxLength": 600,
+          "x-tin-ui": { "control": "textarea", "order": 10 }
+        },
+        "alternatives": {
+          "type": "string",
+          "title": "What courses use for this today",
+          "description": "Competing tools, spreadsheets, paper forms, or doing it by hand.",
+          "maxLength": 600,
+          "default": "",
+          "x-tin-ui": { "control": "textarea", "order": 20 }
+        },
+        "subjects": {
+          "type": "string",
+          "title": "Subjects or programs to search",
+          "description": "Leave empty to let the run pick from the job.",
+          "maxLength": 600,
+          "default": "",
+          "x-tin-ui": { "control": "textarea", "order": 30 }
+        },
+        "geography": {
+          "type": "string",
+          "title": "Countries or regions",
+          "maxLength": 200,
+          "default": "",
+          "x-tin-ui": { "control": "text", "order": 40 }
+        },
+        "education_offer": {
+          "type": "string",
+          "title": "What you can give instructors and students",
+          "description": "Free seats, a class plan, setup help. Leave empty if you have not decided.",
+          "maxLength": 1000,
+          "default": "",
+          "x-tin-ui": { "control": "textarea", "order": 50 }
+        },
+        "max_courses": {
+          "type": "integer",
+          "title": "Courses to shortlist",
+          "minimum": 5,
+          "maximum": 30,
+          "default": 15,
+          "x-tin-ui": { "control": "counter", "order": 60 }
+        }
+      }
+    },
+    "procedure": {
+      "prompt_path": "PROMPT.md",
+      "skills_path": "skills",
+      "skill_files": [
+        "skills/syllabus-placement/SKILL.md",
+        "skills/syllabus-placement/SEARCH.md",
+        "skills/syllabus-placement/SCORING.md",
+        "skills/syllabus-placement/REPORT.md"
+      ],
+      "entry_skill": "syllabus-placement",
+      "workspace": { "kind": "project.state" },
+      "sandbox": { "profile": "isolated", "egress": "fenced", "timeout_seconds": 1800 },
+      "output": {
+        "kind": "project.artifact",
+        "path": "reports/SYLLABUS_PLACEMENT.md",
+        "media_type": "text/markdown",
+        "max_bytes": 200000
+      }
+    },
+    "system": "cold-outreach"
+  }
+}
